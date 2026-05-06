@@ -1,11 +1,13 @@
 {
   "name": "aldot-starter-template",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Starter template con OpenRouter (Perplexity), capacidad de crear agentes Claude Code, y reglas Karpathy.",
+  "description": "Starter template con OpenRouter (Perplexity), gpt-image-2 paralelo, pipeline v2 de orquestación de agentes, y entrevista /kickoff al usuario.",
   "scripts": {
     "setup": "node setup.js",
-    "research": "node src/research.js"
+    "setup-python": "node -e \"import('./setup.js')\" || node setup.js",
+    "research": "node src/research.js",
+    "postinstall": "node setup.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5"

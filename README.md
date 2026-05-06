@@ -1,6 +1,13 @@
 # Starter Template
 
-Repo base para iniciar proyectos con Claude Code + OpenRouter (Perplexity) + capacidad de crear agentes.
+Repo base para iniciar proyectos con Claude Code. Incluye:
+
+- **Pipeline v2** de orquestación de agentes (architect → critic → cold-reader → humano).
+- **Entrevista `/kickoff`** que autogenera el canon del proyecto.
+- **Research** vía Perplexity (OpenRouter).
+- **Imágenes** con gpt-image-2 + identity lock + batch paralelo.
+
+Diseñado para que cualquier persona novata pueda clonar y arrancar.
 
 ## Quickstart (3 minutos)
 
@@ -9,19 +16,44 @@ Repo base para iniciar proyectos con Claude Code + OpenRouter (Perplexity) + cap
 git clone https://github.com/Mazelabcl/starter-template mi-proyecto
 cd mi-proyecto
 
-# 2. Instalar
+# 2. Instalar — el setup automático te pide las API keys e instala Python deps
 npm install
-
-# 3. Configurar API key (elige una)
-npm run setup                    # interactivo desde terminal
-# o desde Claude Code:
-# escribe /setup-openrouter
-
-# 4. Probar
-node src/research.js quick "qué hora es en Tokio"
 ```
 
-## Modelos disponibles
+`npm install` corre `setup.js` que:
+- Te pide la **OpenRouter API key** (research) — opcional pero recomendada.
+- Te pide la **OpenAI API key** (gpt-image-2) — opcional, solo si vas a generar imágenes.
+- Detecta **Python 3.10+**. Si está, crea un `venv` e instala `openai` automáticamente. Si no, te muestra cómo instalarlo según tu sistema operativo.
+
+```bash
+# 3. Abrir Claude Code y escribir:
+/kickoff
+```
+
+El comando `/kickoff` te entrevista y genera `content/principles.md` + `content/INDEX.md` con tu proyecto definido. Después, todo lo que crees pasa por **pipeline v2**.
+
+## Cómo funciona el pipeline v2
+
+Cada vez que pides crear algo no trivial (guion, imágenes, plan, código de feature):
+
+```
+Capa 0  — content/principles.md   (canon del proyecto, definido en /kickoff)
+Capa 0.5 — content/INDEX.md       (decide qué archivos cargar para la tarea)
+Capa 1  — Architect                (crea el deliverable)
+Capa 2  — Critic interno multi-óptica
+Capa 3  — Cold-reader gate         (lectura independiente, voto GO/NO-GO con veto absoluto)
+Capa 4  — Humano (tú) decide
+```
+
+Esto evita que los agentes generen cosas que pasan validación interna pero fallan al leer en frío.
+
+## Capacidades
+
+### Research (texto)
+
+```bash
+node src/research.js quick "qué hora es en Tokio"
+```
 
 | Alias | Modelo | Uso |
 |---|---|---|
@@ -31,14 +63,70 @@ node src/research.js quick "qué hora es en Tokio"
 | `reason` | sonar-reasoning-pro | Análisis profundo |
 | `deep` | sonar-deep-research | Multi-paso |
 
+### Imágenes (gpt-image-2)
+
+```bash
+# Una imagen
+python scripts/openai_images.py generate "un perro azul" output.png --quality medium
+
+# Imagen con references (identity lock)
+python scripts/openai_images.py edit "match exactly Image 1" '["char_sheet.png"]' scene01.png
+
+# Batch paralelo (hasta 8-20 simultáneas según tier OpenAI)
+python scripts/openai_images.py batch jobs.json --concurrent 8
+```
+
+La skill `image-gen` lo orquesta con todas las reglas (identity lock, refs en texto del prompt, validación multimodal después).
+
+### Slash commands disponibles
+
+- `/kickoff` — entrevista inicial del proyecto
+- `/setup-openrouter` — configura la key de OpenRouter
+- `/setup-openai` — configura la key de OpenAI
+
 ## Estructura
 
-- `src/research.js` — wrapper OpenRouter + CLI
-- `setup.js` — config interactivo de la API key
-- `.claude/skills/` — skills disponibles (karpathy-rules, agent-template, superpowers-lite)
-- `.claude/commands/setup-openrouter.md` — slash command para configurar la key
-- `docs/company.md` — info de tu empresa (poblar antes de empezar)
+```
+starter-template/
+├── content/                 # principles.md, INDEX.md, lore, char-sheets, outputs (vacío al clonar)
+├── process-log/             # 00-decisions.md (decisiones humanas — ley)
+├── scripts/                 # openai_images.py
+├── src/                     # research.js
+├── docs/company.md          # contexto de tu empresa (poblar si aplica)
+├── .claude/
+│   ├── skills/
+│   │   ├── kickoff/         # entrevista inicial
+│   │   ├── pipeline-v2/     # orquestación de capas
+│   │   ├── cold-reader-gate/# capa 3 independiente
+│   │   ├── multimodal-validation/  # forzar Read del PNG
+│   │   ├── image-gen/       # wrapper gpt-image-2
+│   │   ├── agent-template/  # generar agentes con score ≥92
+│   │   ├── karpathy-rules/  # 4 reglas de coding
+│   │   └── superpowers-lite/# 5 reglas Git/PR
+│   └── commands/
+│       ├── kickoff.md
+│       ├── setup-openrouter.md
+│       └── setup-openai.md
+├── CLAUDE.md                # instrucciones operativas
+├── setup.js                 # setup interactivo
+├── requirements.txt         # deps Python (openai)
+└── package.json
+```
 
-## Agregar info de tu empresa
+## Costos referenciales gpt-image-2
 
-Edita `docs/company.md` con: qué hace tu empresa, servicios, audiencia, tono. Claude lo usará automáticamente.
+| Quality | 1024×1024 | 1024×1536 |
+|---|---|---|
+| low | ~$0.011 | ~$0.018 |
+| medium | ~$0.04 | ~$0.06-0.07 |
+| high | ~$0.17 | ~$0.25 |
+
+Las references no suben el costo significativamente.
+
+## Para agregar info de tu empresa
+
+Edita `docs/company.md` con: qué hace tu empresa, servicios, audiencia, tono. Claude lo lee como contexto base.
+
+## Versión
+
+v0.2 — pipeline v2 + gpt-image-2 + entrevista /kickoff.
