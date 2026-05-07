@@ -15,7 +15,10 @@ from pathlib import Path
 try:
     from openai import OpenAI, AsyncOpenAI
 except ImportError:
-    print("ERROR: openai no instalado. Corre: npm run setup")
+    print("❌ Falta dependencia 'openai' en el venv de Python.")
+    print("   Causa probable: no corriste el setup de Python todavía.")
+    print("   Corre: npm run setup-python   (o `npm run setup` para el flow completo)")
+    print("   Si ya tienes .venv creado, activalo y corre: pip install -r requirements.txt")
     sys.exit(1)
 
 

@@ -18,7 +18,16 @@ cd mi-proyecto
 
 # 2. Instalar — el setup automático te pide las API keys e instala Python deps
 npm install
+
+# 3. Copiar permisos sugeridos para Claude Code (evita prompts en cada comando)
+cp .claude/settings.example.local.json .claude/settings.local.json
+# (en Windows PowerShell: Copy-Item .claude/settings.example.local.json .claude/settings.local.json)
 ```
+
+> **Importante:** copia `.claude/settings.example.local.json` a
+> `.claude/settings.local.json` antes de correr el primer flujo. Trae los
+> permisos típicos (`npm`, `node src/research.js`, `python scripts/openai_images.py`,
+> `git`, etc.) ya pre-aprobados, así Claude Code no te pregunta en cada paso.
 
 `npm install` corre `setup.js` que:
 - Te pide la **OpenRouter API key** (research) — opcional pero recomendada.

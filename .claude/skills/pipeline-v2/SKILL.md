@@ -83,6 +83,27 @@ Si Capa 3 = NO-GO → vuelve a Capa 1 con los fixes de cold-reader.
 9. Si GO → presento al humano + escribo process-log/XX-{tarea}-{ronda}.md.
 ```
 
+## Regla anti-watchdog para sub-agentes Opus en outputs largos
+
+Cuando lances un agente que escribe archivos largos (outline >50 slides,
+código >500 líneas, guion >3000 palabras), incluye **literal** en el brief
+esta cláusula al inicio:
+
+```
+EMPIEZA YA. Lee inputs, después escribe el archivo INMEDIATAMENTE.
+No planifiques en mensajes — planifica en comentario HTML al tope.
+Tu plan vive en el archivo, no en la conversación.
+```
+
+**Por qué:** sin esto, el sub-agente puede entrar en "deliberación
+extendida" y el watchdog del stream lo mata a los 600s sin progreso.
+Caso real: F12 en `process-log/findings-for-template.md` — el architect
+R4 quedó >10 min sin escribir y el stream se cortó.
+
+Patrón de mitigación adicional: split de tareas grandes en 2 mini-tareas
+más cortas (ej. R4a = rellenar placeholders, R4b = refactor conectores)
+cuando el output esperado es muy extenso.
+
 ## Reglas duras
 
 1. **principles.md literal, no resumido.** Resumir = drift garantizado.

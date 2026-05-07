@@ -14,6 +14,15 @@ if (!process.stdin.isTTY) {
   process.exit(0);
 }
 
+// Pre-flight: verificar que las dependencias npm están instaladas.
+// Si alguien clona el repo y corre `npm run setup` directo (sin `npm install`),
+// fallamos limpio con instrucción clara en lugar de explotar más adelante.
+if (!existsSync('node_modules')) {
+  console.error('\n❌ Faltan dependencias. Corre primero: npm install');
+  console.error('   (después puedes volver a correr: npm run setup)\n');
+  process.exit(1);
+}
+
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise(r => rl.question(q, r));
 

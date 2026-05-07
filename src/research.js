@@ -1,4 +1,14 @@
-import 'dotenv/config';
+// Carga dotenv con manejo de error explícito si falta la dependencia.
+// Esto pasa cuando alguien clona el repo y olvida correr `npm install`.
+try {
+  await import('dotenv/config');
+} catch (err) {
+  if (err.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find package 'dotenv'/.test(err.message)) {
+    console.error("❌ Falta dependencia 'dotenv'. Corre: npm install");
+    process.exit(1);
+  }
+  throw err;
+}
 
 const KEY = process.env.OPENROUTER_API_KEY;
 if (!KEY) {

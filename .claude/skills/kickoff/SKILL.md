@@ -1,7 +1,7 @@
 ---
 name: kickoff
 description: Entrevista al usuario al iniciar un proyecto y autogenera content/principles.md + content/INDEX.md. Triggers "/kickoff", "vamos a empezar", "nuevo proyecto", "qué construimos hoy".
-allowed-tools: Read, Write, Glob
+allowed-tools: Read, Write, Glob, Bash
 ---
 
 # kickoff — entrevista inicial del proyecto
@@ -20,6 +20,80 @@ allowed-tools: Read, Write, Glob
 - Si el usuario solo quiere hacer una pregunta puntual no relacionada al proyecto.
 
 ## Cómo opera
+
+### Paso 0 — greeting cálido (PRIMER mensaje, antes de cualquier check)
+
+Antes de checks técnicos y antes de las preguntas, suelta este greeting
+literal (puedes adaptar el copy con buen criterio, manteniendo el tono cálido):
+
+```
+¡Hola! Bienvenido al starter template de Mazelab.
+
+Acá te explico cómo funciono:
+
+1. **Yo soy el orquestador.** Yo no trabajo, yo entiendo lo que necesitas
+   y creo agentes especializados que resuelven cada parte.
+
+2. **Crítico iterativo (confidence loop).** Cada artefacto importante pasa
+   por un agente crítico que lo evalúa y propone mejoras. Iteramos hasta
+   llegar a calidad alta.
+
+3. **Te voy a hacer 5-6 preguntas** para entender qué quieres construir
+   en este proyecto. No me apures las respuestas — mientras más claro tú,
+   mejor el resultado.
+
+4. **Cada agente puede usar Perplexity** para buscar información actualizada
+   en internet. No invento datos, los valido.
+
+5. **Generación de imágenes con gpt-image-2** (si tu proyecto lo necesita).
+
+6. **Pipeline v2:** architect → critic interno → cold-reader → tu validación.
+   Esto evita que generemos cosas que pasan validación interna pero fallan
+   al leerse en frío.
+
+¿Listo? Antes de la primera pregunta, déjame revisar que el entorno esté ok.
+```
+
+Tono: cálido, no técnico-frío. Aldot describe "novato-friendly".
+
+### Paso 0.5 — pre-flight checks (ANTES de la entrevista)
+
+No arranques las preguntas hasta confirmar que el entorno está listo.
+Corre estos checks en orden y resuelve cada uno antes de avanzar:
+
+1. **¿`node_modules/` existe?**
+   - Si NO → dile al usuario:
+     ```
+     Necesito que corras `npm install` primero (instala las dependencias
+     base del template). ¿Quieres que lo corra yo? [Sí/No]
+     ```
+   - Si dice Sí → corre `npm install` (Bash tool).
+   - Si dice No → frena la skill y pide al usuario que vuelva después de instalar.
+
+2. **¿`.env` existe con `OPENROUTER_API_KEY` no vacío?**
+   - Lee `.env`. Si no existe el archivo o la key no está / está vacía / es
+     placeholder → propone:
+     ```
+     No detecto tu OpenRouter API key (la usa Perplexity para research).
+     Corre: /setup-openrouter
+     O sáltalo si no vas a usar research por ahora.
+     ```
+
+3. **¿`.env` con `OPENAI_API_KEY` (si va a generar imágenes)?**
+   - Pregunta: "¿Tu proyecto va a generar imágenes con gpt-image-2?"
+   - Si Sí y la key falta → propone `/setup-openai`.
+   - Si No → salta este check.
+
+4. **¿`.venv/` existe (Python para gpt-image-2)?**
+   - Solo si va a generar imágenes. Si `.venv/` falta → propone:
+     ```
+     Necesitas Python 3.10+ con venv para gpt-image-2. Corre:
+     npm run setup-python
+     (o instrucciones manuales si Python no está instalado)
+     ```
+
+Solo después de que estos checks pasen (o el usuario decida saltarlos
+explícitamente), arranca la entrevista del Paso 1.
 
 ### Paso 1 — entrevista (haz UNA pregunta a la vez, espera respuesta)
 

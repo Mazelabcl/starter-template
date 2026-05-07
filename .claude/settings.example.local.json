@@ -1,0 +1,26 @@
+{
+  "_comment": "Copia este archivo a .claude/settings.local.json antes de tu primer flujo. Trae permisos pre-aprobados para los comandos típicos del template — así Claude Code no te pregunta en cada paso.",
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node src/research.js *)",
+      "Bash(node src/research.js:*)",
+      "Bash(python scripts/openai_images.py *)",
+      "Bash(python scripts/openai_images.py:*)",
+      "Bash(.venv/Scripts/python *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(.venv/Scripts/pip *)",
+      "Bash(.venv/bin/pip *)",
+      "Bash(python -m venv *)",
+      "Bash(pip install *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git config *)",
+      "Bash(git rm *)",
+      "Bash(npx *)"
+    ]
+  }
+}
