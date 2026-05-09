@@ -5,8 +5,8 @@ Un OS personal para arrancar proyectos con Claude Code: perfil del proyecto + eq
 ## Quickstart (3 pasos)
 
 ```bash
-# 1. Clonar el template
-git clone https://github.com/Mazelabcl/starter-template mi-proyecto
+# 1. Clonar el template (mientras v3 vive en branch — usa -b v3 explícito)
+git clone -b v3 https://github.com/Mazelabcl/starter-template.git mi-proyecto
 cd mi-proyecto
 
 # 2. Setup interactivo: instala deps, pide API keys, arma el venv de Python
@@ -17,6 +17,8 @@ npm install
 npm run smoke
 # Valida 8 checks end-to-end. ~90s, ~USD 0.05 en API. Si está verde, listo para arrancar.
 ```
+
+Cuando v3 se mergee a main, podrás clonar sin el flag `-b v3`.
 
 Después abres Claude Code en este repo y le dices `/kickoff`. La entrevista detecta qué proyecto vas a hacer, recomienda stack, persiste el perfil, y deja todo armado para empezar.
 

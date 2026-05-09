@@ -4,10 +4,14 @@ Para alguien que clona el starter por primera vez. Al terminar tienes un proyect
 
 ## Paso 1 — Clonar el template
 
+Mientras v3 vive en branch separada (no mergeada a main todavía), clonas con `-b v3`:
+
 ```bash
-git clone https://github.com/Mazelabcl/starter-template mi-proyecto
+git clone -b v3 https://github.com/Mazelabcl/starter-template.git mi-proyecto
 cd mi-proyecto
 ```
+
+Cuando v3 se mergee a main, podrás clonar sin el flag `-b v3`.
 
 ## Paso 2 — Setup interactivo
 
