@@ -27,7 +27,51 @@ En cualquier momento del kickoff, si el usuario dice "reinicia", "vuelve atrás"
 
 ---
 
-## Paso 0 — saludo inicial (literal)
+## Paso 0 (pre-flight) — auto-setup si falta
+
+**Antes del saludo**, verifica el estado del proyecto. Si algo falta, te ofreces a configurarlo automáticamente — el usuario novato no debería tener que correr comandos a mano.
+
+### Checks en orden
+
+1. **`node_modules/` existe?** Si no:
+   ```
+   Veo que aún no tienes las dependencias instaladas. Es 1 comando, ~30 segundos.
+   ¿Las instalo por ti ahora? [Y/n]
+   ```
+   Si confirma → ejecuta `npm install` vía Bash. Si falla, muestra el error y guía.
+
+2. **`.env` existe y tiene API keys reales?** Verifica:
+   - Si `.env` no existe → falta setup completo.
+   - Si `.env` existe pero `OPENROUTER_API_KEY` o `OPENAI_API_KEY` están vacías o tienen placeholder (`pega-aqui-tu-key`) → falta configurar.
+   
+   En cualquiera de los casos, ofrécelo:
+   ```
+   Faltan tus API keys. Te las pido conversacionalmente — son 2 obligatorias y 1 opcional.
+   ¿Empezamos? [Y/n]
+   ```
+   
+   Si confirma:
+   - **OpenRouter API key** (requerida — research, councils, cliente unificado): "Sácala en https://openrouter.ai/keys. Formato `sk-or-v1-...`. Pégala (Enter para saltar):"
+   - **OpenAI API key** (requerida — gpt-image-2, voice-mode TTS): "Sácala en https://platform.openai.com/api-keys. Formato `sk-proj-...`. Pégala:"
+   - **Replicate API token** (opcional — image-explorer multi-modelo): "Si vas a hacer concept art o exploración visual, conviene. Pégala (Enter para saltar):"
+   
+   Cada key que reciba la guarda con el helper `upsertEnv(key, value)` (o equivalente) escribiendo a `.env`.
+
+3. **Python 3.10+ disponible?** (solo si vas a usar gpt-image-2 — opcional):
+   - Si está y no hay venv → ofrece crearlo: `python -m venv .venv && .venv/Scripts/pip install -r requirements.txt` (Windows) o equivalente en macOS/Linux.
+   - Si no está → muéstrale el comando de instalación según OS y sigue sin él (gpt-image-2 quedará desactivado hasta que lo configure).
+
+4. **Una vez todo verde**, pasas al Paso 1 (saludo) sin ceremonia. Si algo falló, lo mencionas brevemente ("OpenAI key quedó saltada — la puedes configurar después con `/setup-openai`") y pasas al saludo igual.
+
+### Anti-patrones del pre-flight
+
+- **No abrumar.** Si TODO está OK, no lo menciones — pasa directo al saludo. Solo hablas si falta algo.
+- **No exigir todas las keys.** OpenRouter es la mínima viable para arrancar. OpenAI puede saltar (gpt-image-2 quedará off). Replicate es siempre opcional.
+- **No correr `npm install` sin confirmar.** Es seguro pero educa al usuario sobre qué pasa.
+
+---
+
+## Paso 1 — saludo inicial (literal)
 
 ```
 Hola, soy el Starter Template de Mazelab.
