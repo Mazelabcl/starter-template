@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "council-config",
+  "title": "Council configuration",
+  "description": "Configuración de un council multi-modelo. Define personas, rondas y políticas de síntesis.",
+  "type": "object",
+  "required": ["name", "personas", "rounds"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-_]*$",
+      "description": "Identificador del council (kebab-case). Usado para cargar councils/<name>.json y para logs."
+    },
+    "description": {
+      "type": "string"
+    },
+    "tier_default": {
+      "type": "integer",
+      "enum": [1, 2, 3],
+      "description": "Tier por defecto si el caller no lo especifica. Tier 1 liviano, Tier 2 mixto, Tier 3 crítico."
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 7,
+      "description": "Personas que debaten. Mínimo 2 (sin debate no hay council). Máximo 7 (más es ruido).",
+      "items": {
+        "type": "object",
+        "required": ["id", "actua_como", "model"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-_]*$",
+            "description": "Identificador único de la persona dentro del council."
+          },
+          "actua_como": {
+            "type": "string",
+            "minLength": 10,
+            "description": "System prompt de la persona. Debe describir perspectiva, sesgo intencional y tono."
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Slug OpenRouter (ej. anthropic/claude-sonnet-4.5) o ID del catálogo."
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["perplexity_research", "image_reference", "code_simulation"]
+            },
+            "description": "Tools disponibles para esta persona. Si no se especifica, no se le ofrecen."
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 16000
+          }
+        }
+      }
+    },
+    "rounds": {
+      "type": "object",
+      "required": ["round1"],
+      "additionalProperties": false,
+      "properties": {
+        "round1": {
+          "type": "object",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "instructions": { "type": "string" }
+          }
+        },
+        "round2": {
+          "type": "object",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "instructions": { "type": "string" }
+          }
+        },
+        "synthesis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string", "minLength": 1 },
+            "instructions": { "type": "string" },
+            "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+            "max_tokens": { "type": "integer", "minimum": 256, "maximum": 32000 }
+          }
+        }
+      }
+    },
+    "post_synthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "confidence_loop": { "type": "boolean" },
+        "max_loop_iterations": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "target_score": { "type": "integer", "minimum": 50, "maximum": 100 }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Outputs de councils
+
+Este directorio guarda los resultados JSON de cada invocación del motor de councils
+(`src/council.js`). Cada archivo se nombra con timestamp ISO compacto:
+`<YYYY-MM-DDTHHmm>.json`.
+
+La skill `council` (`.claude/skills/council/SKILL.md`) y el slash `/council`
+escriben acá automáticamente cuando lanzan el motor con `--output`.
+
+Mantén este directorio versionado para histórico de decisiones, pero los archivos
+individuales son efímeros — la información durable vive en `memory/decisions.md`
+cuando el usuario aprueba una recomendación.

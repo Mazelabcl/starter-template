@@ -143,8 +143,16 @@ async function maybeAskKey(label, envKey, prefix, url) {
   log('Y en https://platform.openai.com/limits que aparezca gpt-image-2.\n');
   await maybeAskKey('OpenAI API key', 'OPENAI_API_KEY', 'sk-proj-', 'https://platform.openai.com/api-keys');
 
-  // 3. Python
-  header('3. Python (para gpt-image-2)');
+  // 3. Replicate (opcional, para image-explorer multi-modelo)
+  header('3. Replicate API token (OPCIONAL — image-explorer multi-modelo)');
+  log('Da acceso a FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 con UNA SOLA key.');
+  log('Sin esto, image-explorer queda con solo gpt-image-2 disponible.');
+  log('Si vas a hacer concept art, branding o exploraciones de "mano de modelo" → conviene.');
+  log('Si solo vas a usar gpt-image-2 → puedes saltarlo (Enter).\n');
+  await maybeAskKey('Replicate API token', 'REPLICATE_API_TOKEN', 'r8_', 'https://replicate.com/account/api-tokens');
+
+  // 4. Python
+  header('4. Python (para gpt-image-2)');
   const py = detectPython();
   if (py) {
     log(`Detectado: ${py.version}`);
@@ -161,8 +169,11 @@ async function maybeAskKey(label, envKey, prefix, url) {
   // Cierre
   header('Listo');
   log('Próximos pasos:');
-  log('  1. Abre Claude Code en este proyecto.');
-  log('  2. Escribe /kickoff para arrancar la entrevista del proyecto.');
-  log('  3. O prueba: node src/research.js quick "qué hora es en Tokio"\n');
+  log('  1. (Recomendado) Smoke test end-to-end:');
+  log('       npm run smoke           # 8 checks en ~90s, ~USD 0.05');
+  log('       npm run smoke:quick     # estructura solamente, sin gasto de red');
+  log('  2. Levanta el dashboard en otro terminal: npm run dashboard');
+  log('  3. Abre Claude Code en este repo y escribe /kickoff.');
+  log('  4. Guía completa de 5 minutos: docs/QUICKSTART.md\n');
   rl.close();
 })();

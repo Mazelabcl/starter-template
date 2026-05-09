@@ -1,0 +1,24 @@
+{
+  "agent": "ArchitectAlpha",
+  "declared_at": "2026-05-09T15:05:53.391Z",
+  "inputs": [
+    {
+      "schema": "research-output",
+      "path": "content/research/topic.json",
+      "optional": true
+    }
+  ],
+  "outputs": [
+    {
+      "schema": "architect-output",
+      "path": "content/architect/proposal.json",
+      "optional": false
+    }
+  ],
+  "preconditions": [
+    "principles.md existe"
+  ],
+  "postconditions": [
+    "un proposal por section listado en INDEX.md"
+  ]
+}

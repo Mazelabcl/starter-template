@@ -7,9 +7,19 @@
     "setup": "node setup.js",
     "setup-python": "node -e \"import('./setup.js')\" || node setup.js",
     "research": "node src/research.js",
+    "test:contracts": "node contracts/test.js",
+    "test:dashboard": "node dashboard-server.test.js",
+    "test:dashboard:ui": "node dashboard-ui.test.js",
+    "test:dashboard:ui:extras": "node dashboard-ui-extras.test.js",
+    "smoke": "node scripts/smoke_test.js",
+    "smoke:quick": "node scripts/smoke_test.js --quick",
+    "dashboard": "node dashboard/server.js",
+    "voz": "node scripts/voice_tts.js",
     "postinstall": "node setup.js"
   },
   "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "dotenv": "^16.4.5"
   },
   "engines": {

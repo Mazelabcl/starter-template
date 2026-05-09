@@ -1,0 +1,24 @@
+{
+  "agent": "architect-test",
+  "declared_at": "2026-05-09T15:05:52.612Z",
+  "inputs": [
+    {
+      "schema": "research-output",
+      "path": "content/research/topic.json",
+      "optional": true
+    }
+  ],
+  "outputs": [
+    {
+      "schema": "architect-output",
+      "path": "content/architect/cap03.json",
+      "optional": false
+    }
+  ],
+  "preconditions": [
+    "principles.md existe"
+  ],
+  "postconditions": [
+    "proposal con al menos 1 section"
+  ]
+}

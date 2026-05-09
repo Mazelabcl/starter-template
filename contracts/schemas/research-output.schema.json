@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "research-output",
+  "title": "Research output (Perplexity vía OpenRouter)",
+  "description": "Producido por src/research.js o equivalente. Resume la respuesta y guarda citas estructuradas para que el siguiente agente las cite con confianza.",
+  "type": "object",
+  "required": ["agent", "model", "produced_at", "query", "summary", "citations"],
+  "additionalProperties": false,
+  "properties": {
+    "agent": { "type": "string", "minLength": 1 },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modelo Perplexity usado (sonar, sonar-pro, sonar-deep-research, etc.)"
+    },
+    "produced_at": { "type": "string", "format": "date-time" },
+    "query": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Al menos una cita; si Perplexity no devolvió ninguna, el research no es publicable.",
+      "items": {
+        "type": "object",
+        "required": ["url", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "published_at": { "type": "string" },
+          "snippet": { "type": "string" }
+        }
+      }
+    },
+    "raw_response": {
+      "type": "string",
+      "description": "Respuesta cruda opcional. Útil para auditoría, no obligatorio."
+    },
+    "cost_usd": { "type": "number", "minimum": 0 }
+  }
+}

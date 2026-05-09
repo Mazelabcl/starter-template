@@ -1,3 +1,9 @@
+// src/research.js
+// Wrapper sobre src/openrouter_client.js especializado en Perplexity (Sonar).
+// La API pública (`research(modelKey, question, opts)` + CLI) se mantiene 1:1
+// para no romper consumidores existentes (smoke test check 5, cualquier código
+// que dependa del shape `{content, model, usage, citations}`).
+
 // Carga dotenv con manejo de error explícito si falta la dependencia.
 // Esto pasa cuando alguien clona el repo y olvida correr `npm install`.
 try {
@@ -10,50 +16,61 @@ try {
   throw err;
 }
 
-const KEY = process.env.OPENROUTER_API_KEY;
-if (!KEY) {
-  console.error('Falta OPENROUTER_API_KEY. Corre `npm run setup` o usa `/setup-openrouter` en Claude Code.');
-  process.exit(1);
-}
+// El guard de OPENROUTER_API_KEY solo aplica cuando este archivo se ejecuta como
+// CLI. Importarlo como librería (ej. desde tests o módulos consumidores) no debe
+// matar el proceso — el `chat()` interno ya falla con error claro si la key falta.
 
-const MODELS = {
-  quick:  'perplexity/sonar',
-  pro:    'perplexity/sonar-pro',
-  search: 'perplexity/sonar-pro-search',
-  reason: 'perplexity/sonar-reasoning-pro',
-  deep:   'perplexity/sonar-deep-research',
+import { chat, MODELS, OpenRouterError } from './openrouter_client.js';
+
+// Mapa de aliases del CLI/legacy a entradas del catálogo unificado.
+// Mantiene compatibilidad: `research('quick', q)` sigue funcionando exactamente
+// como antes.
+const KEY_TO_MODEL = {
+  quick:  MODELS.perplexity.sonar,
+  pro:    MODELS.perplexity.sonar_pro,
+  search: MODELS.perplexity.sonar_pro_search,
+  reason: MODELS.perplexity.sonar_reasoning_pro,
+  deep:   MODELS.perplexity.sonar_deep_research,
 };
 
 export async function research(modelKey, question, opts = {}) {
-  const model = MODELS[modelKey] ?? MODELS.pro;
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  const model = KEY_TO_MODEL[modelKey] ?? KEY_TO_MODEL.pro;
+  let result;
+  try {
+    result = await chat({
       model,
       messages: [{ role: 'user', content: question }],
       ...opts,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${err}`);
+    });
+  } catch (e) {
+    if (e instanceof OpenRouterError) {
+      // Re-throw como Error plano para mantener compatibilidad con el shape
+      // histórico del módulo (los consumidores esperan Error.message tipo
+      // "OpenRouter 401: ..." sin instancia custom).
+      throw new Error(e.message);
+    }
+    throw e;
   }
-  const data = await res.json();
+
+  // Las citations de Perplexity vienen en `raw.citations` (top-level del response
+  // OpenRouter). Las exponemos al mismo nivel que antes.
+  const citations = result.raw?.citations ?? result.citations ?? [];
+
   return {
-    content: data.choices?.[0]?.message?.content ?? '',
-    model: data.model,
-    usage: data.usage,
-    citations: data.citations ?? [],
+    content: result.content ?? '',
+    model: result.model_used,
+    usage: result.usage,
+    citations,
   };
 }
 
 // CLI: detecta si este archivo se está ejecutando directamente (cross-platform Windows/Unix)
 import { pathToFileURL } from 'url';
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error('Falta OPENROUTER_API_KEY. Corre `npm run setup` o usa `/setup-openrouter` en Claude Code.');
+    process.exit(1);
+  }
   const [, , modelKey = 'pro', ...rest] = process.argv;
   const question = rest.join(' ');
   if (!question) {

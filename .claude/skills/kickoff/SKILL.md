@@ -1,228 +1,432 @@
 ---
 name: kickoff
-description: Entrevista al usuario al iniciar un proyecto y autogenera content/principles.md + content/INDEX.md. Triggers "/kickoff", "vamos a empezar", "nuevo proyecto", "qué construimos hoy".
-allowed-tools: Read, Write, Glob, Bash
+description: Entrevista adaptativa al iniciar un proyecto. Detecta señales del usuario, hace solo las preguntas relevantes, recomienda stack de skills y deja persistido project-profile.json + active-team.json + sprint inicial. Triggers "/kickoff", "vamos a empezar", "nuevo proyecto", "qué construimos hoy".
+allowed-tools: Read, Write, Edit, Glob, Bash
 ---
 
-# kickoff — entrevista inicial del proyecto
+# kickoff — onboarding adaptativo del proyecto
 
-**Esta es la primera skill que corre en un proyecto nuevo.** Sin esto, los agentes drifteán porque no hay un canon corto que guíe.
+**Esta es la primera skill que corre en un proyecto nuevo.** Reemplaza la v2 lineal por una entrevista que se adapta al usuario: lo escucha, detecta qué quiere construir, y solo le pregunta lo necesario para arrancar.
+
+Filosofía: un onboarding de producto premium, no un formulario. Dos usuarios distintos NO reciben las mismas preguntas.
 
 ## Cuándo invocarla
 
-- Usuario clona el starter por primera vez y dice algo tipo "tengo una idea", "vamos a empezar", "qué hacemos"
-- Slash command `/kickoff` explícito
-- `content/principles.md` no existe o está vacío
+- Usuario clona el starter por primera vez y dice "vamos a empezar", "tengo una idea", "qué hacemos".
+- Slash command `/kickoff` explícito.
+- `memory/project-profile.json` no existe o está vacío.
 
 ## Cuándo NO invocarla
 
-- Si `content/principles.md` ya existe con contenido válido — pregunta antes de sobrescribir.
-- Si el usuario solo quiere hacer una pregunta puntual no relacionada al proyecto.
+- Si `memory/project-profile.json` ya tiene un perfil válido — pregunta antes de sobrescribir. Ofrece la opción "ajustar perfil" en lugar de reiniciar.
+- Si el usuario hace una pregunta puntual no relacionada al proyecto.
 
-## Cómo opera
+## Reversibilidad
 
-### Paso 0 — greeting cálido (PRIMER mensaje, antes de cualquier check)
+En cualquier momento del kickoff, si el usuario dice "reinicia", "vuelve atrás" o "cambiemos esto", retomas desde el punto que pida. No persistes nada hasta su confirmación final explícita.
 
-Antes de checks técnicos y antes de las preguntas, suelta este greeting
-literal (puedes adaptar el copy con buen criterio, manteniendo el tono cálido):
+---
 
-```
-¡Hola! Bienvenido al starter template de Mazelab.
-
-Acá te explico cómo funciono:
-
-1. **Yo soy el orquestador.** Yo no trabajo, yo entiendo lo que necesitas
-   y creo agentes especializados que resuelven cada parte.
-
-2. **Crítico iterativo (confidence loop).** Cada artefacto importante pasa
-   por un agente crítico que lo evalúa y propone mejoras. Iteramos hasta
-   llegar a calidad alta.
-
-3. **Te voy a hacer 5-6 preguntas** para entender qué quieres construir
-   en este proyecto. No me apures las respuestas — mientras más claro tú,
-   mejor el resultado.
-
-4. **Cada agente puede usar Perplexity** para buscar información actualizada
-   en internet. No invento datos, los valido.
-
-5. **Generación de imágenes con gpt-image-2** (si tu proyecto lo necesita).
-
-6. **Pipeline v2:** architect → critic interno → cold-reader → tu validación.
-   Esto evita que generemos cosas que pasan validación interna pero fallan
-   al leerse en frío.
-
-¿Listo? Antes de la primera pregunta, déjame revisar que el entorno esté ok.
-```
-
-Tono: cálido, no técnico-frío. Aldot describe "novato-friendly".
-
-### Paso 0.5 — pre-flight checks (ANTES de la entrevista)
-
-No arranques las preguntas hasta confirmar que el entorno está listo.
-Corre estos checks en orden y resuelve cada uno antes de avanzar:
-
-1. **¿`node_modules/` existe?**
-   - Si NO → dile al usuario:
-     ```
-     Necesito que corras `npm install` primero (instala las dependencias
-     base del template). ¿Quieres que lo corra yo? [Sí/No]
-     ```
-   - Si dice Sí → corre `npm install` (Bash tool).
-   - Si dice No → frena la skill y pide al usuario que vuelva después de instalar.
-
-2. **¿`.env` existe con `OPENROUTER_API_KEY` no vacío?**
-   - Lee `.env`. Si no existe el archivo o la key no está / está vacía / es
-     placeholder → propone:
-     ```
-     No detecto tu OpenRouter API key (la usa Perplexity para research).
-     Corre: /setup-openrouter
-     O sáltalo si no vas a usar research por ahora.
-     ```
-
-3. **¿`.env` con `OPENAI_API_KEY` (si va a generar imágenes)?**
-   - Pregunta: "¿Tu proyecto va a generar imágenes con gpt-image-2?"
-   - Si Sí y la key falta → propone `/setup-openai`.
-   - Si No → salta este check.
-
-4. **¿`.venv/` existe (Python para gpt-image-2)?**
-   - Solo si va a generar imágenes. Si `.venv/` falta → propone:
-     ```
-     Necesitas Python 3.10+ con venv para gpt-image-2. Corre:
-     npm run setup-python
-     (o instrucciones manuales si Python no está instalado)
-     ```
-
-Solo después de que estos checks pasen (o el usuario decida saltarlos
-explícitamente), arranca la entrevista del Paso 1.
-
-### Paso 1 — entrevista (haz UNA pregunta a la vez, espera respuesta)
-
-Tono: directo, simple, novato-friendly. Español neutro (cero voseo).
-
-Preguntas en este orden:
-
-1. **"¿Qué quieres construir / diseñar / pensar / desarrollar?"** (deja que se explaye libre)
-2. **"¿Para quién es?"** (audiencia, cliente, uso interno, público general)
-3. **"¿Qué outputs concretos esperas tener al final?"** (ej. video de 1 min, web landing, set de imágenes, plan de contenidos, app, doc, etc.)
-4. **"¿Qué tono / estilo?"** (formal, casual, juguetón, técnico, místico, etc.)
-5. **"¿Hay restricciones duras?"** (deadline, presupuesto, lo que SÍ debe pasar, lo que NUNCA debe pasar)
-6. **"¿Hay referencias inspiradoras?"** (URLs, marcas, otros proyectos, si tiene)
-
-Si el usuario responde algo ambiguo, repregunta UNA vez. Si sigue ambiguo, registra "TBD" y avanza.
-
-### Paso 2 — síntesis y muestra al usuario
-
-Antes de escribir archivos, muestra al usuario:
+## Paso 0 — saludo inicial (literal)
 
 ```
-Voy a generar content/principles.md con esto. Confírmame:
+Hola, soy el Starter Template de Mazelab.
 
-PROYECTO: <nombre tentativo>
-QUÉ ES: <1 línea>
-QUÉ NO ES: <1-2 líneas, lo opuesto>
-AUDIENCIA: <...>
-OUTPUTS: <lista>
-TONO: <...>
-RESTRICCIONES: <...>
-REFERENCIAS: <...>
+Soy un sistema multi-agente que te acompaña en cualquier tipo de proyecto:
+investigaciones, software, contenido creativo, decisiones de negocio,
+automatizaciones personales. Tengo capacidades como councils multi-modelo,
+generación de imágenes, dashboard en vivo, memoria persistente entre
+sesiones, voz (input por Win+H + output por TTS), y un catálogo de skills
+opcionales que activo según tu proyecto.
 
-¿Está bien o ajustamos algo antes de escribir?
+Mi job es escucharte, armar el equipo correcto, y ejecutar contigo. La
+entrevista que sigue se adapta a tu respuesta — si dices "necesito un meme",
+no te pregunto sobre arquitectura. Te haré entre 3 y 5 preguntas cortas y
+propondré un plan que tú confirmas o ajustas antes de arrancar.
+
+Antes de empezar dime en una frase qué quieres construir o resolver hoy.
 ```
 
-Espera confirmación. Si pide cambios, ajusta y vuelve a mostrar.
+La intro debe leerse en menos de 20 segundos — es saludo + valor + qué viene a continuación. Después una sola pregunta. Sin checks técnicos previos. Si el ambiente necesita configuración (npm install, .env), el orquestador lo detecta después del kickoff; aquí solo escuchamos.
 
-### Paso 3 — escribir `content/principles.md`
+---
 
-Estructura obligatoria (< 1500 palabras):
+## Paso 1 — detección de señales
 
-```markdown
-# {{PROYECTO}} — Principios
+Cuando el usuario responde, aplicas la función `detectSignals(input)` definida en `.claude/skills/kickoff/detector.js`. La lógica es determinística (regex sobre el texto en minúsculas), no LLM, para que sea predecible y testeable.
 
-> Documento canónico. Cualquier agente lo lee LITERAL al tope de su brief.
-> Si lo que vas a producir contradice un principio, frena y pregunta al orquestador.
+Devuelve `{ type, size, output, confidence, evidence }`:
 
-## Qué ES este proyecto
-{{1-2 párrafos directos}}
+- **type** ∈ `research | build | content | business | personal | mixed`
+- **size** ∈ `rapido | medio | grande`
+- **output** ∈ `imagen | codigo | analisis | documento | idea | mixed`
 
-## Qué NO ES
-- {{Anti-pattern 1}}
-- {{Anti-pattern 2}}
-- {{Anti-pattern 3}}
+### Tabla resumida de señales (para diagnóstico humano)
 
-## Audiencia
-{{1 párrafo: para quién, contexto, qué espera}}
-
-## Tono no negociable
-- {{Atributo 1 (ej. "directo, sin jerga")}}
-- {{Atributo 2}}
-- {{Idioma: español neutro — cero voseo, cero regionalismos}}
-
-## Outputs esperados
-- {{Output 1}}
-- {{Output 2}}
-
-## Restricciones duras
-- {{Lo que SIEMPRE debe pasar}}
-- {{Lo que NUNCA debe pasar}}
-
-## Reglas para cualquier agente
-1. Lee este archivo + `content/INDEX.md` + `process-log/00-decisions.md` antes de generar output.
-2. Si tu output contradice un principio, frena y pregunta.
-3. Reporta el modelo que usaste (`claude-opus-4-7`, `gpt-image-2`, etc.).
-4. Si generas imágenes: haz Read multimodal del PNG después (skill `multimodal-validation`).
-5. Si generas prompts con references: cada `Image N` declarada DEBE estar mencionada en el texto del prompt.
-
-## Versión
-v0 — {{YYYY-MM-DD}}
-```
-
-### Paso 4 — escribir `content/INDEX.md`
-
-```markdown
-# INDEX — router de archivos del proyecto
-
-> Cada agente carga SOLO los archivos relevantes a su tarea. No el repo entero.
-
-## Tabla de carga obligatoria por tarea
-
-| Tarea | Carga obligatoria | Carga si aplica |
+| Categoría | Keywords/patrones disparadores | Resultado |
 |---|---|---|
-| Cualquier output | `principles.md` + este INDEX + `process-log/00-decisions.md` | — |
-| Texto narrativo / pitch / contenido | + glosario, lore, ejemplos previos | — |
-| Visual / imagen | + style-guide, char-sheets relevantes | concept arts contextuales |
-| Personaje nuevo | + lore, canon-cast | research previo si hay |
-| Code | + relevant module(s) | tests, docs |
+| content | meme, post, instagram, tiktok, campaña, copy, guion, ilustración, reel, artículo, blog | `type=content` |
+| build | app, aplicación, web, dashboard, plataforma, sistema, herramienta, cli, api, bot, automatizar, digitalizar | `type=build` |
+| business | ventas, clientes, crm, mi empresa, operación, estrategia comercial, modelo de negocio, pitch deck | `type=business` |
+| research | investigar, research, analizar mercado, benchmark, competencia, estado del arte, tendencias, deep dive | `type=research` |
+| personal | organizar mi, agenda, rutina, hábito, journal, productividad personal | `type=personal` |
+| rápido | ahora, rápido, urgente, hoy, ya, "en 30 min", meme, post | `size=rapido` |
+| grande | varios días, sprint, aplicación, plataforma, digitalizar, "a fondo", "deep dive" | `size=grande` |
 
-## Archivos canónicos del proyecto
+Si dos categorías de tipo empatan con score ≥2, devuelve `mixed`. Si nadie hizo match, también `mixed`.
 
-- `content/principles.md` — qué ES y qué NO ES (Capa 0)
-- `content/INDEX.md` — este archivo
-- `process-log/00-decisions.md` — decisiones humanas (ley)
-- {{añadir aquí los archivos que se vayan creando: lore.md, style-guide.md, char-sheets/, etc.}}
+**Tiebreaker `build > business`:** cuando build y business empatan (caso típico: "construir app para gestionar ventas"), gana `build`. La naturaleza dominante de un proyecto es lo que se EJECUTA, no para qué área es. Una app de ventas se construye como software (stack build) aunque sirva al negocio.
+
+### Si la confianza es baja (`confidence < 2`)
+
+Antes de bifurcar preguntas, repregunta UNA vez con una opción cerrada cálida:
+
+```
+No me quedó del todo claro. ¿Esto va más por el lado de:
+(a) crear contenido o algo creativo,
+(b) construir software o una herramienta,
+(c) investigar o analizar algo,
+(d) organizar un proceso o decisión de negocio,
+(e) algo personal,
+o (f) otra cosa que no entra ahí?
+```
+
+Con la respuesta, re-corres `detectSignals(answer + " " + originalInput)` y avanzas con lo que salga, aunque siga `mixed`.
+
+---
+
+## Paso 2 — preguntas adaptativas (máximo 4-5)
+
+Según el `type` detectado, haces SOLO las preguntas de la rama correspondiente. Una pregunta a la vez. Tono cálido, directo, español neutro.
+
+**Regla dura:** nunca más de 5 preguntas adaptativas. Si necesitas más detalle, lo descubres durante la ejecución, no en el kickoff.
+
+### Rama: content
+
+1. ¿Para quién es y dónde se va a publicar? (Instagram, LinkedIn, web, interno…)
+2. ¿Qué tono o estilo? (juguetón, técnico, místico, irónico, formal…)
+3. ¿Hay marca o referencias visuales que respetar? (URLs, logos, paletas)
+4. ¿Cuántas piezas y para cuándo? (una sola para hoy, set de 5, campaña semanal…)
+
+### Rama: build
+
+1. ¿Para quién es? (uso interno tuyo, equipo, clientes externos)
+2. ¿Stack o restricciones técnicas? (lenguajes que ya usas, qué NO usar, integraciones obligadas)
+3. ¿Cuál es el flujo crítico que debe funcionar primero? (lo mínimo que prueba que vale la pena seguir)
+4. ¿Deadline o presupuesto que marque el ritmo?
+
+### Rama: business
+
+1. ¿Qué proceso o área concreta estamos atacando? (ventas, ops, soporte, finanzas…)
+2. ¿Quién lo opera hoy y dónde está el dolor? (cuello de botella, costo, errores)
+3. ¿Tienes datos o documentación previa del proceso? (planillas, manuales, CRM)
+4. ¿En qué horizonte quieres ver resultado? (semana, mes, trimestre)
+
+### Rama: research
+
+1. ¿Qué profundidad necesitas? (panorama de 1 hora, informe semanal, tesis de varias semanas)
+2. ¿Hay fuentes preferidas o vetadas? (papers, prensa especializada, redes, internas)
+3. ¿Qué decisión vas a tomar con el resultado? (define cuándo es "suficiente")
+4. ¿Formato del entregable? (informe escrito, deck, base de datos, mapa)
+
+### Rama: personal
+
+1. ¿Qué intentas mejorar o resolver? (productividad, hábitos, decisiones, journaling)
+2. ¿Qué intentaste antes y por qué no funcionó?
+3. ¿Cuánto tiempo al día estás dispuesto a dedicarle?
+
+### Rama: mixed
+
+Solo 3 preguntas, abiertas, para concretar el tipo:
+1. ¿Cuál es el resultado tangible que quieres tener al final? (algo que se vea, se lea, se use)
+2. ¿Quién es el usuario o lector? (tú, tu equipo, clientes, público)
+3. ¿En cuánto tiempo esperas tenerlo listo?
+
+Después de estas 3, vuelves a correr `detectSignals` sobre las respuestas combinadas y eliges la rama. Si sigue `mixed`, asumes ese tipo y avisas al usuario que el sprint inicial será "concretar el tipo".
+
+---
+
+## Paso 3 — diagnóstico y stack recomendado
+
+Una vez recogidas las respuestas, aplicas:
+
+- `recommendStack(type)` → lista de skills recomendadas con un `why` por cada una.
+- `recommendMode(type, size)` → `rapido` o `profundo`.
+- `suggestInitialSprint(type, mode)` → `{ objective, deliverables[], mode }`.
+
+Las **skills core** (siempre activas, definidas en `CORE_SKILLS` del detector) son:
+`pipeline-v2`, `cold-reader-gate`, `multimodal-validation`, `karpathy-rules`, `confidence-loop`, `agent-template`. Estas no se discuten — se activan automáticamente. Solo presentas al usuario las RECOMENDADAS adicionales.
+
+### Stack recomendado por tipo (resumen)
+
+| Tipo | Skills recomendadas adicionales |
+|---|---|
+| content | image-gen, image-explorer, brand-guidelines, multimodal-validation, marketing, canvas-design |
+| build | quality-mindset, agent-template, council, karpathy-rules, superpowers-pr, frontend-design, webapp-testing, playwright |
+| business | council, pipeline-v2, seo-strategist, agent-template, marketing, brand-guidelines, xlsx |
+| research | pipeline-v2, cold-reader-gate, firecrawl, context7 |
+| personal | confidence-loop, pipeline-v2 |
+| mixed | pipeline-v2, confidence-loop, web-artifacts-builder |
+
+Las skills opcionales del catálogo (`_catalog/INDEX.md`) están disponibles pero no todas se recomiendan automáticamente para todo tipo. La lista por tipo es curada — Sprint 5.2 amplió las recomendaciones según el video que vio Aldo. Las skills no listadas (ej. `pdf-skill`, `remotion`, `web-artifacts-builder` para tipos distintos a `mixed`) se activan manualmente cuando el caso lo amerita, no por default.
+
+### Diagnóstico al usuario (formato literal de salida)
+
+```
+Esto es lo que entendí:
+
+Proyecto: <descripción de 1 línea reformulada por ti>
+Tipo: <type detectado> (<por qué — referencia a las palabras del usuario>)
+Tamaño: <size> · Modo: <rapido|profundo>
+
+Stack recomendado:
+- <skill 1> — <why en 1 línea>
+- <skill 2> — <why en 1 línea>
+- <skill 3> — <why en 1 línea>
+(además de las skills core: pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop, agent-template)
+
+Sprint 1 sugerido — <objective>:
+- <deliverable 1>
+- <deliverable 2>
+- <deliverable 3>
+
+¿Confirmas o ajustas algo antes de que lo guarde?
+```
+
+Si el usuario ajusta, integras los cambios y vuelves a mostrar este bloque hasta que diga "confirma", "dale", "guarda", "sí está bien", etc.
+
+---
+
+## Paso 4 — persistencia (SOLO al recibir confirmación explícita)
+
+Cargas `src/memory.js` y ejecutas en este orden. Todas las llamadas son idempotentes.
+
+```js
+import { writeProfile, addAgent, addSkill, addSprint } from '../src/memory.js';
+import { CORE_SKILLS, recommendStack, recommendMode, suggestInitialSprint } from '.claude/skills/kickoff/detector.js';
+
+const profile = {
+  project_type: <type>,
+  mode: <mode>,
+  description: <descripción de 1 línea, máx 240 caracteres>,
+  created_at: new Date().toISOString(),
+  owner: <email del usuario>,
+  skills_activas: [...CORE_SKILLS, ...recommendStack(type).map(s => s.name)],
+  agentes_activos: [],
+  sprint_inicial: 'sprint-1',
+  tags: [<type>, <size>],
+};
+writeProfile(profile);
+
+for (const name of CORE_SKILLS) addSkill({ name });
+for (const s of recommendStack(type)) addSkill({ name: s.name, notas: s.why });
+
+const sprint = suggestInitialSprint(type, mode);
+addSprint({ number: 1, objective: sprint.objective, deliverables: sprint.deliverables, lessons: [] });
+```
+
+### Crear archivos del proyecto
+
+1. `content/principles.md` ← copia desde `content/principles.template.md` y reemplaza `{{PROYECTO}}`, `{{TIPO}}`, `{{DESCRIPCION}}`, `{{TONO}}`, `{{NO_NEGOCIABLES}}`, `{{FECHA}}`.
+2. `content/INDEX.md` ← copia desde `content/INDEX.template.md` y ajusta la sección de archivos canónicos según el tipo.
+3. `roadmap/roadmap.md` ← genera con sprint 1 explicitado y backlog vacío. Sprint 2.4 lo enriquecerá.
+
+Si `content/` o `roadmap/` no existen, créalos.
+
+### Roadmap inicial (formato literal)
+
+```markdown
+# Roadmap del proyecto
+
+## Sprint actual
+
+### Sprint 1 — <objective>
+**Modo:** <rapido|profundo>
+**Estado:** abierto
+
+Deliverables:
+- <deliverable 1>
+- <deliverable 2>
+- <deliverable 3>
+
+## Backlog
+
+(vacío — Sprint 2.4 lo enriquecerá con priorización)
+
+## Sprints cerrados
+
+(ninguno aún — ver memory/sprint-log.md cuando empiecen a cerrarse)
+```
+
+### Agentes activos
+
+En el kickoff NO se invocan agentes todavía. `agentes_activos` arranca vacío. El primer agente se registra cuando el usuario pida la primera tarea concreta.
+
+---
+
+## Paso 5 — verificación final
+
+Cierra con este mensaje:
+
+```
+Listo. Guardé:
+- memory/project-profile.json (perfil)
+- memory/active-team.json (skills activadas)
+- memory/sprint-log.md (sprint 1)
+- content/principles.md y content/INDEX.md (canon del proyecto)
+- roadmap/roadmap.md (con sprint 1 abierto)
+
+Tip de productividad: si vas a escribir prompts largos, en Windows usa Win+H
+para dictar (macOS: doble Fn). Detalles en docs/voice-input-guide.md.
+
+Si quieres validar que el sistema arranca limpio, corre:
+node scripts/smoke-test.js   (Sprint 3.3 lo provee; si no existe aún, salta)
+
+¿Empezamos con el primer deliverable del sprint?
+```
+
+Si existe el smoke test (Sprint 3.3), ofrece correrlo automáticamente. Si no, no lo menciones como bloqueo.
+
+---
+
+## Persistencia: contrato exacto con memory.js
+
+| Llamada | Cuándo | Argumentos |
+|---|---|---|
+| `writeProfile(profile)` | Una sola vez, al confirmar el diagnóstico. | El objeto del Paso 4. |
+| `addSkill({ name, notas? })` | Una vez por skill core + una vez por skill recomendada. | `notas` es el `why` cuando aplica. |
+| `addAgent(...)` | NO en el kickoff. Se llama cuando el primer agente se invoca. | — |
+| `addSprint({ number: 1, objective, deliverables, lessons: [] })` | Una sola vez, junto con el resto. | Tomado de `suggestInitialSprint`. |
+
+`addDecision` y `addLesson` NO se llaman en el kickoff salvo que el usuario tome una decisión explícita durante la entrevista (ej. "decido no usar Git en este proyecto"). En ese caso lo registras como `addDecision`.
+
+---
+
+## Anti-patrones (no hacer)
+
+1. **No hacer más de 5 preguntas adaptativas.** Si la pregunta 6 te parece necesaria, no la es: descubre eso en la primera tarea.
+2. **No recomendar stack genérico.** Si el tipo es `content`, no recomiendas `firecrawl`. Si es `research`, no recomiendas `image-gen`. La justificación de cada skill (`why`) debe ser específica al proyecto.
+3. **No asumir tipo sin señal clara.** Si `confidence < 2`, repreguntas. No "intuyes".
+4. **No persistir antes de la confirmación.** El usuario decide final. Hasta entonces, todo vive en memoria de la conversación.
+5. **No bombardear al usuario con jerga.** Aldo es vibe coder. Decir "te activo confidence-loop, pipeline-v2 y agent-template" sin explicar para qué = falla.
+6. **No saltarte el Paso 0 con un párrafo educativo de 6 puntos.** El saludo es UNA línea, una pregunta. Lo demás se gana con el flujo.
+7. **No correr checks técnicos (npm install, .env) antes de preguntar.** Eso interrumpe la energía. El orquestador los ejecuta DESPUÉS, cuando ya hay perfil.
+
+---
+
+## Ejemplos end-to-end
+
+### Escenario A — meme rápido para Instagram
+
+```
+[USUARIO clona el repo]
+KICKOFF: Hola, soy el starter template de Mazelab. Antes de empezar dime
+en una frase qué quieres construir o resolver hoy.
+
+USUARIO: necesito un meme para Instagram sobre que los lunes son lentos.
+
+[detectSignals → type=content, size=rapido, output=imagen, confidence=3]
+
+KICKOFF: Va, content rápido. Tres preguntas cortas:
+
+1. ¿Tono? (juguetón, irónico, ácido, melancólico…)
+
+USUARIO: ácido pero no agresivo, tipo Liana Finck.
+
+2. ¿Hay paleta o marca que respetar?
+
+USUARIO: no, libre.
+
+3. ¿Una sola pieza o varias?
+
+USUARIO: una sola, para hoy.
+
+KICKOFF:
+
+Esto es lo que entendí:
+
+Proyecto: Meme ácido para Instagram sobre lunes lentos.
+Tipo: content (palabras clave: "meme", "Instagram") · pieza única.
+Tamaño: rapido · Modo: rapido
+
+Stack recomendado:
+- image-gen — genera la imagen final con identity lock.
+- image-explorer — explora 3-4 variantes antes de cerrar dirección.
+- brand-guidelines — opcional, solo si más adelante quieres formalizar tu look.
+- multimodal-validation — fuerza que yo lea el PNG antes de dártelo.
+(además de las skills core: pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop, agent-template)
+
+Sprint 1 sugerido — Producir el primer artefacto creativo y validarlo con cold-reader:
+- principles.md y INDEX.md generados por kickoff
+- 1 pieza creativa (imagen/copy/post) pasada por pipeline-v2
+- Lessons del primer ciclo registradas en lessons.md
+
+¿Confirmas o ajustas algo?
+
+USUARIO: dale.
+
+[Persistencia → writeProfile, addSkill x10, addSprint]
+[Crea content/principles.md, content/INDEX.md, roadmap/roadmap.md]
+
+KICKOFF: Listo. Guardé... ¿empezamos con el meme?
+```
+
+### Escenario B — digitalizar área de ventas de empresa
+
+```
+USUARIO: voy a digitalizar el área de ventas de mi empresa, somos 4 personas y todo está en planillas.
+
+[detectSignals → type=business, size=grande, output=mixed, confidence=4]
+
+KICKOFF: Va, business grande. Cuatro preguntas:
+
+1. ¿Qué proceso concreto te duele más hoy? (lead capture, seguimiento, cotización, cierre, post-venta)
+
+USUARIO: el seguimiento. Se nos pierden leads en planillas distintas.
+
+2. ¿Tienes alguna herramienta ya en uso o partimos de cero?
+
+USUARIO: usamos Google Sheets. No queremos pagar HubSpot todavía.
+
+3. ¿Qué horizonte? (semanas, meses)
+
+USUARIO: idealmente 1 mes para tener algo usable.
+
+4. ¿Quién va a usarlo además de ti? (perfiles técnicos, no técnicos)
+
+USUARIO: yo y dos vendedores que no son técnicos.
+
+KICKOFF:
+
+Esto es lo que entendí:
+
+Proyecto: Digitalizar seguimiento de leads de ventas (4 personas, sin HubSpot).
+Tipo: business (frase: "digitalizar el área de ventas") · proceso real con usuarios.
+Tamaño: grande · Modo: profundo (varios sprints, decisiones con impacto)
+
+Stack recomendado:
+- council — decisiones de proceso tienen ángulos comerciales y técnicos a la vez.
+- pipeline-v2 — antes de proponer un cambio operativo, lo pasamos por critic + cold-reader.
+- agent-template — modelaremos roles (vendedor, follow-up, reporte) como agentes para tareas repetitivas.
+- seo-strategist — opcional, solo si después atacamos captura orgánica de leads.
+(además de las skills core)
+
+Sprint 1 sugerido — Mapear el proceso a digitalizar y proponer la primera versión:
+- principles.md y INDEX.md generados por kickoff
+- Mapa actual del proceso (estado AS-IS) en docs/
+- Propuesta TO-BE con 3 cambios concretos prioritizados
+
+¿Confirmas o ajustas?
+
+USUARIO: confirma.
+
+[Persistencia + creación de archivos]
+```
+
+---
 
 ## Versión
-v0 — {{YYYY-MM-DD}}
-```
 
-### Paso 5 — confirmar al usuario
+v3 — 2026-05-09 — entrevista adaptativa con detección de señales, recomendación de stack justificada, persistencia integrada con memory.js, templates pre-pobladas y test de integración con 3 escenarios. Reemplaza la v2 lineal de 6 preguntas fijas.
 
-```
-Listo. Generé:
-- content/principles.md
-- content/INDEX.md
-
-Próximo paso: cuéntame qué quieres hacer primero. Te propondré un plan
-usando pipeline v2 (architect → critic → cold-reader → tu validación).
-```
-
-## Reglas duras
-
-1. **Una pregunta a la vez.** No hagas un cuestionario gigante.
-2. **Muestra antes de escribir.** Confirmación humana es obligatoria.
-3. **Idioma del usuario.** Si responde en español neutro, escribe en español neutro. Si el global del usuario marca lista negra de regionalismos, respétala.
-4. **Si el usuario es novato**, explica decisiones técnicas en lenguaje simple (sin jerga gratuita).
-5. **No inventes información.** Si una respuesta es ambigua, repregunta o registra "TBD".
-
-## Versión
-
-v0 — 2026-05-06 — primera versión derivada del manual portable de orquestación.
+Cambios principales: ver `CHANGELOG.md` en esta misma carpeta.

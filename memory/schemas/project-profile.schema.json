@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "project-profile",
+  "title": "Project profile (memoria del proyecto)",
+  "description": "Perfil del proyecto generado por la skill /kickoff. Vive en memory/project-profile.json. Pequeño y estable: cambia rara vez, se lee en cada sesión.",
+  "type": "object",
+  "required": ["project_type", "mode", "description", "created_at", "owner", "skills_activas", "agentes_activos", "sprint_inicial"],
+  "additionalProperties": false,
+  "properties": {
+    "project_type": {
+      "type": "string",
+      "enum": ["research", "build", "content", "business", "personal", "mixed"],
+      "description": "Naturaleza dominante del proyecto. Define qué agentes/skills tienen prioridad."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["rapido", "profundo"],
+      "description": "Cadencia esperada. rapido = iteraciones cortas. profundo = pipeline-v2 completo cada output."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "Descripción de una línea. Si necesita más, va en docs/ no acá."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Email o handle del dueño del proyecto."
+    },
+    "skills_activas": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Slugs de skills habilitadas. Ej: kickoff, pipeline-v2, image-gen."
+    },
+    "agentes_activos": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Nombres de agentes activos. El detalle vive en active-team.json."
+    },
+    "sprint_inicial": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador del sprint con el que arranca el proyecto. Ej: sprint-0-discovery."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Etiquetas libres para clasificar el proyecto."
+    }
+  }
+}

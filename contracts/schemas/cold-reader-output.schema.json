@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "cold-reader-output",
+  "title": "Cold reader gate output",
+  "description": "Producido por Capa 3 (cold-reader-gate). Voto binario con veto absoluto. Solo recibe principles + deliverable, sin debate previo.",
+  "type": "object",
+  "required": ["agent", "model", "produced_at", "target_artifact", "vote"],
+  "additionalProperties": false,
+  "properties": {
+    "agent": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "produced_at": { "type": "string", "format": "date-time" },
+    "target_artifact": { "type": "string", "minLength": 1 },
+    "vote": {
+      "type": "string",
+      "enum": ["GO", "NO-GO"]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Obligatorio si vote=NO-GO. Frase corta accionable."
+    },
+    "blocking_principles": {
+      "type": "array",
+      "description": "Si vote=NO-GO, lista de principios violados con id o cita corta.",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "vote": { "const": "NO-GO" } } },
+      "then": { "required": ["reason"] }
+    }
+  ]
+}

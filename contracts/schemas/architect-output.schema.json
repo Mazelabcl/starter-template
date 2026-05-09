@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "architect-output",
+  "title": "Architect layer output",
+  "description": "Producido por Capa 1 (Architect) del pipeline v2. Describe la estructura propuesta de un artefacto creativo o técnico antes de que Critic lo evalúe.",
+  "type": "object",
+  "required": ["agent", "model", "produced_at", "artifact_kind", "title", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "agent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nombre del agente que produjo el output (ej. architect-alpha)"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Modelo LLM usado (ej. claude-opus-4-7)"
+    },
+    "produced_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifact_kind": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tipo de artefacto propuesto: capitulo, articulo, plan, codigo, diseno, etc."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "heading", "intent"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "heading": { "type": "string", "minLength": 1 },
+          "intent": { "type": "string", "minLength": 1 },
+          "estimated_length": { "type": "string" },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["principles", "index", "research", "image", "code", "external"]
+          },
+          "path": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "active-team",
+  "title": "Equipo activo del proyecto",
+  "description": "Lista de agentes y skills habilitados en el proyecto, con métricas de uso. Vive en memory/active-team.json. Cambia con frecuencia (cada invocación toca ultimo_uso).",
+  "type": "object",
+  "required": ["agents", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "agents": {
+      "type": "array",
+      "description": "Agentes registrados como activos para este proyecto.",
+      "items": {
+        "type": "object",
+        "required": ["name", "rol_corto", "modelo_asignado", "fecha_activacion", "ultimo_uso", "total_invocaciones"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "rol_corto": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Resumen del 'actúa como'. No todo el system prompt, solo la línea identidad."
+          },
+          "modelo_asignado": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Modelo LLM por defecto para este agente. Ej: claude-opus-4-7."
+          },
+          "fecha_activacion": { "type": "string", "format": "date-time" },
+          "ultimo_uso": { "type": "string", "format": "date-time" },
+          "total_invocaciones": { "type": "integer", "minimum": 0 },
+          "notas": { "type": "string" }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "Skills habilitadas en el proyecto. Las skills no llevan métricas de invocación porque viven a nivel global.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "fecha_activacion": { "type": "string", "format": "date-time" },
+          "notas": { "type": "string" }
+        }
+      }
+    }
+  }
+}

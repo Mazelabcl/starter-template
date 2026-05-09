@@ -1,0 +1,18 @@
+{
+  "session_id": "c2d71c90-1ca8-46d0-8c55-479c6e038f0d",
+  "session_started_at": "2026-05-09T00:00:00.000Z",
+  "active_tasks": [],
+  "events": [],
+  "metrics": {
+    "total_tokens_session": 0,
+    "tasks_completed": 0,
+    "tasks_failed": 0,
+    "councils_invoked": 0,
+    "images_generated": 0
+  },
+  "active_skills": [],
+  "current_sprint": {
+    "number": 0,
+    "objective": "(sin sprint declarado)"
+  }
+}
