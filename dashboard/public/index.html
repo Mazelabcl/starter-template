@@ -1,229 +1,24 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=1280" />
-  <title>Mazelab Starter — Dashboard v3</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard v3 — &lt;project&gt;</title>
+  <!-- Webfont pixel-art CC0 vía Google Fonts CDN (ADR-02). Solo se aplica al panel. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+  <link rel="stylesheet" href="./style.css">
 </head>
-<body data-empty="true" data-sidebar="open">
-
-  <!-- ============== HEADER ============== -->
-  <header class="topbar" role="banner">
-    <div class="topbar-left">
-      <button class="icon-btn sidebar-toggle" aria-label="Mostrar u ocultar barra lateral" data-action="toggle-sidebar">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 8h12M2 13h12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-      </button>
-      <h1 class="brand">Mazelab Starter — Dashboard v3</h1>
-    </div>
-
-    <div class="topbar-mid">
-      <div id="project-banner" class="project-banner" aria-live="polite">
-        <span class="project-icon" data-slot="project-icon" aria-hidden="true"></span>
-        <div class="project-text">
-          <div class="project-desc" data-slot="project-desc">esperando perfil del proyecto…</div>
-          <div class="project-tags" data-slot="project-tags"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="topbar-right">
-      <ul class="metrics" aria-label="Métricas de la sesión">
-        <li class="metric" title="Tokens consumidos en la sesión"><span class="metric-icon">tk</span><span data-slot="metric-tokens">0</span></li>
-        <li class="metric metric-ok" title="Tareas completadas"><span class="metric-icon">ok</span><span data-slot="metric-done">0</span></li>
-        <li class="metric metric-fail" title="Tareas fallidas"><span class="metric-icon">!!</span><span data-slot="metric-failed">0</span></li>
-        <li class="metric metric-council" title="Councils invocados"><span class="metric-icon">co</span><span data-slot="metric-councils">0</span></li>
-        <li class="metric metric-img" title="Imágenes generadas"><span class="metric-icon">im</span><span data-slot="metric-images">0</span></li>
-        <li class="metric metric-uptime" title="Tiempo desde el inicio de la sesión"><span class="metric-icon">up</span><span data-slot="metric-uptime">0s</span></li>
-      </ul>
-
-      <div id="conn-indicator" class="conn-indicator conn-init" role="status" aria-live="polite">
-        <span class="conn-dot" aria-hidden="true"></span>
-        <span class="conn-label" data-slot="conn-label">conectando…</span>
-      </div>
-    </div>
-  </header>
-
-  <!-- ============== MAIN LAYOUT ============== -->
-  <div class="layout">
-
-    <!-- ============== SIDEBAR ============== -->
-    <aside class="sidebar" aria-label="Información del proyecto">
-      <section class="side-section">
-        <h2 class="side-title">Sprint actual</h2>
-        <div class="sprint-card">
-          <div class="sprint-row">
-            <span class="sprint-num" data-slot="sprint-num">—</span>
-            <span class="sprint-pending" data-slot="sprint-pending">0 pendientes</span>
-          </div>
-          <p class="sprint-objective" data-slot="sprint-objective">(sin sprint declarado)</p>
-          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-slot="sprint-progressbar">
-            <div class="progress-fill" data-slot="sprint-progress-fill" style="width:0%"></div>
-          </div>
-          <div class="sprint-stats" data-slot="sprint-stats">0/0 tareas</div>
-        </div>
-      </section>
-
-      <section class="side-section">
-        <h2 class="side-title">Skills activas</h2>
-        <div class="chip-row" data-slot="skills" role="list">
-          <span class="chip chip-empty">ninguna activa</span>
-        </div>
-      </section>
-
-      <section class="side-section">
-        <h2 class="side-title">Equipo activo</h2>
-        <ul class="team-list" data-slot="team" aria-label="Agentes activos del proyecto">
-          <li class="team-empty">sin agentes registrados</li>
-        </ul>
-      </section>
-
-      <section class="side-section">
-        <h2 class="side-title">Contratos declarados</h2>
-        <ul class="contract-list" data-slot="contracts">
-          <li class="contract-empty">sin contratos en contracts/declared</li>
-        </ul>
-      </section>
-
-      <section class="side-section">
-        <h2 class="side-title">Recursos</h2>
-        <div class="side-actions">
-          <a class="link-btn" href="/api/state" target="_blank" rel="noopener">descargar /api/state</a>
-          <!-- 2.3b: botón "exportar log" — descarga JSON con state + history + memoria. -->
-          <button type="button" class="link-btn" data-export-btn data-action="export-log" aria-label="Exportar log de la sesión">
-            <svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14" style="vertical-align:-2px; margin-right:6px;"><use href="/icons/sprite.svg#i-export"/></svg>
-            exportar log
-          </button>
-          <span class="export-feedback" data-export-feedback aria-live="polite" hidden></span>
-        </div>
-      </section>
-    </aside>
-
-    <!-- ============== KANBAN ============== -->
-    <main class="board" aria-label="Tareas en curso">
-      <div id="empty-banner" class="empty-banner" hidden>
-        <h2>esperando primera tarea…</h2>
-        <p>El dashboard reacciona en vivo a <code>dashboard/state.json</code>. Cuando un agente registre una tarea, aparecerá acá.</p>
-        <p class="hint">Probar manualmente:<br><code>node scripts/update_state.js task-start demo-1 TestAgent "actúa como QA" "primera tarea" file.js</code></p>
-      </div>
-
-      <section class="column" data-status="queued">
-        <header class="column-head">
-          <h2>En cola</h2>
-          <span class="count" data-slot="count-queued">0</span>
-        </header>
-        <div class="column-body" data-slot="col-queued"></div>
-      </section>
-
-      <section class="column" data-status="running">
-        <header class="column-head">
-          <h2>Trabajando</h2>
-          <span class="count" data-slot="count-running">0</span>
-        </header>
-        <div class="column-body" data-slot="col-running"></div>
-      </section>
-
-      <section class="column" data-status="completed">
-        <header class="column-head">
-          <h2>Completadas</h2>
-          <span class="count" data-slot="count-completed">0</span>
-        </header>
-        <div class="column-body" data-slot="col-completed"></div>
-      </section>
-
-      <section class="column column-fail" data-status="failed">
-        <header class="column-head">
-          <h2>Falladas</h2>
-          <span class="count" data-slot="count-failed">0</span>
-        </header>
-        <div class="column-body" data-slot="col-failed"></div>
-      </section>
-    </main>
+<body>
+  <div id="loading">Dashboard v3 cargando…</div>
+  <div id="game"></div>
+  <!-- Topbar flotante. pointer-events:none en el contenedor; solo los botones capturan clicks. -->
+  <div id="topbar">
+    <button id="sprint-toggle" type="button" aria-label="Abrir vista de sprint">Sprint</button>
+    <button id="roadmap-toggle" type="button" aria-label="Abrir vista de roadmap">Roadmap</button>
   </div>
-
-  <!-- ============== 2.3b: TIMELINE PANEL (sticky bottom) ============== -->
-  <section class="timeline" id="timeline-panel" data-timeline aria-label="Línea de tiempo de eventos">
-    <header class="timeline-head">
-      <div class="timeline-head-left">
-        <button type="button" class="icon-btn timeline-collapse" data-action="toggle-timeline" aria-label="Colapsar o expandir timeline" aria-expanded="true">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><use href="/icons/sprite.svg#i-chevron"/></svg>
-        </button>
-        <h2 class="timeline-title">Eventos</h2>
-        <span class="timeline-count" data-timeline-count>0 eventos</span>
-        <span class="timeline-filtered" data-timeline-filtered hidden></span>
-      </div>
-      <div class="timeline-head-right">
-        <div class="timeline-search">
-          <svg viewBox="0 0 16 16" aria-hidden="true" class="timeline-search-icon"><use href="/icons/sprite.svg#i-search"/></svg>
-          <input type="search" class="timeline-search-input" data-timeline-search placeholder="buscar en eventos…" aria-label="Buscar en eventos del timeline" />
-        </div>
-        <button type="button" class="link-btn" data-action="open-replay" data-replay-btn aria-label="Abrir modal de replay">
-          <svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14" style="vertical-align:-2px; margin-right:4px;"><use href="/icons/sprite.svg#i-replay"/></svg>
-          replay
-        </button>
-      </div>
-    </header>
-    <div class="timeline-filters" data-timeline-filters role="group" aria-label="Filtros por tipo de evento"></div>
-    <div class="timeline-body" data-timeline-body>
-      <ol class="timeline-list" data-timeline-list aria-label="Lista cronológica de eventos"></ol>
-      <div class="timeline-empty" data-timeline-empty>Sin eventos aún. Lanza una tarea para empezar a verla aquí.</div>
-    </div>
-  </section>
-
-  <!-- ============== 2.3b: REPLAY MODAL ============== -->
-  <div class="replay-modal" data-replay-modal id="replay-modal" role="dialog" aria-modal="true" aria-labelledby="replay-modal-title" hidden>
-    <div class="replay-backdrop" data-replay-backdrop></div>
-    <div class="replay-dialog" role="document">
-      <header class="replay-head">
-        <h2 id="replay-modal-title" class="replay-title">Replay de sesión</h2>
-        <button type="button" class="icon-btn replay-close" data-action="close-replay" aria-label="Cerrar replay">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
-        </button>
-      </header>
-      <div class="replay-body" data-replay-body>
-        <div class="replay-loading" data-replay-loading hidden>
-          <span class="replay-spinner" aria-hidden="true"></span>
-          <span>cargando historia…</span>
-        </div>
-        <div class="replay-empty" data-replay-empty hidden>Aún no hay historia para replay.</div>
-        <div class="replay-snapshot" data-replay-snapshot hidden>
-          <div class="replay-snapshot-head">
-            <span class="replay-snapshot-time" data-replay-snapshot-time>—</span>
-            <span class="replay-snapshot-pos" data-replay-snapshot-pos>0/0</span>
-          </div>
-          <div class="replay-kanban" data-replay-kanban>
-            <section class="replay-col" data-replay-col="queued"><h3>En cola <span data-replay-col-count="queued">0</span></h3><div data-replay-col-body="queued"></div></section>
-            <section class="replay-col" data-replay-col="running"><h3>Trabajando <span data-replay-col-count="running">0</span></h3><div data-replay-col-body="running"></div></section>
-            <section class="replay-col" data-replay-col="completed"><h3>Completadas <span data-replay-col-count="completed">0</span></h3><div data-replay-col-body="completed"></div></section>
-            <section class="replay-col" data-replay-col="failed"><h3>Falladas <span data-replay-col-count="failed">0</span></h3><div data-replay-col-body="failed"></div></section>
-          </div>
-          <div class="replay-current-event" data-replay-current-event></div>
-        </div>
-      </div>
-      <footer class="replay-foot" data-replay-foot hidden>
-        <div class="replay-controls">
-          <button type="button" class="link-btn replay-ctrl" data-action="replay-restart" aria-label="Reiniciar al primer evento">«</button>
-          <button type="button" class="link-btn replay-ctrl" data-action="replay-step-back" aria-label="Un evento atrás">‹</button>
-          <button type="button" class="link-btn replay-play" data-action="replay-play-toggle" data-replay-play aria-label="Reproducir o pausar">play</button>
-          <button type="button" class="link-btn replay-ctrl" data-action="replay-step-fwd" aria-label="Un evento adelante">›</button>
-          <button type="button" class="link-btn replay-ctrl" data-action="replay-end" aria-label="Saltar al último evento">»</button>
-          <select class="replay-speed" data-replay-speed aria-label="Velocidad de reproducción">
-            <option value="1">1x</option>
-            <option value="2">2x</option>
-            <option value="5">5x</option>
-          </select>
-        </div>
-        <input type="range" class="replay-scrubber" data-replay-scrubber min="0" max="0" value="0" step="1" aria-label="Posición temporal del replay" />
-        <div class="replay-times">
-          <span data-replay-time-start>—</span>
-          <span data-replay-time-end>—</span>
-        </div>
-      </footer>
-    </div>
-  </div>
-
-  <script type="module" src="/app.js"></script>
-  <!-- 2.3b: módulo extra (timeline + replay + export). NO toca el módulo de 2.3a. -->
-  <script type="module" src="/app-extras.js"></script>
+  <aside id="panel"></aside>
+  <script type="module" src="./boot.js"></script>
 </body>
 </html>

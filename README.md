@@ -2,20 +2,28 @@
 
 Un OS personal para arrancar proyectos con Claude Code: perfil del proyecto + equipo de agentes con contratos verificables + visibilidad en vivo + memoria persistente. No es "abrir Claude Code en un repo vacío".
 
-## Quickstart (3 pasos)
+## Quickstart (lo más simple, copia y pega)
 
 ```bash
-# 1. Clonar el template (mientras v3 vive en branch — usa -b v3 explícito)
+# 1. Clonar el template + entrar en la carpeta
 git clone -b v3 https://github.com/Mazelabcl/starter-template.git mi-proyecto
 cd mi-proyecto
 
-# 2. Setup interactivo: instala deps, pide API keys, arma el venv de Python
+# 2. Instalar dependencias (te va a pedir API keys: OpenRouter obligatorio, OpenAI opcional, Replicate opcional)
 npm install
-# (corre setup.js en postinstall — pide OpenRouter, OpenAI y opcional Replicate)
 
-# 3. Smoke test antes de empezar (opcional pero muy recomendado)
+# 3. Arrancar todo en un solo comando
+npm start
+# Esto baja los assets del dashboard pixel-art, levanta el servidor en background, abre el browser
+# en http://localhost:7777, y te muestra el próximo paso.
+
+# 4. Abre Claude Code en esta carpeta y dile: /kickoff
+```
+
+### Antes de empezar a trabajar en serio (opcional)
+```bash
 npm run smoke
-# Valida 8 checks end-to-end. ~90s, ~USD 0.05 en API. Si está verde, listo para arrancar.
+# 8 checks end-to-end. ~90s, ~USD 0.05 en API. Confirma que todo funciona antes de invertir tiempo.
 ```
 
 Cuando v3 se mergee a main, podrás clonar sin el flag `-b v3`.

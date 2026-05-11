@@ -1,208 +1,178 @@
-# Dashboard de observabilidad multi-agente — v3 (Sprint 2.2)
+# Dashboard v3
 
-Servidor HTTP nativo (cero deps) que expone el estado en vivo del sistema multi-agente.
-Sprint 2.3 reemplazará el placeholder de UI por un kanban + métricas.
+Pixel-art office scene en Phaser 3. Pixel-art ↔ `state.json` en vivo vía SSE.
 
-## Levantar
+**Estado:** v3.0 completo — fases 1-7 implementadas. Avatares dinámicos con label flotante, side panel rico con drill-down por agente, vista de Sprint con hitos cruzados contra tasks, vista Roadmap macro con render markdown XSS-safe + historial de sprints colapsable.
+
+## Quick start
 
 ```bash
+npm install
+npm run dashboard:assets    # primera vez: baja pack CC0 default (Kenney)
 npm run dashboard
-# o equivalente:
-node dashboard/server.js
+# abre http://localhost:7777
 ```
 
-Puerto: `7777` por defecto. Override con `DASHBOARD_PORT=9000 npm run dashboard`.
-
-URL: <http://localhost:7777/>
+`npm run dashboard:assets` solo es necesario la primera vez (o cuando borras `assets/vendor/`). El default es `kenney-roguelike`.
 
 ## Endpoints
 
-### `GET /api/state`
+| Endpoint | Qué hace |
+|---|---|
+| `GET /` | Sirve el frontend estático (Phaser 3 + ESM). |
+| `GET /api/state` | Snapshot completo: tasks, eventos, métricas, memoria derivada. |
+| `GET /api/events` | Server-Sent Events; emite cuando `state.json` cambia. |
+| `POST /api/state` | Merge atómico (validación básica). Bloqueado en modo público. |
+| `GET /api/history` | Últimos 100 eventos persistidos del session log. |
+| `GET /api/sprint` | Lee `roadmap/current-sprint.json` y lo devuelve (200 con `{}` si no existe). |
+| `GET /api/roadmap` | Lee `roadmap/roadmap.md` y devuelve `{ markdown: "<contenido>" }`. 200 con `{ markdown: "" }` si no existe. |
+| `GET /api/sprints/history` | Parsea `memory/sprint-log.md` y devuelve array de sprints cerrados ordenado descendente por número. 200 con `[]` si no existe. |
+| `GET /api/pack-name` | Nombre del pack activo. |
+| `GET /assets/<rel>` | Binarios CC0 con whitelist. |
+| `GET /files/<rel>` | Archivos del repo bajo subcarpetas permitidas. |
 
-Retorna el estado completo + campos derivados (memoria del proyecto y contratos).
+## Schema extendido del task
+
+Aditivos retro-compatibles. Tasks sin estos campos siguen funcionando — el server inyecta defaults seguros.
+
+### v2.1 (fase 6 expandida) — drill-down por agente
+
+| Campo | Tipo | Default | Uso |
+|---|---|---|---|
+| `prompt_brief` | string \| null | `null` | Brief en lenguaje humano del prompt completo. Se muestra como BRIEF en el side panel. Si está ausente, el panel cae a `summary` y luego a `title`. |
+| `plan_steps` | string[] | `[]` | Pasos planificados que el agente declara seguir. Se renderiza como lista numerada en la sección PLAN del panel. |
+| `current_step` | integer | `0` | Índice 0-based del paso actual. Marca con ▶ el paso vivo; ✓ los anteriores; ○ los siguientes. |
+
+### v2.2 (fase 7) — agrupación organizativa
+
+| Campo | Tipo | Default | Uso |
+|---|---|---|---|
+| `phase` | string \| null | `null` | Fase del proyecto en la que vive la task (ej. `"design"`, `"build"`, `"validate"`). Se muestra en la sección CONTEXTO ORGANIZATIVO del panel agente, y agrupa las tareas completadas en la vista Sprint cuando alguna las declara. |
+| `epic` | string \| null | `null` | Épica que agrupa varias tasks bajo un objetivo mayor (ej. `"dashboard-v3"`). Acompaña a `phase` en el panel agente y aparece como sufijo `[epic]` en la vista Sprint. |
+
+### Declarar plan + brief + phase/epic al iniciar la task
+
+CLI flags (sintaxis natural):
+```bash
+node scripts/update_state.js task-start demo-1 ArchitectAgent "Arquitecto" "Sistema de auth" auth.js \
+  --prompt "Diseñar el sistema de auth con OAuth2" \
+  --plan-step "Investigar opciones" \
+  --plan-step "Elegir librería" \
+  --plan-step "Implementar flujo" \
+  --plan-step "Tests" \
+  --current-step 0 \
+  --phase design \
+  --epic dashboard-v3
+```
+
+JSON patch en mitad del trabajo (avanza el paso actual sin reiniciar):
+```bash
+node scripts/update_state.js task-update demo-1 '{"current_step":1}'
+```
+
+Patch combinado (cambia plan + brief + phase/epic):
+```bash
+node scripts/update_state.js task-update demo-1 \
+  '{"prompt_brief":"Diseñar auth OAuth2","plan_steps":["Investigar","Elegir","Implementar","Tests"],"current_step":2,"phase":"build","epic":"auth-system"}'
+```
+
+Para limpiar phase o epic, pasa `null`:
+```bash
+node scripts/update_state.js task-update demo-1 '{"phase":null,"epic":null}'
+```
+
+## Side panel
+
+Tres modos accesibles desde la barra de modo en el header del panel:
+
+- **Agente** — click en cualquier avatar abre el panel acá: brief, plan, task actual (id/gate/origin/tokens), contexto organizativo (fase/épica) cuando se declaran, entregables, eventos recientes.
+- **Sprint** — botón `Sprint` en la topbar (esquina superior derecha): objetivo, hitos planificados cruzados con tasks completadas, tareas done (agrupadas por phase cuando se usa), entregables agrupados del sprint, métricas.
+- **Roadmap** — botón `Roadmap` en la topbar: render del `roadmap/roadmap.md` como texto pixel-art monoespaciado + historial colapsable de sprints cerrados leído de `memory/sprint-log.md`.
+
+Cierre del panel: tecla **ESC**, click fuera del card, o botón **×**.
+
+### Cruce de hitos con tasks
+
+El frontend acepta varios shapes para los milestones del sprint:
+
+1. `sprint.milestones[]` — array de `{ title, task_id?, status? }`.
+2. `sprint.hitos[]` — alias en español, mismo shape.
+3. **Fallback (shape real actual):** si no hay milestones formales, se usan `sprint.tasks[]` como hitos implícitos. Cada `task.title` se vuelve un milestone con `task_id = task.id`.
+
+Match contra `state.active_tasks[]`:
+- Si `milestone.task_id` matchea `task.id` → status derivado del task (`completed` → done, `running` → in_progress, otro → planned).
+- Si no, se respeta `milestone.status` declarado explícito.
+- Si no, aprox-match por `title` contra `task.summary || task.title || task.id` (lowercase, igualdad o inclusión).
+- Si nada matchea → `planned`.
+
+### Render del roadmap.md
+
+Mini-parser markdown XSS-safe en `dashboard/public/ui/panel.js` (función `renderMarkdownToDOM`). Soporta:
+
+- `# H1`, `## H2`, `### H3` → `<h1/h2/h3>` con `textContent`
+- `- bullet` o `* bullet` → `<ul><li>` (bullets consecutivos se agrupan)
+- `**bold**` → `<strong>` intercalado con texto plano
+- Comentarios HTML (`<!-- ... -->`) → ignorados (son marcadores internos de `src/roadmap.js`, no contenido)
+- Líneas en blanco → break visual
+- Cualquier otra línea → `<p>` con `textContent`
+
+**Invariante ADR-02:** ningún render usa `innerHTML` con datos del state. Cubierto por test `dashboard-roadmap-render.test.js` que hace grep contra `\.innerHTML\s*=` en `panel.js`.
+
+### Parser de `memory/sprint-log.md`
+
+`GET /api/sprints/history` parsea sprints cerrados con el siguiente shape esperado:
+
+```markdown
+## Sprint 1 — Fundamentos del pipeline
+
+**Fechas**
+- inicio: 2026-05-01
+- fin: 2026-05-08
+
+**Entregables**
+- contracts/
+- memory/
+
+**Lessons**
+- schemas compartidos evitan reescribir validación
+```
+
+El parser es defensivo:
+- Cada bloque empieza con `## Sprint <N>` (cualquier cosa después del N es objetivo opcional).
+- Sub-bloques aceptados: `Objetivo`/`Objective`, `Fechas`/`Dates`, `Entregables`/`Deliverables`, `Lessons`/`Lecciones`.
+- Sub-headers `**Texto**` o `### Texto` ambos válidos.
+- Bullets con `-` o `*`.
+- Si el archivo no existe → retorna `[]` con 200.
+
+## Modo público (read-only)
+
+Activado con `DASHBOARD_PUBLIC=1`. Whitelist de métodos `GET`, `HEAD`, `OPTIONS`. Cualquier otro método responde 403 con `{"error":"read-only mode"}` antes de entrar a los handlers.
 
 ```bash
-curl -s http://localhost:7777/api/state | jq .
+# POSIX
+DASHBOARD_PUBLIC=1 node dashboard/server.js
+
+# Windows PowerShell
+$env:DASHBOARD_PUBLIC = '1'; node dashboard/server.js
 ```
 
-Estructura de respuesta:
+## Pack customization
 
-```json
-{
-  "session_id": "uuid",
-  "session_started_at": "ISO timestamp",
-  "active_tasks": [ /* ver esquema abajo */ ],
-  "events": [ /* últimos eventos en memoria, full history en /api/history */ ],
-  "metrics": {
-    "total_tokens_session": 0,
-    "tasks_completed": 0,
-    "tasks_failed": 0,
-    "councils_invoked": 0,
-    "images_generated": 0
-  },
-  "active_skills": ["skill-name"],
-  "current_sprint": { "number": 2, "objective": "..." },
-  "derived": {
-    "memory_snapshot": { /* output de src/memory.js summarize() */ },
-    "declared_contracts": ["ArchitectAlpha", "..."],
-    "uptime_seconds": 42
-  }
-}
-```
+Por defecto el dashboard usa el pack `kenney-roguelike` (CC0, descargado por `npm run dashboard:assets`).
 
-### `POST /api/state`
+Para usar un pack propio:
 
-Merge atómico de un patch parcial contra state.json.
+1. Crear `assets/vendor/<mi-pack>/` con la estructura del manifest declarado en `contracts/schemas/assets-pack.schema.json`.
+2. Arrancar con la env var: `DASHBOARD_PACK=mi-pack npm run dashboard`.
+
+El resolver intenta primero `/assets/vendor/<pack>/manifest.json` y cae a `/assets/packs/<pack>/manifest.json` si no encuentra binarios. El nombre del pack se sanitiza contra la regex `^[a-z0-9][a-z0-9-]*$` antes de construir el path.
+
+## Migración desde v2 (kanban)
+
+El dashboard v2 quedó en el tag git `dashboard-v2-final`. Para recuperar:
 
 ```bash
-curl -X POST http://localhost:7777/api/state \
-  -H 'Content-Type: application/json' \
-  -d '{"active_skills": ["pipeline-v2", "image-gen"]}'
+git checkout dashboard-v2-final -- dashboard/public/
 ```
 
-Política de merge:
-
-- `active_tasks`, `events`, `active_skills` reemplazan completamente si vienen en el patch.
-- `metrics` hace shallow merge (solo overrides explícitos).
-- `current_sprint`, `session_id`, `session_started_at` reemplazan.
-- Eventos nuevos detectados (por `timestamp+type`) se persisten también en `dashboard/history/events.log`.
-
-### `GET /api/events`
-
-Server-Sent Events stream. Emite el evento `state` cuando `state.json` cambia (vía `fs.watch`).
-
-Cliente:
-
-```js
-const es = new EventSource('/api/events');
-es.addEventListener('state', () => fetch('/api/state').then(r => r.json()).then(render));
-```
-
-Si SSE no está disponible (proxy hostil, etc.), Sprint 2.3 puede caer a polling cada 2s sobre `/api/state`.
-
-### `GET /api/history?limit=100`
-
-Últimos N eventos persistidos en `dashboard/history/events.log` (NDJSON append-only). Default 100, máximo 1000.
-
-```bash
-curl -s 'http://localhost:7777/api/history?limit=20' | jq .
-```
-
-## Esquema completo de `state.json`
-
-```json
-{
-  "session_id": "uuid-v4",
-  "session_started_at": "ISO timestamp",
-  "active_tasks": [
-    {
-      "id": "task-uuid",
-      "title": "string",
-      "agent": "agent-name",
-      "agent_role": "actúa como ...",
-      "status": "queued|running|completed|failed",
-      "files_in_use": ["path1"],
-      "started_at": "ISO",
-      "ended_at": "ISO | null",
-      "tokens_estimated": 0,
-      "skill_invoked": "skill-name | null",
-      "failure_reason": "(opcional) string si status=failed"
-    }
-  ],
-  "events": [
-    {
-      "timestamp": "ISO",
-      "type": "task_started|task_completed|task_failed|agent_invoked|skill_invoked|decision_emitted|hand_off_validated|hand_off_failed|council_invoked|image_generated",
-      "payload": { "...": "..." }
-    }
-  ],
-  "metrics": {
-    "total_tokens_session": 0,
-    "tasks_completed": 0,
-    "tasks_failed": 0,
-    "councils_invoked": 0,
-    "images_generated": 0
-  },
-  "active_skills": ["skill-name"],
-  "current_sprint": { "number": 2, "objective": "..." }
-}
-```
-
-## Cómo deben usarlo los agentes
-
-Usar el helper `scripts/update_state.js`. Cada agente, al arrancar y al terminar, ejecuta los comandos correspondientes. El helper escribe `state.json` atómicamente y, si el servidor está vivo, también notifica vía POST.
-
-```bash
-# Al empezar una tarea
-node scripts/update_state.js task-start <task-id> <agent> "<agent-role>" "<title>" file1.js file2.js
-
-# Al terminar OK
-node scripts/update_state.js task-complete <task-id> 12000
-
-# Al fallar
-node scripts/update_state.js task-fail <task-id> "razón corta del fallo"
-
-# Eventos arbitrarios
-node scripts/update_state.js event council_invoked '{"voices": 4}'
-node scripts/update_state.js event image_generated '{"asset": "hero-shot.png"}'
-
-# Skills entrando/saliendo del set activo
-node scripts/update_state.js skill-add pipeline-v2
-node scripts/update_state.js skill-remove pipeline-v2
-```
-
-Exit code 0 si OK, 1 si fallo. Mensajes de error en español neutro a `stderr`.
-
-## Robustez
-
-- Si `state.json` no existe, `/api/state` retorna estado inicial vacío sin crashear.
-- Si `state.json` se corrompe, el server loguea y retorna estado inicial; el helper falla rápido y pide reparación manual.
-- Escrituras siempre atómicas (`tmp + rename`), seguras ante kill mid-write.
-- CORS abierto a todos los orígenes (uso local).
-
-## Auto-update vía hooks
-
-El template trae un par de hooks de Claude Code que escriben al dashboard automáticamente cada vez que Claude lanza un sub-agente con la herramienta `Agent`. No tienes que hacer nada manual: en cuanto un agente arranca, aparece como tarea `running` en el dashboard; en cuanto termina, pasa a `completed` (o `failed` si la tool reportó error).
-
-### Qué hace el hook
-
-- `.claude/settings.json` registra dos hooks: `PreToolUse` y `PostToolUse`, ambos filtrados por `matcher: "Agent"`.
-- El comando del hook es `node "$CLAUDE_PROJECT_DIR/scripts/dashboard_hook.js" pre|post`.
-- El wrapper:
-  1. Lee el JSON del hook por stdin (incluye `tool_use_id`, `tool_input.prompt`, `tool_input.subagent_type`, `tool_input.description`, y en `post` también `tool_response`).
-  2. Genera un `task_id` único en el `pre` y lo correlaciona con `tool_use_id` en `.cache/active-agents.json`. El `post` recupera el mismo `task_id` para cerrar la tarea correcta.
-  3. Extrae `agent_role` del prompt buscando un patrón `ROL: <texto>` en los primeros 400 chars (fallback al primer renglón). Trunca a 100 chars.
-  4. Llama a `node scripts/update_state.js task-start | task-complete | task-fail` con los args correctos.
-  5. Logea cada invocación a `dashboard/hooks.log` (NDJSON, una línea por evento).
-
-### Cómo verificar que está funcionando
-
-```bash
-# Mira los logs en vivo mientras Claude trabaja
-tail -f dashboard/hooks.log
-
-# O dispara el test integral
-node dashboard-hooks.test.js
-```
-
-Cuando Claude lanza un Agent, deberías ver una línea `{"level":"info","msg":"hook ejecutado","mode":"pre",...}` y, al terminar, otra con `"mode":"post"`.
-
-### Cómo desactivarlo
-
-Si los hooks interfieren (por ejemplo si vas a hacer demos sin red, o el dashboard te da igual en una sesión puntual), basta con renombrar el archivo de settings:
-
-```bash
-mv .claude/settings.json .claude/settings.json.disabled
-```
-
-Reinicia Claude Code para que tome el cambio. Para reactivarlo, renombra al revés.
-
-Alternativa quirúrgica: comenta solo la sección `hooks` dentro del JSON.
-
-### Limitaciones conocidas
-
-- **Solo funciona dentro del repo.** El `.claude/settings.json` es local al proyecto. Si abres Claude Code desde otra carpeta, no se aplica.
-- **La primera vez Claude Code puede pedir confirmación** para cargar el settings de proyecto y/o para ejecutar comandos `node` desde un hook. Acepta una vez y queda persistido.
-- **Fail-safe estricto:** si `update_state.js` falla, el dashboard no está corriendo, o el spawn revienta — el hook igual sale con exit 0 y NO bloquea al Agent. Errores quedan en `dashboard/hooks.log` (rotación automática a `hooks.log.1` cuando supera 1 MB).
-- **Correlación PreToolUse ↔ PostToolUse vía `tool_use_id`.** Si Claude Code cambia el campo en el futuro, el `post` no encontraría la tarea y simplemente no haría nada (queda visible en el dashboard hasta el próximo cierre manual).
-- **No instrumenta otras herramientas.** Solo `Agent`. Si quieres trackear `Bash`, `Edit`, etc., agrega más entradas con su propio `matcher`.
+Esto reescribe `dashboard/public/` con la versión v2. Para volver a v3 sin pull: `git checkout HEAD -- dashboard/public/`.

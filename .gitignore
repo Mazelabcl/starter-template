@@ -19,3 +19,6 @@ process-log/0*.md
 process-log/1*.md
 process-log/W*.md
 process-log/_*.md
+
+# Dashboard v3 — assets binarios CC0 (poblados por scripts/fetch_default_pack.js)
+assets/vendor/

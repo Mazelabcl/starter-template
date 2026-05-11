@@ -280,6 +280,138 @@ async function main() {
       assertTrue(j.active_tasks.some(t => t.id === 'task-end-to-end'), 'tarea visible vía GET /api/state');
     });
 
+    // ---------- v2 schema fields + helpers nuevos ----------
+
+    await check('CLI task-start hidrata campos v2 con defaults', async () => {
+      resetStateForTests();
+      runHelper(['task-start', 'task-v2-defaults', 'AgentX', 'rol completo aquí', 'tarea v2'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-v2-defaults');
+      assertTrue(!!t, 'tarea existe');
+      assertEqual(t.role_full, 'rol completo aquí', 'role_full backup');
+      assertEqual(t.summary, null, 'summary default null');
+      assertEqual(t.origin, null, 'origin default null');
+      assertEqual(t.gate, null, 'gate default null');
+      assertTrue(Array.isArray(t.artifacts), 'artifacts es array');
+      assertEqual(t.artifacts.length, 0, 'artifacts vacío');
+      assertEqual(typeof t.review_worthy, 'boolean', 'review_worthy bool');
+      assertEqual(typeof t.review_seen, 'boolean', 'review_seen bool');
+    });
+
+    await check('CLI task-start no marca review_worthy automático (eliminada heurística first-of-agent)', async () => {
+      // Las tasks nuevas no son review_worthy por default. Solo si origin=council:*,
+      // gate=cold-reader, hay artifact binario, o override manual.
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.agent === 'AgentX');
+      assertEqual(t.review_worthy, false, 'review_worthy false por default');
+      assertEqual(t.review_reason, null, 'review_reason null por default');
+    });
+
+    await check('CLI task-update aplica patch parcial sin tocar otros campos', async () => {
+      const patch = JSON.stringify({ summary: 'Una línea de contexto', origin: 'sprint:1', gate: 'critic' });
+      const r = runHelper(['task-update', 'task-v2-defaults', patch], helperEnv);
+      assertEqual(r.code, 0, `exit code (stderr=${r.stderr})`);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-v2-defaults');
+      assertEqual(t.summary, 'Una línea de contexto', 'summary aplicado');
+      assertEqual(t.origin, 'sprint:1', 'origin aplicado');
+      assertEqual(t.gate, 'critic', 'gate aplicado');
+      // Otros campos intactos.
+      assertEqual(t.agent, 'AgentX', 'agent intacto');
+      assertEqual(t.role_full, 'rol completo aquí', 'role_full intacto');
+    });
+
+    await check('CLI task-update con origin council:* dispara review-worthy', async () => {
+      runHelper(['task-start', 'task-council', 'CouncilBot', 'rol', 'titulo'], helperEnv);
+      runHelper(['task-update', 'task-council', '{"origin":"council:strategy-calls"}'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-council');
+      assertTrue(t.review_worthy === true, 'review_worthy true por origin council:*');
+      assertEqual(t.review_reason, 'council', `review_reason debe ser council, no ${t.review_reason}`);
+    });
+
+    await check('CLI task-update con gate cold-reader dispara review-worthy', async () => {
+      runHelper(['task-start', 'task-cold', 'ColdBot', 'rol', 'titulo'], helperEnv);
+      runHelper(['task-update', 'task-cold', '{"gate":"cold-reader"}'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-cold');
+      assertTrue(t.review_worthy === true, 'review_worthy true por gate cold-reader');
+    });
+
+    await check('CLI task-artifact con imagen dispara review-worthy y dedup por path', async () => {
+      runHelper(['task-start', 'task-img', 'ImgAgent', 'rol', 'titulo'], helperEnv);
+      runHelper(['task-artifact', 'task-img', 'content/output/scene/bg.png', 'image', 'fondo'], helperEnv);
+      // Repetimos el mismo path: debe deduplicar.
+      runHelper(['task-artifact', 'task-img', 'content/output/scene/bg.png', 'image', 'fondo'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-img');
+      assertEqual(t.artifacts.length, 1, 'artifacts deduplicado');
+      assertEqual(t.artifacts[0].kind, 'image', 'kind image');
+      assertTrue(t.review_worthy === true, 'review_worthy true por binary-artifact');
+    });
+
+    await check('CLI task-artifact sin path o vacío falla con exit 1', async () => {
+      const r = runHelper(['task-artifact', 'task-img'], helperEnv);
+      assertEqual(r.code, 1, 'exit code 1 cuando falta path');
+    });
+
+    await check('CLI task-review-seen apaga el badge sin perder review_worthy', async () => {
+      runHelper(['task-review-seen', 'task-img'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-img');
+      assertTrue(t.review_seen === true, 'review_seen true');
+      assertTrue(t.review_worthy === true, 'review_worthy se preserva (audit trail)');
+    });
+
+    await check('CLI task-update review_seen=true es idempotente con humano', async () => {
+      // Race between humano (POST /api/state con review_seen) y heurística (que no
+      // debe re-flagear review_seen=false). refreshReviewWorthy nunca toca review_seen.
+      runHelper(['task-update', 'task-img', '{"review_seen":true}'], helperEnv);
+      const state = JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+      const t = state.active_tasks.find(x => x.id === 'task-img');
+      assertTrue(t.review_seen === true, 'review_seen sigue true tras un update posterior');
+    });
+
+    // ---------- /files/<rel> whitelist + path traversal ----------
+
+    await check('GET /files/<archivo de content/> sirve contenido', async () => {
+      // Creamos un archivo pequeño dentro de content/ para verificar lectura ok.
+      const targetDir = join(REPO_ROOT, 'content');
+      mkdirSync(targetDir, { recursive: true });
+      const targetFile = join(targetDir, '__a11y-test-fixture.txt');
+      writeFileSync(targetFile, 'hello-from-test', 'utf8');
+      try {
+        const r = await fetch(`${baseUrl}/files/${encodeURIComponent('content/__a11y-test-fixture.txt')}`);
+        assertEqual(r.status, 200, 'status 200');
+        const text = await r.text();
+        assertEqual(text, 'hello-from-test', 'contenido coincide');
+      } finally {
+        try { unlinkSync(targetFile); } catch { /* ignore */ }
+      }
+    });
+
+    await check('GET /files/.env retorna 404 (blocklist)', async () => {
+      // Aunque el archivo no exista, la blocklist debe rechazarlo antes.
+      const r = await fetch(`${baseUrl}/files/.env`);
+      assertEqual(r.status, 404, 'status 404');
+    });
+
+    await check('GET /files/dashboard/state.json retorna 404 (blocklist)', async () => {
+      const r = await fetch(`${baseUrl}/files/dashboard/state.json`);
+      assertEqual(r.status, 404, 'status 404 — state.json es privado');
+    });
+
+    await check('GET /files/<path-traversal> retorna 404', async () => {
+      const r = await fetch(`${baseUrl}/files/${encodeURIComponent('../../etc/passwd')}`);
+      assertEqual(r.status, 404, 'status 404 — path traversal bloqueado');
+    });
+
+    await check('GET /files/<carpeta no-whitelisted> retorna 404', async () => {
+      // package.json existe pero no está en la whitelist.
+      const r = await fetch(`${baseUrl}/files/package.json`);
+      assertEqual(r.status, 404, 'status 404 — fuera de whitelist');
+    });
+
   } finally {
     if (serverInfo && serverInfo.server) {
       await new Promise(r => serverInfo.server.close(r));

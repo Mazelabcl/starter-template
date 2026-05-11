@@ -1,11 +1,16 @@
 // dashboard/server.js
 // Servidor HTTP nativo (cero deps) para el dashboard de observabilidad multi-agente.
 // Endpoints:
-//   GET  /api/state    → state.json + derivados de memory.summarize() + contratos declarados
-//   GET  /api/events   → Server-Sent Events: emite cuando state.json cambia (fs.watch)
-//   POST /api/state    → merge atómico contra state.json (validación básica)
-//   GET  /api/history  → últimos 100 eventos persistidos
-//   GET  /             → archivos estáticos en dashboard/public/
+//   GET  /api/state       → state.json + derivados de memory.summarize() + contratos declarados
+//   GET  /api/events      → Server-Sent Events: emite cuando state.json cambia (fs.watch)
+//   POST /api/state       → merge atómico contra state.json (validación básica)
+//   GET  /api/history     → últimos 100 eventos persistidos
+//   GET  /api/pack-name   → nombre del pack activo (env DASHBOARD_PACK || 'kenney-roguelike')
+//   GET  /assets/<rel>    → sirve binarios CC0 desde assets/packs/ y assets/vendor/ con whitelist
+//   GET  /                → archivos estáticos en dashboard/public/
+//
+// Modo público: DASHBOARD_PUBLIC=1 activa whitelist de métodos (GET/HEAD/OPTIONS).
+// Cualquier otro método → 403 read-only. Aplica ANTES de los handlers.
 //
 // Diseño: http nativo, fs.watch + dedup por mtime, atomic write (tmp + rename).
 
@@ -45,6 +50,15 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.md': 'text/markdown; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.mp4': 'video/mp4',
   '.ico': 'image/x-icon',
 };
 
@@ -86,12 +100,36 @@ export function readState() {
   }
 }
 
+// v2: completa campos opcionales en cada task con defaults seguros (no toca disco).
+function ensureTaskV2Fields(task) {
+  if (!task || typeof task !== 'object') return task;
+  if (task.role_full === undefined) task.role_full = task.agent_role || null;
+  if (task.summary === undefined) task.summary = null;
+  if (task.origin === undefined) task.origin = null;
+  if (task.gate === undefined) task.gate = null;
+  if (!Array.isArray(task.artifacts)) task.artifacts = [];
+  if (typeof task.review_worthy !== 'boolean') task.review_worthy = false;
+  if (task.review_reason === undefined) task.review_reason = null;
+  if (typeof task.review_seen !== 'boolean') task.review_seen = false;
+  // v2.1 (fase 6 expandida): drill-down opcional para el side panel.
+  if (task.prompt_brief === undefined) task.prompt_brief = null;
+  if (!Array.isArray(task.plan_steps)) task.plan_steps = [];
+  if (typeof task.current_step !== 'number' || !Number.isInteger(task.current_step) || task.current_step < 0) {
+    task.current_step = 0;
+  }
+  // v2.2 (fase 7): agrupación organizativa por fase y épica. Default null.
+  if (task.phase === undefined) task.phase = null;
+  if (task.epic === undefined) task.epic = null;
+  return task;
+}
+
 function normalizeState(s) {
   const base = emptyState();
+  const tasks = Array.isArray(s.active_tasks) ? s.active_tasks : [];
   return {
     session_id: s.session_id || base.session_id,
     session_started_at: s.session_started_at || base.session_started_at,
-    active_tasks: Array.isArray(s.active_tasks) ? s.active_tasks : [],
+    active_tasks: tasks.map(ensureTaskV2Fields),
     events: Array.isArray(s.events) ? s.events : [],
     metrics: { ...base.metrics, ...(s.metrics || {}) },
     active_skills: Array.isArray(s.active_skills) ? s.active_skills : [],
@@ -286,6 +324,165 @@ function serveStatic(req, res, urlPath) {
   res.end(data);
 }
 
+// v2: /files/<path-relativo-al-repo> sirve archivos del repo bajo subcarpetas
+// permitidas (resuelto contra REPO_ROOT) con guard de path-traversal y
+// whitelist explícita. Sin esto los chips de "entregable" en las task cards no
+// podrían abrir los outputs reales.
+//
+// Política:
+//   - Solo lectura, nunca escribe.
+//   - Path traversal bloqueado (rechaza `..`).
+//   - Whitelist de raíces (DASHBOARD_FILES_ALLOW env var sobrescribe la lista).
+//     Por defecto: content/, councils/results/, dashboard/public/, memory/,
+//     contracts/declared/, roadmap/, process-log/, docs/.
+//   - Bloquea archivos sensibles por nombre/ruta: .env, .git, node_modules,
+//     dashboard/state.json (privado), dashboard/history (privado),
+//     .cache (privado).
+//
+// Cuando el dashboard se expone fuera de localhost, restringir aún más vía
+// DASHBOARD_FILES_ALLOW="content,councils/results" o usar un proxy con auth.
+const DEFAULT_FILES_ALLOW = [
+  'content',
+  'councils/results',
+  'dashboard/public',
+  'memory',
+  'contracts/declared',
+  'contracts/schemas',
+  'roadmap',
+  'process-log',
+  'docs',
+];
+const FILES_ALLOW = (process.env.DASHBOARD_FILES_ALLOW || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const FILES_ALLOW_LIST = FILES_ALLOW.length > 0 ? FILES_ALLOW : DEFAULT_FILES_ALLOW;
+// Subcadenas que nunca deben aparecer en una ruta servida (block list dura).
+const FILES_BLOCK_SUBSTRINGS = [
+  '.env', '.git/', 'node_modules/', 'dashboard/state.json',
+  'dashboard/history/', '.cache/', '.claude/',
+];
+
+function isPathAllowed(relNormalized) {
+  // Verifica whitelist + blocklist. relNormalized usa forward slashes.
+  for (const block of FILES_BLOCK_SUBSTRINGS) {
+    if (relNormalized.includes(block)) return false;
+  }
+  for (const allow of FILES_ALLOW_LIST) {
+    const a = allow.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (!a) continue;
+    if (relNormalized === a) return true;
+    if (relNormalized.startsWith(a + '/')) return true;
+  }
+  return false;
+}
+
+function serveRepoFile(req, res, encodedRel) {
+  let rel;
+  try {
+    rel = decodeURIComponent(encodedRel || '');
+  } catch {
+    return send404(res, 'path inválido');
+  }
+  if (!rel || rel.length > 600) return send404(res, 'path inválido');
+  // Normalizamos backslashes de Windows a forward, y bloqueamos anti-traversal.
+  rel = rel.replace(/^[\\/]+/, '').replace(/\\/g, '/');
+  if (rel.includes('..')) return send404(res, 'path inválido (..)');
+  // Whitelist + blocklist check ANTES de tocar disco.
+  if (!isPathAllowed(rel)) {
+    return send404(res, `path fuera de la whitelist: ${rel}`);
+  }
+  const root = resolve(REPO_ROOT);
+  const target = resolve(root, rel);
+  // Guard: el resolved path tiene que vivir dentro del repo root.
+  const sep = process.platform === 'win32' ? '\\' : '/';
+  if (target !== root && !target.startsWith(root + sep) && !target.startsWith(root + '/')) {
+    return send404(res, 'path fuera del repo');
+  }
+  if (!existsSync(target) || !statSync(target).isFile()) {
+    return send404(res, `archivo no encontrado: ${rel}`);
+  }
+  const ext = extname(target).toLowerCase();
+  const mime = MIME[ext] || 'application/octet-stream';
+  const data = readFileSync(target);
+  res.writeHead(200, {
+    ...CORS,
+    'Content-Type': mime,
+    'Content-Length': data.length,
+    'Cache-Control': 'no-cache',
+  });
+  res.end(data);
+}
+
+// ---------- /assets/<rel> (binarios del pack system) ----------
+// Sirve archivos desde assets/packs/<pack-name>/ (declarativo, commiteado) y
+// assets/vendor/<pack-name>/ (binarios, gitignored). Whitelist por regex para
+// bloquear path traversal y extensiones inesperadas.
+//
+// Estructura aceptada:
+//   /assets/(packs|vendor)/<pack-name>/manifest.json
+//   /assets/(packs|vendor)/<pack-name>/ATTRIBUTION.md
+//   /assets/(packs|vendor)/<pack-name>/<subdir>/<file>.<png|json|md|webp>
+// El segundo "subdir" puede tener un nivel de profundidad (típico Kenney).
+//
+// Si el archivo no existe (común cuando vendor/ aún no se pobló), respondemos
+// 404 — el frontend muestra el banner "no encontré assets, corre npm run dashboard:assets".
+const ASSETS_DIR = join(REPO_ROOT, 'assets');
+const ASSETS_PATH_RE = /^\/assets\/(packs|vendor)\/([a-z0-9][a-z0-9-]*)\/((?:manifest\.json)|(?:ATTRIBUTION\.md)|(?:[a-z0-9_-]+\/[a-z0-9._-]+\.(?:png|json|md|webp)))$/i;
+
+function serveAssetFile(req, res, urlPath) {
+  const match = ASSETS_PATH_RE.exec(urlPath);
+  if (!match) {
+    return send404(res, 'asset path inválido o fuera de whitelist');
+  }
+  const [, kind, packName, rel] = match;
+  // Anti `..` paranoia (la regex ya bloquea, pero double-check no cuesta).
+  if (rel.includes('..') || packName.includes('..')) {
+    return send404(res, 'asset path inválido (..)');
+  }
+  const target = resolve(ASSETS_DIR, kind, packName, rel);
+  const expectedRoot = resolve(ASSETS_DIR, kind, packName);
+  const sep = process.platform === 'win32' ? '\\' : '/';
+  if (target !== expectedRoot && !target.startsWith(expectedRoot + sep) && !target.startsWith(expectedRoot + '/')) {
+    return send404(res, 'asset path fuera del root');
+  }
+  if (!existsSync(target) || !statSync(target).isFile()) {
+    return send404(res, `asset no encontrado: ${urlPath}`);
+  }
+  const ext = extname(target).toLowerCase();
+  const mime = MIME[ext] || 'application/octet-stream';
+  const data = readFileSync(target);
+  res.writeHead(200, {
+    ...CORS,
+    'Content-Type': mime,
+    'Content-Length': data.length,
+    'Cache-Control': 'no-cache',
+  });
+  if (req.method === 'HEAD') {
+    res.end();
+  } else {
+    res.end(data);
+  }
+}
+
+// ---------- read-only public mode ----------
+// DASHBOARD_PUBLIC=1 → whitelist de métodos GET/HEAD/OPTIONS. Cualquier otro
+// método rechaza con 403 ANTES de entrar a los handlers. Esto cubre futuros
+// endpoints mutantes sin tener que recordar agregar 403 en cada uno.
+const DASHBOARD_PUBLIC = process.env.DASHBOARD_PUBLIC === '1';
+const PUBLIC_METHOD_WHITELIST = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// ---------- /api/pack-name ----------
+// Devuelve el nombre del pack activo. Default 'kenney-roguelike'.
+const PACK_NAME = (() => {
+  const raw = process.env.DASHBOARD_PACK;
+  if (!raw) return 'kenney-roguelike';
+  // Sanitización mínima — el frontend hace la suya pero defendemos en server también.
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(raw)) {
+    console.warn(`[dashboard] DASHBOARD_PACK="${raw}" no matchea regex; uso default kenney-roguelike`);
+    return 'kenney-roguelike';
+  }
+  return raw;
+})();
+
 // ---------- SSE stream ----------
 
 const sseClients = new Set();
@@ -358,6 +555,160 @@ export function closeWatcher() {
 
 const SERVER_STARTED_AT = Date.now();
 
+// ---------- /api/sprint ----------
+// Lee roadmap/current-sprint.json y lo devuelve tal cual. Si no existe o es
+// inválido, devuelve {} con 200 — el frontend lo trata como "sin sprint activo".
+// El shape del sprint vive en src/roadmap.js (función readSprint). Esto evita
+// que el frontend tenga que adivinar el path o duplicar defaults defensivos.
+const SPRINT_PATH = join(REPO_ROOT, 'roadmap', 'current-sprint.json');
+
+function readSprintFile() {
+  if (!existsSync(SPRINT_PATH)) return {};
+  try {
+    const raw = readFileSync(SPRINT_PATH, 'utf8');
+    if (!raw.trim()) return {};
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn(`[dashboard] /api/sprint: no pude leer current-sprint.json: ${e.message}`);
+    return {};
+  }
+}
+
+// ---------- /api/roadmap ----------
+// Devuelve { markdown: <contenido literal de roadmap/roadmap.md> }. Si no existe,
+// retorna { markdown: "" } con 200. El frontend lo renderiza con un mini-parser
+// XSS-safe (textContent-only) en panel.js — no servimos HTML pre-renderizado.
+const ROADMAP_MD_PATH = join(REPO_ROOT, 'roadmap', 'roadmap.md');
+
+function readRoadmapMarkdown() {
+  if (!existsSync(ROADMAP_MD_PATH)) return '';
+  try {
+    return readFileSync(ROADMAP_MD_PATH, 'utf8');
+  } catch (e) {
+    console.warn(`[dashboard] /api/roadmap: no pude leer roadmap.md: ${e.message}`);
+    return '';
+  }
+}
+
+// ---------- /api/sprints/history ----------
+// Parsea memory/sprint-log.md a un array estructurado de sprints cerrados.
+//
+// Shape de parser (best-effort, defensivo):
+//   - Cada sprint vive bajo un header `## Sprint <N>` o `## Sprint <N> — <título>`.
+//     Tomamos N como número entero. Si no parsea, el sprint se descarta.
+//   - Dentro del bloque, buscamos los siguientes subheaders (case-insensitive,
+//     español neutro):
+//       * "Objetivo" → string en la siguiente línea o párrafo.
+//       * "Fechas" / "Dates" → si trae `inicio: YYYY-MM-DD` y `fin: YYYY-MM-DD`
+//         (o `start`/`end`), los extrae. Si no, dates queda en {}.
+//       * "Entregables" / "Deliverables" → lista con bullets `-` o `*`.
+//       * "Lessons" / "Lecciones" → idem.
+//   - Si el archivo no existe → retorna [].
+//   - Si el archivo existe pero no matchea ningún header → retorna [].
+//
+// El parser es deliberadamente conservador. Si el formato evoluciona, se ajusta
+// acá. La verdad estructurada futura podría vivir como JSON, pero por ahora
+// `addSprint()` de memory.js escribe markdown.
+const SPRINT_LOG_PATH = join(REPO_ROOT, 'memory', 'sprint-log.md');
+
+function parseSprintLogMarkdown(md) {
+  if (typeof md !== 'string' || !md.trim()) return [];
+  // Split por headers `## Sprint <N>...`. Mantenemos el header capturado para
+  // saber qué número es. Usamos un regex de split con grupo.
+  const re = /^##\s+Sprint\s+(\d+)(.*)$/gmi;
+  const sprints = [];
+  const positions = [];
+  let m;
+  while ((m = re.exec(md)) !== null) {
+    positions.push({ start: m.index, headerEnd: m.index + m[0].length, number: parseInt(m[1], 10), titleTail: m[2] || '' });
+  }
+  for (let i = 0; i < positions.length; i++) {
+    const cur = positions[i];
+    const blockEnd = i + 1 < positions.length ? positions[i + 1].start : md.length;
+    const body = md.slice(cur.headerEnd, blockEnd);
+    const number = cur.number;
+    if (!Number.isFinite(number)) continue;
+    // Extraemos el objetivo del titleTail si tiene formato `— <texto>` o `: <texto>`.
+    let objective = '';
+    const titleMatch = cur.titleTail.match(/^\s*[—:\-]\s*(.+?)\s*$/);
+    if (titleMatch && titleMatch[1]) {
+      objective = titleMatch[1].trim();
+    }
+    // Si el titleTail no trae el objetivo, buscamos un sub-bloque "Objetivo".
+    const objBlock = extractSubBlock(body, /^(?:###?\s+|\*\*)?(?:Objetivo|Objective)\b/i);
+    if (!objective && objBlock) {
+      // Toma la primera línea no-vacía del bloque objetivo.
+      const firstLine = objBlock.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+      if (firstLine) objective = firstLine;
+    }
+    // Fechas: buscamos un sub-bloque con keywords o líneas inline.
+    let dates = {};
+    const datesBlock = extractSubBlock(body, /^(?:###?\s+|\*\*)?(?:Fechas|Dates)\b/i);
+    const datesSource = datesBlock || body;
+    const startMatch = datesSource.match(/\b(?:inicio|start)\s*[:=]\s*(\d{4}-\d{2}-\d{2})/i);
+    const endMatch = datesSource.match(/\b(?:fin|end)\s*[:=]\s*(\d{4}-\d{2}-\d{2})/i);
+    if (startMatch) dates.start = startMatch[1];
+    if (endMatch) dates.end = endMatch[1];
+    // Entregables y lessons: extraemos sub-bloques y parseamos bullets.
+    const deliverablesBlock = extractSubBlock(body, /^(?:###?\s+|\*\*)?(?:Entregables|Deliverables)\b/i);
+    const lessonsBlock = extractSubBlock(body, /^(?:###?\s+|\*\*)?(?:Lessons|Lecciones)\b/i);
+    sprints.push({
+      number,
+      objective,
+      dates,
+      deliverables: extractBullets(deliverablesBlock),
+      lessons: extractBullets(lessonsBlock),
+    });
+  }
+  // Orden descendente por número de sprint (lo más reciente primero).
+  sprints.sort((a, b) => b.number - a.number);
+  return sprints;
+}
+
+// Extrae el cuerpo entre un sub-header que matchea `headerRe` y el siguiente
+// header (cualquier `## ` o `### `) o el fin del bloque. Devuelve null si no
+// encuentra el sub-header.
+function extractSubBlock(body, headerRe) {
+  const lines = body.split('\n');
+  let startIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (headerRe.test(lines[i].trim())) { startIdx = i + 1; break; }
+  }
+  if (startIdx === -1) return null;
+  let endIdx = lines.length;
+  for (let i = startIdx; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^##\s+/.test(t) || /^###\s+/.test(t) || /^\*\*[^*]+\*\*\s*$/.test(t)) {
+      endIdx = i;
+      break;
+    }
+  }
+  return lines.slice(startIdx, endIdx).join('\n');
+}
+
+function extractBullets(block) {
+  if (!block || typeof block !== 'string') return [];
+  return block.split('\n')
+    .map(l => l.trim())
+    .filter(l => /^[-*]\s+/.test(l))
+    .map(l => l.replace(/^[-*]\s+/, '').trim())
+    .filter(Boolean);
+}
+
+function readSprintHistory() {
+  if (!existsSync(SPRINT_LOG_PATH)) return [];
+  try {
+    const raw = readFileSync(SPRINT_LOG_PATH, 'utf8');
+    return parseSprintLogMarkdown(raw);
+  } catch (e) {
+    console.warn(`[dashboard] /api/sprints/history: no pude leer sprint-log.md: ${e.message}`);
+    return [];
+  }
+}
+
+// Exportamos los parsers internos para los tests.
+export { parseSprintLogMarkdown, readSprintHistory, readRoadmapMarkdown };
+
 function handleRequest(req, res) {
   const t0 = Date.now();
   const urlObj = new URL(req.url, `http://localhost:${PORT}`);
@@ -370,10 +721,62 @@ function handleRequest(req, res) {
     return;
   }
 
+  // Read-only public mode: whitelist de métodos.
+  if (DASHBOARD_PUBLIC && !PUBLIC_METHOD_WHITELIST.has(method)) {
+    return sendJSON(res, 403, { error: 'read-only mode' });
+  }
+
   try {
-    if (method === 'GET' && path === '/api/state') {
+    if (method === 'GET' && path === '/api/pack-name') {
+      return sendJSON(res, 200, { pack: PACK_NAME });
+    }
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/sprint') {
+      const sprint = readSprintFile();
+      const body = JSON.stringify(sprint, null, 2);
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      if (method === 'HEAD') res.end();
+      else res.end(body);
+      return;
+    }
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/roadmap') {
+      const body = JSON.stringify({ markdown: readRoadmapMarkdown() });
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      if (method === 'HEAD') res.end();
+      else res.end(body);
+      return;
+    }
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/sprints/history') {
+      const body = JSON.stringify(readSprintHistory());
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      if (method === 'HEAD') res.end();
+      else res.end(body);
+      return;
+    }
+    if ((method === 'GET' || method === 'HEAD') && path.startsWith('/assets/')) {
+      return serveAssetFile(req, res, path);
+    }
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/state') {
       const snap = buildSnapshot();
-      sendJSON(res, 200, snap);
+      const body = JSON.stringify(snap, null, 2);
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      if (method === 'HEAD') res.end();
+      else res.end(body);
     } else if (method === 'POST' && path === '/api/state') {
       readRequestBody(req).then(raw => {
         let patch;
@@ -394,6 +797,10 @@ function handleRequest(req, res) {
     } else if (method === 'GET' && path === '/api/history') {
       const limit = Math.min(parseInt(urlObj.searchParams.get('limit') || HISTORY_LIMIT, 10) || HISTORY_LIMIT, 1000);
       sendJSON(res, 200, { events: readHistoryTail(limit) });
+    } else if (method === 'GET' && path.startsWith('/files/')) {
+      // v2: sirve cualquier archivo del repo para preview/descarga desde las cards.
+      const encodedRel = path.slice('/files/'.length);
+      serveRepoFile(req, res, encodedRel);
     } else if (method === 'GET') {
       serveStatic(req, res, path);
     } else {

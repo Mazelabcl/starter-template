@@ -54,6 +54,11 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 - **roadmap.js** (`src/roadmap.js`): gestión de sprint actual + backlog priorizado. Helpers: `addIdea`, `getCurrentSprint`, `closeSprint`. Slash command `/idea` para captura sin desvío.
 - **voice-mode** (skill + `scripts/voice_tts.js`): TTS de respuestas largas con OpenAI TTS. Comandos `/voz-on`, `/voz-off`, `/voz-leer`. Defaults en `memory/voice-mode-state.json`.
 
+### Observabilidad — dashboard v3
+
+- **Dashboard pixel-art** (Phaser 3) con avatares vivos por agente, drill-down por agente, vista Sprint con hitos cruzados, vista Roadmap macro + historial de sprints. `npm run dashboard` lo levanta en `http://localhost:7777`. **Requiere `npm run dashboard:assets` la primera vez** para bajar el pack CC0 default (`kenney-roguelike`). Modo público read-only con `DASHBOARD_PUBLIC=1`. Detalle: `dashboard/README.md`.
+- **Cómo lo alimentan los agentes**: `node scripts/update_state.js task-start <id> <agent> <role> <title> [files...] [--prompt ...] [--plan-step ...]... [--current-step N] [--phase ...] [--epic ...]` + `task-update <id> '<json-patch>'` + `task-complete <id> [tokens]`. El helper escribe atómico a `dashboard/state.json` y notifica al server. Schema completo de la task en `dashboard/README.md`.
+
 ## Hand-off contracts
 
 Cada agente del pipeline declara qué archivos lee, qué archivos escribe, contra qué schema, y precondiciones/postcondiciones. Antes de que el agente B procese el output del agente A, el contrato se valida.
@@ -174,13 +179,25 @@ Cuando algo se rompa, estos tests son el primer chequeo:
 | `npm run smoke` | Sistema completo end-to-end (8 checks, ~90s, gasta API). |
 | `npm run smoke:quick` | Estructura solamente, sin red. |
 | `npm run test:contracts` | Schemas + emit/consume del sistema de hand-offs. |
-| `npm run test:dashboard` | Server HTTP + SSE + history. |
-| `npm run test:dashboard:ui` | UI rica (kanban + métricas + timeline + replay + export). |
+| `npm run test:dashboard` | Server HTTP + SSE + history + helper update_state.js + endpoints v3 (32 checks). |
+| `npm run test:dashboard:scene` | Suite completa del frontend Phaser 3: phaser smoke + pack resolver + fetch pack + public mode + seating + event bus + panel render + sprint cross + roadmap render + sprints history. |
+| `npm run test:dashboard:panel` | Solo render del side panel (agente / sprint / roadmap). Más rápido cuando iteras sobre la UI. |
 | `node memory/test.js` | Helpers de memoria del proyecto. |
 | `node pipeline-v2-integration.test.js` | Flujo completo pipeline v2. |
 | `node docs-v3.test.js` | Documentación v3 al día. |
 
 No corras `npm run smoke` en cada commit — gasta credits reales. Para CI continuo, usa los tests específicos.
+
+## Feedback al starter Mazelab
+
+En la raíz hay un archivo `feedback.md`. Es el canal para reportar findings sobre el starter mismo (skills faltantes, scripts rotos, anti-patrones, contracts que no encajan en uso real) — **NO** para bugs/features del proyecto consumer.
+
+**Flujo:**
+1. Cuando aldot ve algo del starter que falla o falta, te dice: _"anota esto en `feedback.md`"_.
+2. Agregas entry al final del archivo: fecha, contexto, finding, acción sugerida (opcional). Texto libre, no hay formato rígido.
+3. Cuando aldot retoma sesión sobre el starter, le da la ruta del `feedback.md` al orquestador del starter, que lee, sintetiza al inbox global y aplica fixes.
+
+**NO arregles el starter desde este proyecto.** Tu rol es reportar. El orquestador del starter es el que corrige.
 
 ## Versión
 
