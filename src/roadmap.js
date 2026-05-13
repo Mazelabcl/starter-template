@@ -6,11 +6,56 @@ import {
   renameSync,
   unlinkSync,
 } from 'node:fs';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import { addSprint } from './memory.js';
+
+// ---- Sync hacia el dashboard ----
+// D7 (Sprint v3.1): `roadmap/current-sprint.json` es la fuente de verdad del
+// sprint vivo. Cada vez que cambia (startSprint, closeSprint), notificamos al
+// dashboard vía POST /api/state actualizando `current_sprint`. Best-effort: si
+// el dashboard no está corriendo, silencioso (igual que `notifyServer` en
+// `scripts/update_state.js`). Sin esto, la pestaña Roadmap del dashboard nunca
+// veía el sprint actual recién creado (feedback 2026-05-11).
+
+function getDashboardPort() {
+  return parseInt(process.env.DASHBOARD_PORT || '7777', 10);
+}
+
+async function notifyDashboardCurrentSprint(sprintObj) {
+  // sprintObj: { number, objective, ... } — shape de blankSprint() o readSprint().
+  // El dashboard solo necesita number + objective; aceptamos todo el objeto por
+  // si en el futuro queremos más (target_close, started_at, etc).
+  if (!sprintObj || typeof sprintObj !== 'object') return;
+  const payload = {
+    current_sprint: {
+      number: typeof sprintObj.number === 'number' ? sprintObj.number : 0,
+      objective: sprintObj.objective || '',
+      ...(sprintObj.started_at ? { started_at: sprintObj.started_at } : {}),
+      ...(sprintObj.target_close ? { target_close: sprintObj.target_close } : {}),
+    },
+  };
+  const port = getDashboardPort();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 500);
+    const res = await fetch(`http://localhost:${port}/api/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    // No-op si !res.ok: el JSON local ya está escrito, esto es solo sync de UI.
+    void res;
+  } catch {
+    // Dashboard no levantado: silencioso. El watcher del state lo recogerá
+    // cuando se reescriba state.json por otra vía.
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -330,9 +375,22 @@ export function startSprint({ number, objective, target_close } = {}, roadmapDir
   next.target_close = target_close || '';
   writeSprint(next, roadmapDir);
 
-  let md = readMarkdown(roadmapDir);
-  md = rerenderAll(md, next);
-  writeMarkdown(md, roadmapDir);
+  let md;
+  try {
+    md = readMarkdown(roadmapDir);
+    md = rerenderAll(md, next);
+    writeMarkdown(md, roadmapDir);
+  } catch (e) {
+    // roadmap.md ausente (proyecto recién iniciado): no es fatal — el sprint
+    // ya quedó en current-sprint.json y el kickoff crea roadmap.md después.
+    if (!(e instanceof RoadmapError) || !/roadmap\.md no existe/.test(e.message)) {
+      throw e;
+    }
+  }
+
+  // D7: sync best-effort hacia el dashboard. Fire-and-forget, no bloquea.
+  // No esperamos al await; el caller no necesita saber si llegó.
+  notifyDashboardCurrentSprint(next);
 
   return { sprint: next };
 }
@@ -381,6 +439,10 @@ export function closeSprint({ lessons = [], deliverables = [] } = {}, roadmapDir
   let md = readMarkdown(roadmapDir);
   md = rerenderAll(md, fresh);
   writeMarkdown(md, roadmapDir);
+
+  // D7: sync best-effort hacia el dashboard. Reseteamos current_sprint a "fresh"
+  // (objetivo vacío) hasta que el usuario abra el siguiente con startSprint.
+  notifyDashboardCurrentSprint(fresh);
 
   return {
     closed_sprint: sprint.number,
@@ -454,4 +516,4 @@ export function summarize(roadmapDir) {
   };
 }
 
-export const _internal = { MARKERS, PRIORITIES, TASK_STATUSES, blankSprint };
+export const _internal = { MARKERS, PRIORITIES, TASK_STATUSES, blankSprint, notifyDashboardCurrentSprint };

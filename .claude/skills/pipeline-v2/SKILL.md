@@ -195,9 +195,29 @@ try {
 
 - Si el humano hizo override del veto cold-reader → `addDecision` obligatorio con razonamiento.
 - Si emergió una lección operacional (un patrón de fallo, una receta que funcionó) → `addLesson`.
-- Si esta invocación cierra un sprint completo → `addSprint({ number, objective, deliverables, lessons })`.
+- Si esta invocación cierra un sprint completo → llama `closeSprint()` desde `src/roadmap.js` (que internamente hace `addSprint` + actualiza el roadmap + sincroniza con dashboard).
 
 No escribir más de lo necesario. La memoria se mantiene útil porque está curada, no porque sea exhaustiva.
+
+## Convención de chat público (Sprint v3.1)
+
+El dashboard expone una pestaña "Chat" con feed cronológico de comunicación orquestador ↔ agentes. **Cada brief a sub-agentes del pipeline debe incluir esta instrucción literal**:
+
+> "Cuando termines un milestone significativo (research listo, primer draft escrito, validación pasada), llama:
+>
+> ```bash
+> node scripts/update_state.js say <tu-nombre> orquestador "<descripción 1 línea del milestone>"
+> ```
+>
+> El humano que mira el dashboard verá tu avance en la pestaña Chat sin tener que preguntarme cómo va. Si el dashboard no está corriendo, el comando es silencioso — no rompe nada."
+
+**Importante:** el chat NO reemplaza el output formal (hand-off contracts siguen siendo la verdad). Es narrativa para el humano. Mensajes típicos:
+- `say architect orquestador "research completado, escribiendo proposal"`
+- `say critic architect "missing section sobre edge cases, RE-DO"`
+- `say architect orquestador "R2 listo, pass internal critic"`
+- `say cold-reader orquestador "GO, deliverable listo para review humano"`
+
+Limitación A7 (subagentes y Write): los sub-agentes NO pueden hacer `Write` directo a archivos del proyecto desde su wrapper. Devuelven todo como TEXTO. El orquestador hace el `Write`. Esto NO afecta al helper `say` porque éste es un comando Bash que el sub-agente ejecuta (no es Write); el comando hace el append al log él mismo.
 
 ## Manejo de fallos contractuales
 

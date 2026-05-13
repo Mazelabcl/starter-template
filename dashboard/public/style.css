@@ -599,3 +599,94 @@ html, body { width: 100%; height: 100%; background: #0a0e1a; color: #e1e7ef; fon
 .completed-summary {
   color: #e1e7ef;
 }
+
+/* --- Sprint v3.1: Sprint actual card en pestaña Roadmap --- */
+.panel-current-sprint-card {
+  background: rgba(20, 26, 46, 0.85);
+  border: 1px solid #2a3450;
+  padding: 10px 12px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+.panel-current-sprint-number {
+  color: #fbbf24;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+.panel-current-sprint-objective {
+  color: #e1e7ef;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.panel-current-sprint-dates {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* --- Sprint v3.1: chat público --- */
+.panel-chat-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+.panel-chat-msg {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(20, 26, 46, 0.65);
+  border-left: 2px solid #5c6fa0;
+  border-radius: 0 3px 3px 0;
+}
+.panel-chat-avatar {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  background: #2a3450;
+  color: #fde68a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+.panel-chat-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.panel-chat-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: baseline;
+}
+.panel-chat-from {
+  color: #fde68a;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  letter-spacing: 0.3px;
+}
+.panel-chat-to {
+  color: #c4b5fd;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  letter-spacing: 0.3px;
+}
+.panel-chat-time {
+  color: #64748b;
+  margin-left: auto;
+}
+.panel-chat-body {
+  color: #e1e7ef;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}

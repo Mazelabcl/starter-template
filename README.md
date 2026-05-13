@@ -65,9 +65,17 @@ Cada una se invoca desde Claude Code con sus triggers naturales. Skills viven en
 | **quality-mindset** | Auto en tareas no triviales | Disciplina mínima viable: spec → plan → ejecución → cierre validado. Sin Git formal. |
 | **confidence-loop** | "/confidence-loop", "mejora hasta 95" | Itera artefacto hasta 95+/100 (5 iteraciones máx). |
 
-Skills opcionales (14 más en `.claude/skills/_catalog/`): `superpowers-pr`, `frontend-design`, `playwright`, `webapp-testing`, `pdf-skill`, `xlsx`, `marketing`, `seo`, `remotion`, `brand-guidelines`, `canvas-design`, `web-artifacts-builder`, `skill-creator`, `superpowers-full`. Se activan vía `/kickoff` según perfil del proyecto.
+Skills opcionales (16 más en `.claude/skills/_catalog/`): `superpowers-pr`, `frontend-design`, `playwright`, `webapp-testing`, `pdf-skill`, `xlsx`, `marketing`, `seo`, `remotion`, `brand-guidelines`, `canvas-design`, `web-artifacts-builder`, `skill-creator`, `superpowers-full`, `dual-auditor-protocol`, `review-app`. Se activan vía `/kickoff` según perfil del proyecto.
 
 Catálogo completo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
+
+### Capacidades nuevas en v3.1
+
+- **Chat público en el dashboard** — pestaña "Chat" en el panel; agentes y orquestador reportan milestones vía `node scripts/update_state.js say <from> <to> <message>`. Feed cronológico con avatares pixel-art mini, SSE en vivo, persistencia en `dashboard/chat-log.jsonl`. Reduce fricción del owner: ya no tiene que preguntar "cómo vamos". Detalle: `dashboard/README.md`.
+- **review-app oficial** — app HTTP local cero deps (`node review-app/server.js`) para revisar PRs/bloques de un sprint marcando OK/Feedback. Cross-sprint, cross-project (`--data-dir` flag), hot-reload del parser, regex `\d+` (sin hardcodes). Promovida desde audit-master. Detalle: `review-app/README.md`.
+- **Skill `dual-auditor-protocol`** — audita un deliverable con DOS modelos en paralelo (Anthropic + OpenAI) + synthesizer que cruza findings. Reduce sesgos de un solo modelo. Promovida desde audit-master con schemas formales en `contracts/schemas/`. Detalle: `.claude/skills/_catalog/dual-auditor-protocol/SKILL.md`.
+- **Helper `src/load_env.js`** — carga `.env` idempotente desde scripts standalone. Necesario cuando un agente invoca un script vía Bash tool (Node no carga `.env` automáticamente fuera de `npm run`).
+- **kickoff con capa de contraste** — después del Paso 3 escanea las respuestas del usuario contra keywords canónicas del catálogo y propone skills adicionales con justificación específica al proyecto. Sub-tipo `business-with-software` auto-activa `superpowers-pr` + `dual-auditor-protocol` + `webapp-testing` cuando el proyecto cruza business con código de producción.
 
 ## Slash commands
 

@@ -4,17 +4,10 @@
 // para no romper consumidores existentes (smoke test check 5, cualquier código
 // que dependa del shape `{content, model, usage, citations}`).
 
-// Carga dotenv con manejo de error explícito si falta la dependencia.
-// Esto pasa cuando alguien clona el repo y olvida correr `npm install`.
-try {
-  await import('dotenv/config');
-} catch (err) {
-  if (err.code === 'ERR_MODULE_NOT_FOUND' || /Cannot find package 'dotenv'/.test(err.message)) {
-    console.error("❌ Falta dependencia 'dotenv'. Corre: npm install");
-    process.exit(1);
-  }
-  throw err;
-}
+// Carga .env explícita vía el helper interno. Sin esto, invocar el script con
+// `node src/research.js ...` directo (sin npm run) no veía las API keys del .env.
+// El helper es idempotente — importarlo varias veces no duplica trabajo.
+import './load_env.js';
 
 // El guard de OPENROUTER_API_KEY solo aplica cuando este archivo se ejecuta como
 // CLI. Importarlo como librería (ej. desde tests o módulos consumidores) no debe

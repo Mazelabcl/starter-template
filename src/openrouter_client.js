@@ -23,7 +23,14 @@
 //  - Los slugs de modelo son los públicos de OpenRouter al momento de escribir;
 //    si OpenRouter renombra alguno, basta con actualizar `MODELS` aquí.
 
+// Carga .env de forma idempotente. Esto cubre el caso de invocación standalone
+// del cliente (un agente, un script suelto) sin pasar por `npm run`. Si .env no
+// existe, no rompe — getApiKey() ya hace check explícito y lanza error claro.
+// Idempotente: si el caller ya cargó env (research.js, scripts), no duplica.
+import './load_env.js';
+
 import process from 'node:process';
+import { existsSync as _existsSyncEnv } from 'node:fs';
 
 // =============================================================================
 // Config
@@ -49,8 +56,19 @@ function buildHeaders(apiKey) {
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
+    // Hint extra: si `.env` existe en cwd pero no expone la key, lo más probable
+    // es que el script no haya cargado dotenv (caso típico: `node script.js`
+    // directo sin pasar por npm run). El helper `src/load_env.js` resuelve esto.
+    let hint = 'Corre `npm run setup` o usa `/setup-openrouter`.';
+    try {
+      if (_existsSyncEnv('.env')) {
+        hint = 'Encontré .env en el cwd pero OPENROUTER_API_KEY no está en process.env. '
+             + 'Asegúrate de que el script importe `src/load_env.js` al tope, '
+             + 'o relanza con `node --env-file=.env <script>`.';
+      }
+    } catch { /* fallback al hint default */ }
     throw new OpenRouterError(
-      'Falta OPENROUTER_API_KEY. Corre `npm run setup` o usa `/setup-openrouter`.',
+      `Falta OPENROUTER_API_KEY. ${hint}`,
       { status: 0, code: 'no_api_key' },
     );
   }

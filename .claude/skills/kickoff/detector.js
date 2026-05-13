@@ -308,6 +308,150 @@ export function recommendMode(type, size) {
   return 'rapido';
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Sprint v3.1 — capa de contraste post-Paso-3 y sub-tipo business-with-software.
+//
+// Problema: kickoff v3 recomienda skills SOLO por tipo (`recommendStack(type)`).
+// Eso pierde casos donde el proyecto cruza tipos (ej. business con código de
+// producción → no se proponía `superpowers-pr` ni `dual-auditor-protocol`). El
+// usuario tenía que pedirlos a mano.
+//
+// Solución: después de armar el stack curado, escanear el texto combinado de las
+// respuestas del usuario contra keywords canónicas de skills del catálogo. Si
+// alguna matchea y no está ya en el stack, agregarla como "extras" con un `why`
+// específico al contexto. Además, detectar el sub-tipo `business-with-software`.
+//
+// Keywords canónicas: están en sync con la tabla del SKILL.md. Si se agregan
+// skills al catálogo, agregar las keywords aquí Y la tabla del SKILL.md.
+
+const CATALOG_KEYWORDS = [
+  {
+    skill: 'superpowers-pr',
+    patterns: [/\bpr(s)?\b/, /\bpull request/i, /\bcode review/i, /\bmerge\b/i, /\bgithub flow/i, /\bbranch(es)?\b/i, /\bmain\b/i, /\bmaster\b/i, /\brepo (de )?producci[oó]n/i],
+    why: 'detecté menciones a PRs/code review/GitHub — `superpowers-pr` estandariza el flujo Git formal.',
+  },
+  {
+    skill: 'dual-auditor-protocol',
+    patterns: [/\baudit(orí[ao])?\b/i, /\bdos auditores\b/i, /\bdoble (revisión|auditor)/i, /\bdos modelos\b/i, /\bc[oó]digo de producci[oó]n\b/i, /\bseguridad\b/i, /\berp\b/i, /\bsistema cr[ií]tico\b/i],
+    why: 'detecté audit/código de producción — `dual-auditor-protocol` reduce sesgos usando dos modelos en paralelo.',
+  },
+  {
+    skill: 'webapp-testing',
+    patterns: [/\btest(ing|s)?\b/i, /\bregresi[oó]n\b/i, /\bqa\b/i, /\be2e\b/i, /\bunit\b/i, /\bintegration\b/i],
+    why: 'detecté testing/calidad — `webapp-testing` ayuda a balancear unit/integration/E2E.',
+  },
+  {
+    skill: 'playwright',
+    patterns: [/\bplaywright\b/i, /\bheadless\b/i, /\bvisual regression\b/i, /\be2e\b/i, /\bnavegador\b/i],
+    why: 'detecté tests E2E o automatización browser — `playwright` da selectores resilientes y traces.',
+  },
+  {
+    skill: 'frontend-design',
+    patterns: [/\blanding\b/i, /\bui\b/, /\baccesibilidad\b/i, /\ba11y\b/i, /\bcomponente web\b/i, /\bdise[ñn]o visual\b/i],
+    why: 'detecté superficie UI — `frontend-design` aporta componentes accesibles y semánticos.',
+  },
+  {
+    skill: 'seo',
+    patterns: [/\bseo\b/i, /\branking\b/i, /\bkeyword(s)?\b/i, /\bmeta tag/i, /\bschema markup/i, /\bindexar\b/i, /\bgoogle\b/i],
+    why: 'detecté SEO/contenido orgánico — la skill `seo` cubre meta, schema, headings.',
+  },
+  {
+    skill: 'marketing',
+    patterns: [/\bcopy\b/i, /\bad(s)?\b/i, /\bcampa[nñ]a\b/i, /\bnewsletter\b/i, /\bemail marketing\b/i],
+    why: 'detecté copy/ads/campañas — `marketing` aporta frameworks AIDA/PAS/BAB.',
+  },
+  {
+    skill: 'brand-guidelines',
+    patterns: [/\bmarca\b/i, /\bbranding\b/i, /\bidentidad visual\b/i, /\bpaleta\b/i, /\btono de voz\b/i],
+    why: 'detecté identidad de marca — `brand-guidelines` la mantiene consistente.',
+  },
+  {
+    skill: 'pdf-skill',
+    patterns: [/\bpdf\b/i, /\bfactura(s)?\b/i],
+    why: 'detecté manipulación de PDFs — `pdf-skill` genera/parsea/extrae.',
+  },
+  {
+    skill: 'xlsx',
+    patterns: [/\bexcel\b/i, /\bplanilla\b/i, /\bxlsx\b/i, /\bgoogle sheets\b/i],
+    why: 'detecté planillas Excel — `xlsx` lee/escribe sin scripts ad-hoc.',
+  },
+  {
+    skill: 'remotion',
+    patterns: [/\bremotion\b/i, /\bvideo (program[aá]tico|lyric)/i],
+    why: 'detecté video programático — `remotion` lo hace data-driven con React.',
+  },
+  {
+    skill: 'canvas-design',
+    patterns: [/\bsvg generativo\b/i, /\binfograf[ií]a\b/i, /\bp5\.?js\b/i, /\bthree\.?js\b/i, /\bvisualizaci[oó]n\b/i],
+    why: 'detecté visualizaciones programáticas — `canvas-design` con D3/p5/three.',
+  },
+  {
+    skill: 'web-artifacts-builder',
+    patterns: [/\bdemo html\b/i, /\bprototipo one-?off\b/i, /\bcalculadora interactiva\b/i, /\bartifact\b/i],
+    why: 'detecté demos one-off — `web-artifacts-builder` produce HTML autocontenido.',
+  },
+  {
+    skill: 'review-app',
+    patterns: [/\breview-?app\b/i, /\brevisar PRs\b/i, /\bmarcar (ok|feedback)\b/i, /\bdashboard de prs\b/i],
+    why: 'detecté flujo de review de PRs — `review-app` aporta interfaz HTTP para marcar OK/Feedback.',
+  },
+];
+
+// Sub-tipo `business-with-software`: business con señales claras de código.
+const BUSINESS_WITH_SOFTWARE_PATTERNS = [
+  /\bc[oó]digo\b/i, /\brepo(sitorio)?\b/i, /\bpr(s)?\b/, /\bpull request/i, /\bmerge\b/i,
+  /\baudit\b/i, /\bapp\b/, /\bsistema\b/i, /\berp\b/i, /\bgithub\b/i, /\bdesarrollo\b/i,
+];
+
+// Skills extra default cuando el sub-tipo es business-with-software.
+const BUSINESS_WITH_SOFTWARE_EXTRAS = [
+  { name: 'superpowers-pr', why: 'flujo Git formal (PRs, code review) cuando hay riesgo de producción.' },
+  { name: 'webapp-testing', why: 'estrategia de testing si el software vive en operación real.' },
+  { name: 'dual-auditor-protocol', why: 'audit de código con dos modelos en paralelo para reducir sesgos.' },
+];
+
+/**
+ * Enriquece el stack curado con extras detectadas por contraste contra el catálogo.
+ * Devuelve { stack, extras, subType } — el caller decide cómo presentarlo al usuario.
+ *
+ * @param {string} type tipo detectado por detectSignals.
+ * @param {string} userAnswersText concatenación libre de las respuestas del usuario.
+ * @returns {{ stack: Array<{name,why}>, extras: Array<{name,why,source:'catalog-keywords'|'business-with-software'}>, subType: string|null }}
+ */
+export function enrichStackWithContrast(type, userAnswersText) {
+  const stack = recommendStack(type);
+  const stackNames = new Set(stack.map(s => s.name));
+  const text = typeof userAnswersText === 'string' ? userAnswersText.toLowerCase() : '';
+  const extras = [];
+  const extrasSeen = new Set();
+
+  // Pass 1: contraste contra keywords del catálogo.
+  for (const entry of CATALOG_KEYWORDS) {
+    if (stackNames.has(entry.skill) || extrasSeen.has(entry.skill)) continue;
+    const matches = entry.patterns.some(p => p.test(text));
+    if (matches) {
+      extras.push({ name: entry.skill, why: entry.why, source: 'catalog-keywords' });
+      extrasSeen.add(entry.skill);
+    }
+  }
+
+  // Pass 2: sub-tipo business-with-software.
+  let subType = null;
+  if (type === 'business') {
+    const hasSoftwareSignal = BUSINESS_WITH_SOFTWARE_PATTERNS.some(p => p.test(text));
+    if (hasSoftwareSignal) {
+      subType = 'business-with-software';
+      for (const ex of BUSINESS_WITH_SOFTWARE_EXTRAS) {
+        if (stackNames.has(ex.name) || extrasSeen.has(ex.name)) continue;
+        extras.push({ name: ex.name, why: ex.why, source: 'business-with-software' });
+        extrasSeen.add(ex.name);
+      }
+    }
+  }
+
+  return { stack, extras, subType };
+}
+
 /**
  * Sprint inicial sugerido según perfil. Devuelve un objeto con
  * objective + deliverables. El kickoff lo presenta al usuario antes de persistir.

@@ -43,6 +43,12 @@ const STATE_URL = '/api/state';
 const SPRINT_URL = '/api/sprint';
 const ROADMAP_URL = '/api/roadmap';
 const HISTORY_URL = '/api/sprints/history';
+const CHAT_HISTORY_URL = '/api/chat/history';
+
+// Límite client-side de mensajes que mantenemos en memoria. El backend ya
+// devuelve los últimos 200 vía /api/chat/history; en memoria nunca pasamos
+// de este número para evitar bloat después de horas de sesión.
+const CHAT_IN_MEMORY_LIMIT = 200;
 
 /** Crea el panel. Devuelve { mount, openForAgent, openSprint, close, getMode }. */
 export function createSidePanel(opts) {
@@ -58,7 +64,9 @@ export function createSidePanel(opts) {
   let lastSprint = null;
   let lastRoadmap = null;       // { markdown: string }
   let lastSprintHistory = null; // array<sprint>
-  // Modo actual. 'agent' | 'sprint' | 'roadmap'. selectedAgent es el name si modo === 'agent'.
+  let chatMessages = [];        // array<{from, to, message, timestamp}>
+  let chatLoaded = false;
+  // Modo actual. 'agent' | 'sprint' | 'roadmap' | 'chat'. selectedAgent es el name si modo === 'agent'.
   let mode = null;
   let selectedAgent = null;
 
@@ -71,6 +79,7 @@ export function createSidePanel(opts) {
   let modeAgentBtn = null;
   let modeSprintBtn = null;
   let modeRoadmapBtn = null;
+  let modeChatBtn = null;
 
   // Listeners que registramos en mount() para poder limpiarlos.
   const unsubscribers = [];
@@ -101,6 +110,29 @@ export function createSidePanel(opts) {
     const openRoadmapHandler = () => openRoadmap();
     bus.addEventListener('open-roadmap', openRoadmapHandler);
     unsubscribers.push(() => bus.removeEventListener('open-roadmap', openRoadmapHandler));
+
+    const openChatHandler = () => openChat();
+    bus.addEventListener('open-chat', openChatHandler);
+    unsubscribers.push(() => bus.removeEventListener('open-chat', openChatHandler));
+
+    // SSE chat-msg → append al feed local. Si el panel está abierto en modo
+    // chat, re-renderiza para mostrar el nuevo mensaje.
+    const chatMsgHandler = (e) => {
+      const entry = e && e.detail;
+      if (!entry || typeof entry !== 'object') return;
+      // Validamos campos mínimos.
+      if (typeof entry.from !== 'string' || typeof entry.to !== 'string'
+          || typeof entry.message !== 'string' || typeof entry.timestamp !== 'string') {
+        return;
+      }
+      chatMessages.push(entry);
+      if (chatMessages.length > CHAT_IN_MEMORY_LIMIT) {
+        chatMessages = chatMessages.slice(-CHAT_IN_MEMORY_LIMIT);
+      }
+      if (isOpen() && mode === 'chat') rerender();
+    };
+    bus.addEventListener('chat-msg', chatMsgHandler);
+    unsubscribers.push(() => bus.removeEventListener('chat-msg', chatMsgHandler));
 
     // Tecla ESC global.
     const keyHandler = (ev) => {
@@ -170,9 +202,16 @@ export function createSidePanel(opts) {
     modeRoadmapBtn.textContent = 'Roadmap';
     modeRoadmapBtn.addEventListener('click', () => openRoadmap());
 
+    modeChatBtn = document.createElement('button');
+    modeChatBtn.className = 'panel-mode-btn';
+    modeChatBtn.type = 'button';
+    modeChatBtn.textContent = 'Chat';
+    modeChatBtn.addEventListener('click', () => openChat());
+
     modeBar.appendChild(modeAgentBtn);
     modeBar.appendChild(modeSprintBtn);
     modeBar.appendChild(modeRoadmapBtn);
+    modeBar.appendChild(modeChatBtn);
 
     // Toggle legacy (compat con tests previos que buscan `.panel-toggle`).
     toggleBtn = document.createElement('button');
@@ -250,7 +289,17 @@ export function createSidePanel(opts) {
     if (toggleBtn) toggleBtn.textContent = 'Agente';
     updateModeButtons();
     show();
-    Promise.all([ensureRoadmap(), ensureSprintHistory()]).then(() => rerender());
+    // v3.1: además del markdown y la historia, cargamos el sprint actual para
+    // mostrar "Sprint actual" como sección destacada (feedback 2026-05-11).
+    Promise.all([ensureRoadmap(), ensureSprintHistory(), ensureSprint()]).then(() => rerender());
+  }
+
+  function openChat() {
+    mode = 'chat';
+    if (toggleBtn) toggleBtn.textContent = 'Agente';
+    updateModeButtons();
+    show();
+    ensureChat().then(() => rerender());
   }
 
   function updateModeButtons() {
@@ -258,6 +307,7 @@ export function createSidePanel(opts) {
       [modeAgentBtn, 'agent'],
       [modeSprintBtn, 'sprint'],
       [modeRoadmapBtn, 'roadmap'],
+      [modeChatBtn, 'chat'],
     ];
     for (const [btn, m] of map) {
       if (!btn) continue;
@@ -272,7 +322,9 @@ export function createSidePanel(opts) {
     } else if (mode === 'agent') {
       renderAgent(body, titleEl, lastSnapshot, selectedAgent);
     } else if (mode === 'roadmap') {
-      renderRoadmap(body, titleEl, lastRoadmap, lastSprintHistory);
+      renderRoadmap(body, titleEl, lastRoadmap, lastSprintHistory, lastSprint);
+    } else if (mode === 'chat') {
+      renderChat(body, titleEl, chatMessages);
     }
   }
 
@@ -329,11 +381,38 @@ export function createSidePanel(opts) {
     return lastSprintHistory;
   }
 
+  async function ensureChat() {
+    // Carga inicial: una sola vez por sesión del panel. Después de eso, los
+    // mensajes nuevos llegan via bus 'chat-msg' del SSE.
+    if (chatLoaded) return chatMessages;
+    try {
+      const res = await fetch(CHAT_HISTORY_URL, { headers: { 'Accept': 'application/json' } });
+      if (res.ok) {
+        const json = await res.json();
+        const arr = Array.isArray(json && json.messages) ? json.messages : [];
+        // Validamos shape de cada mensaje antes de aceptarlo.
+        chatMessages = arr.filter(m => m && typeof m === 'object'
+          && typeof m.from === 'string' && typeof m.to === 'string'
+          && typeof m.message === 'string' && typeof m.timestamp === 'string');
+        // Truncamos en memoria al límite.
+        if (chatMessages.length > CHAT_IN_MEMORY_LIMIT) {
+          chatMessages = chatMessages.slice(-CHAT_IN_MEMORY_LIMIT);
+        }
+      }
+    } catch (e) {
+      console.warn('[panel] no pude fetch /api/chat/history:', e && e.message ? e.message : e);
+      chatMessages = [];
+    }
+    chatLoaded = true;
+    return chatMessages;
+  }
+
   return {
     mount,
     openForAgent,
     openSprint,
     openRoadmap,
+    openChat,
     close,
     getMode: () => mode,
   };
@@ -345,6 +424,7 @@ function makeNoopHandle() {
     openForAgent() {},
     openSprint() {},
     openRoadmap() {},
+    openChat() {},
     close() {},
     getMode: () => null,
   };
@@ -563,7 +643,16 @@ export function renderSprint(body, titleEl, snapshot, sprint) {
   if (dates.length) head.appendChild(makeEl('div', 'panel-sprint-dates', dates.join(' · ')));
   body.appendChild(head);
 
-  const allTasks = (snapshot && Array.isArray(snapshot.active_tasks)) ? snapshot.active_tasks : [];
+  // v2.3 (Sprint v3.1): cuando las tasks declaran `sprint_number`, filtramos para
+  // mostrar SOLO las del sprint actual. Si ninguna task lo declara (legacy), caemos
+  // a la lista completa para no romper UX existente. Esto resuelve el bug "pestañas
+  // no diferencian sprints terminados de actuales" (feedback 2026-05-12).
+  const rawTasks = (snapshot && Array.isArray(snapshot.active_tasks)) ? snapshot.active_tasks : [];
+  const sprintNum = typeof sprint.number === 'number' ? sprint.number : null;
+  const anySprintNumber = rawTasks.some(t => t && typeof t.sprint_number === 'number');
+  const allTasks = (anySprintNumber && sprintNum !== null)
+    ? rawTasks.filter(t => t && t.sprint_number === sprintNum)
+    : rawTasks;
 
   // -- HITOS PLANIFICADOS (cruzados con tasks)
   const milestonesSec = section(body, 'HITOS PLANIFICADOS');
@@ -870,11 +959,28 @@ function appendInlineWithBold(el, text) {
   }
 }
 
-export function renderRoadmap(body, titleEl, roadmap, sprintHistory) {
+export function renderRoadmap(body, titleEl, roadmap, sprintHistory, currentSprint) {
   clear(body);
   if (titleEl) titleEl.textContent = 'Roadmap';
 
-  // -- Sección 1: render del roadmap.md.
+  // -- v3.1: Sección "Sprint actual" si hay un sprint vivo declarado en
+  // roadmap/current-sprint.json. Resuelve el feedback "pestaña Roadmap sin
+  // sprint actual" (2026-05-11). Si el sprint está vacío/sin número, se omite.
+  if (currentSprint && typeof currentSprint === 'object'
+      && typeof currentSprint.number === 'number' && currentSprint.number > 0) {
+    const curSec = section(body, 'SPRINT ACTUAL');
+    const card = makeEl('div', 'panel-current-sprint-card');
+    card.appendChild(makeEl('div', 'panel-current-sprint-number', `Sprint ${currentSprint.number}`));
+    const obj = currentSprint.objective || '(sin objetivo declarado)';
+    card.appendChild(makeEl('div', 'panel-current-sprint-objective', obj));
+    const dates = [];
+    if (currentSprint.started_at) dates.push(`Inicio: ${String(currentSprint.started_at).slice(0, 10)}`);
+    if (currentSprint.target_close) dates.push(`Meta: ${String(currentSprint.target_close).slice(0, 10)}`);
+    if (dates.length) card.appendChild(makeEl('div', 'panel-current-sprint-dates', dates.join(' · ')));
+    curSec.appendChild(card);
+  }
+
+  // -- Sección: render del roadmap.md.
   const mdSec = section(body, 'ROADMAP DEL PROYECTO');
   const mdContainer = makeEl('div', 'panel-roadmap-md');
   const md = roadmap && typeof roadmap.markdown === 'string' ? roadmap.markdown : '';
@@ -942,4 +1048,73 @@ function formatSprintRange(dates) {
   if (s) return `(${s})`;
   if (e) return `(${e})`;
   return '';
+}
+
+// ---------- render: chat (Sprint v3.1) ----------
+//
+// Feed cronológico de mensajes orquestador ↔ agentes. INVARIANTE ADR-02 (XSS):
+// el body del mensaje va por textContent SIEMPRE, nunca innerHTML. Si el from/to
+// del mensaje incluye HTML, va por textContent también.
+//
+// Shape de cada mensaje (validado en ensureChat()):
+//   { from: string, to: string, message: string, timestamp: ISO string }
+//
+// Avatares: ronda mínima con primera letra del `from` dentro de un .panel-chat-avatar.
+// Si en el futuro se quieren avatares de characters_atlas, se conecta acá leyendo
+// `seatFor(from)` o un map directo desde el pack. Por ahora, las iniciales son
+// suficientes para diferenciar visualmente quién habló.
+export function renderChat(body, titleEl, messages) {
+  clear(body);
+  if (titleEl) titleEl.textContent = 'Chat';
+
+  const msgs = Array.isArray(messages) ? messages : [];
+  if (msgs.length === 0) {
+    body.appendChild(makeEl('div', 'panel-empty', 'Sin mensajes aún — los agentes reportan acá vía `node scripts/update_state.js say <from> <to> <message>`.'));
+    return;
+  }
+
+  const wrap = makeEl('div', 'panel-chat-feed');
+  // Orden cronológico ascendente (más viejos arriba, más nuevos abajo).
+  // Asumimos que el backend ya nos los entrega ordenados; defensivo igual.
+  const sorted = [...msgs].sort((a, b) => {
+    const ta = Date.parse(a.timestamp || '') || 0;
+    const tb = Date.parse(b.timestamp || '') || 0;
+    return ta - tb;
+  });
+  for (const m of sorted) {
+    if (!m || typeof m.message !== 'string') continue;
+    const li = makeEl('div', 'panel-chat-msg');
+    const av = makeEl('div', 'panel-chat-avatar', initialOf(m.from));
+    li.appendChild(av);
+    const main = makeEl('div', 'panel-chat-main');
+    const meta = makeEl('div', 'panel-chat-meta');
+    meta.appendChild(makeEl('span', 'panel-chat-from', m.from || '?'));
+    meta.appendChild(document.createTextNode(' → '));
+    meta.appendChild(makeEl('span', 'panel-chat-to', m.to || '?'));
+    meta.appendChild(document.createTextNode(' · '));
+    meta.appendChild(makeEl('span', 'panel-chat-time', timeOfDay(m.timestamp)));
+    main.appendChild(meta);
+    // ADR-02: el body NUNCA va por innerHTML. textContent escapa todo.
+    main.appendChild(makeEl('div', 'panel-chat-body', m.message));
+    li.appendChild(main);
+    wrap.appendChild(li);
+  }
+  body.appendChild(wrap);
+
+  // Auto-scroll al final (último mensaje visible) tras montar.
+  // setTimeout 0 garantiza que el layout se aplicó antes del scroll.
+  setTimeout(() => {
+    if (body && typeof body.scrollTop === 'number') {
+      body.scrollTop = body.scrollHeight || 0;
+    }
+  }, 0);
+}
+
+function initialOf(name) {
+  if (typeof name !== 'string' || !name) return '?';
+  // Primera letra alfanumérica, en mayúscula.
+  for (const ch of name) {
+    if (/[a-zA-Z0-9]/.test(ch)) return ch.toUpperCase();
+  }
+  return '?';
 }

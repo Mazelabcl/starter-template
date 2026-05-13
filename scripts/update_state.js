@@ -34,6 +34,13 @@
 //   Ambos opcionales, default null. El panel los muestra cuando están presentes y
 //   permite agrupar visualmente cuando el sprint cruza muchas tasks de épicas distintas.
 //
+// v2.3 (Sprint v3.1) — asociación al sprint vivo:
+//   sprint_number  integer|null Número del sprint en que vive la task. Auto-poblado
+//                  desde roadmap/current-sprint.json al hacer task-start si hay
+//                  sprint activo. Si no hay sprint activo, queda null. Permite al
+//                  panel agrupar tasks por sprint y distinguir sprints terminados
+//                  de actuales (feedback 2026-05-12).
+//
 // Exit code: 0 = ok, 1 = fallo. Mensajes en español neutro.
 
 import {
@@ -54,8 +61,33 @@ const REPO_ROOT = resolve(__dirname, '..');
 const STATE_PATH = join(REPO_ROOT, 'dashboard', 'state.json');
 const HISTORY_DIR = join(REPO_ROOT, 'dashboard', 'history');
 const HISTORY_LOG = join(HISTORY_DIR, 'events.log');
+const CURRENT_SPRINT_PATH = join(REPO_ROOT, 'roadmap', 'current-sprint.json');
 
 const PORT = parseInt(process.env.DASHBOARD_PORT || '7777', 10);
+
+// v2.3 (Sprint v3.1): lee el número del sprint vivo desde roadmap/current-sprint.json.
+// Si no existe, está vacío o es inválido, devuelve null. Best-effort — no falla
+// al usuario si no hay sprint activo (caso típico al iniciar el proyecto antes
+// del kickoff).
+function readCurrentSprintNumber() {
+  if (!existsSync(CURRENT_SPRINT_PATH)) return null;
+  try {
+    const raw = readFileSync(CURRENT_SPRINT_PATH, 'utf8');
+    if (!raw.trim()) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.number !== 'number' || !Number.isInteger(parsed.number) || parsed.number <= 0) {
+      return null;
+    }
+    // Un sprint sin objective declarado no es un sprint "real" — es un placeholder
+    // post-closeSprint. No asociamos tasks a sprints fantasma.
+    if (!parsed.objective || typeof parsed.objective !== 'string' || !parsed.objective.trim()) {
+      return null;
+    }
+    return parsed.number;
+  } catch {
+    return null;
+  }
+}
 
 function nowISO() { return new Date().toISOString(); }
 
@@ -103,6 +135,12 @@ function ensureTaskV2Fields(task) {
   // v2.2 (fase 7): agrupación organizativa por fase y épica.
   if (task.phase === undefined) task.phase = null;
   if (task.epic === undefined) task.epic = null;
+  // v2.3 (Sprint v3.1): asociación al sprint vivo. Default null = task creada
+  // sin sprint activo (legacy o running fuera de un sprint).
+  if (task.sprint_number === undefined) task.sprint_number = null;
+  if (task.sprint_number !== null && (!Number.isInteger(task.sprint_number) || task.sprint_number < 0)) {
+    task.sprint_number = null;
+  }
   return task;
 }
 
@@ -238,7 +276,7 @@ function refreshReviewWorthy(task, state) {
 // positionals. Permite que el call site siga usando [files...] como antes.
 function extractTaskStartFlags(rawArgs) {
   const positionals = [];
-  const flags = { prompt: null, planSteps: [], currentStep: null, phase: null, epic: null };
+  const flags = { prompt: null, planSteps: [], currentStep: null, phase: null, epic: null, sprintNumber: null };
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
     if (a === '--prompt') {
@@ -256,6 +294,10 @@ function extractTaskStartFlags(rawArgs) {
     } else if (a === '--epic') {
       const v = rawArgs[i + 1]; i += 1;
       if (typeof v === 'string' && v.length > 0) flags.epic = v;
+    } else if (a === '--sprint-number') {
+      const v = rawArgs[i + 1]; i += 1;
+      const n = parseInt(v, 10);
+      if (Number.isInteger(n) && n >= 0) flags.sprintNumber = n;
     } else {
       positionals.push(a);
     }
@@ -267,11 +309,16 @@ function cmdTaskStart(args) {
   const { positionals, flags } = extractTaskStartFlags(args);
   const [taskId, agent, agentRole, title, ...files] = positionals;
   if (!taskId || !agent || !agentRole || !title) {
-    fail('uso: task-start <task-id> <agent> <agent-role> <title> [files...] [--prompt "<brief>"] [--plan-step "paso"]... [--current-step <n>] [--phase <name>] [--epic <name>]');
+    fail('uso: task-start <task-id> <agent> <agent-role> <title> [files...] [--prompt "<brief>"] [--plan-step "paso"]... [--current-step <n>] [--phase <name>] [--epic <name>] [--sprint-number <n>]');
   }
   const state = readState();
   // Si ya existe una tarea con ese ID, la reseteamos a running (idempotencia útil).
   state.active_tasks = state.active_tasks.filter(t => t.id !== taskId);
+
+  // v2.3 (Sprint v3.1): auto-poblar sprint_number desde current-sprint.json
+  // si no se pasó por flag y hay sprint activo. Override por --sprint-number gana.
+  const autoSprint = flags.sprintNumber !== null ? flags.sprintNumber : readCurrentSprintNumber();
+
   const task = {
     id: taskId,
     title,
@@ -299,6 +346,8 @@ function cmdTaskStart(args) {
     // v2.2 fields (defaults null)
     phase: flags.phase,
     epic: flags.epic,
+    // v2.3 fields (auto-poblado desde current-sprint o flag)
+    sprint_number: autoSprint,
   };
   state.active_tasks.push(task);
   refreshReviewWorthy(task, state);
@@ -350,6 +399,8 @@ function cmdTaskUpdate(args) {
     'prompt_brief', 'plan_steps', 'current_step',
     // v2.2 (fase 7): agrupación organizativa por fase y épica.
     'phase', 'epic',
+    // v2.3 (Sprint v3.1): asociación al sprint vivo.
+    'sprint_number',
   ];
   for (const k of ALLOWED) {
     if (Object.prototype.hasOwnProperty.call(patch, k)) {
@@ -380,6 +431,14 @@ function cmdTaskUpdate(args) {
         task[k] = patch[k] === null
           ? null
           : (typeof patch[k] === 'string' && patch[k].length > 0 ? patch[k] : null);
+      } else if (k === 'sprint_number') {
+        // v2.3: integer|null. Cualquier otra cosa → null defensivo.
+        if (patch.sprint_number === null) {
+          task.sprint_number = null;
+        } else {
+          const n = parseInt(patch.sprint_number, 10);
+          task.sprint_number = Number.isInteger(n) && n >= 0 ? n : null;
+        }
       } else {
         task[k] = patch[k];
       }
@@ -475,6 +534,56 @@ function cmdSkillRemove(args) {
   return state;
 }
 
+// Sprint v3.1: chat público orquestador ↔ agentes.
+// Comando: `say <from> <to> <message>`. POSTea a /api/chat (best-effort) y
+// además escribe local a dashboard/chat-log.jsonl (silencioso si server caído).
+// La writethrough es importante para no perder narrativa cuando el dashboard
+// está apagado.
+const CHAT_LOG_PATH_LOCAL = join(REPO_ROOT, 'dashboard', 'chat-log.jsonl');
+
+async function cmdSay(args) {
+  const [from, to, ...msgParts] = args;
+  const message = msgParts.join(' ').trim();
+  if (!from || !to || !message) {
+    fail('uso: say <from> <to> <message>');
+  }
+  const entry = {
+    from: String(from).slice(0, 80),
+    to: String(to).slice(0, 80),
+    message: String(message).slice(0, 4000),
+    timestamp: nowISO(),
+  };
+
+  // 1) Persistir local SIEMPRE (incluso si el server no está).
+  try {
+    mkdirSync(dirname(CHAT_LOG_PATH_LOCAL), { recursive: true });
+    appendFileSync(CHAT_LOG_PATH_LOCAL, JSON.stringify(entry) + '\n', 'utf8');
+  } catch (e) {
+    console.warn(`[update_state] aviso: no pude escribir chat-log.jsonl: ${e.message}`);
+  }
+
+  // 2) Notificar al server (mejor effort).
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 500);
+    const res = await fetch(`http://localhost:${PORT}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) {
+      // Posible duplicado (el server también persiste si recibe). Mensaje suave.
+      console.warn(`[update_state] aviso: /api/chat respondió ${res.status}`);
+    }
+  } catch {
+    // Server no levantado: el log local ya está hecho.
+  }
+  // No retornamos state: `say` no modifica state.json, escribe a chat-log aparte.
+  return null;
+}
+
 const COMMANDS = {
   'task-start': cmdTaskStart,
   'task-update': cmdTaskUpdate,
@@ -485,11 +594,17 @@ const COMMANDS = {
   'event': cmdEvent,
   'skill-add': cmdSkillAdd,
   'skill-remove': cmdSkillRemove,
+  'say': cmdSay,
 };
+
+// Comandos que NO modifican state.json — solo escriben a logs aparte y/o
+// disparan eventos en el dashboard. Si el comando devuelve null, no escribimos
+// state. (Mantiene atómica la escritura del state.)
+const COMMANDS_WITHOUT_STATE = new Set(['say']);
 
 function printUsage() {
   console.error('Uso:');
-  console.error('  node scripts/update_state.js task-start       <task-id> <agent> <agent-role> <title> [files...] [--prompt "<brief>"] [--plan-step "paso"]... [--current-step <n>] [--phase <name>] [--epic <name>]');
+  console.error('  node scripts/update_state.js task-start       <task-id> <agent> <agent-role> <title> [files...] [--prompt "<brief>"] [--plan-step "paso"]... [--current-step <n>] [--phase <name>] [--epic <name>] [--sprint-number <n>]');
   console.error('  node scripts/update_state.js task-update      <task-id> <json-patch>');
   console.error('  node scripts/update_state.js task-artifact    <task-id> <path> [kind] [title]');
   console.error('  node scripts/update_state.js task-review-seen <task-id>');
@@ -498,6 +613,7 @@ function printUsage() {
   console.error('  node scripts/update_state.js event            <type> <json-payload>');
   console.error('  node scripts/update_state.js skill-add        <skill-name>');
   console.error('  node scripts/update_state.js skill-remove     <skill-name>');
+  console.error('  node scripts/update_state.js say              <from> <to> <message>');
 }
 
 async function main() {
@@ -509,12 +625,16 @@ async function main() {
   }
   let newState;
   try {
-    newState = COMMANDS[cmd](args);
+    // Algunos comandos son async (ej. say hace fetch al server). Aceptamos
+    // promesa o valor sincrónico.
+    newState = await COMMANDS[cmd](args);
   } catch (e) {
     fail(e.message);
   }
-  writeStateAtomic(newState);
-  await notifyServer(newState);
+  if (!COMMANDS_WITHOUT_STATE.has(cmd) && newState) {
+    writeStateAtomic(newState);
+    await notifyServer(newState);
+  }
   console.log(`[update_state] ok: ${cmd}`);
   process.exit(0);
 }
@@ -537,9 +657,11 @@ export {
   cmdEvent,
   cmdSkillAdd,
   cmdSkillRemove,
+  cmdSay,
   ensureTaskV2Fields,
   inferArtifactKind,
   computeReviewWorthy,
   STATE_PATH,
   HISTORY_LOG,
+  CHAT_LOG_PATH_LOCAL,
 };

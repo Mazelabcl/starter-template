@@ -198,6 +198,57 @@ Una vez recogidas las respuestas, aplicas:
 - `recommendMode(type, size)` → `rapido` o `profundo`.
 - `suggestInitialSprint(type, mode)` → `{ objective, deliverables[], mode }`.
 
+### Paso 3.5 — capa de contraste contra el catálogo (Sprint v3.1)
+
+Después de detectar tipo y armar el stack curado, **iteras el `_catalog/INDEX.md` y cruzas las descripciones/triggers con las palabras clave de las respuestas del usuario**. Si una skill del catálogo NO está en `recommendStack(type)` pero matchea keywords del proyecto, la propones al usuario como sugerencia adicional con su `why` específico al contexto.
+
+**Keywords canónicas para skills del catálogo:**
+
+| Skill catálogo | Keywords disparadoras (presentes en respuestas del usuario) |
+|---|---|
+| `superpowers-pr` | PR, pull request, code review, merge, GitHub flow, branch, master/main, repo de producción, audit de código |
+| `dual-auditor-protocol` | audit, dos auditores, doble revisión, dos modelos, código de producción, seguridad, ERP, sistema crítico |
+| `webapp-testing` | test, testing, regresión, QA, e2e, unit, integration, calidad |
+| `playwright` | playwright, navegador headless, E2E browser, visual regression |
+| `frontend-design` | landing, UI, accesibilidad, A11y, componente web, diseño visual |
+| `seo` | SEO, ranking, keywords, meta tags, schema markup, indexar Google |
+| `marketing` | copy, ad, campaña, post, newsletter, email marketing |
+| `brand-guidelines` | marca, branding, identidad visual, paleta, tono de voz |
+| `canvas-design` | SVG generativo, infografía, p5.js, three.js, visualización |
+| `pdf-skill` | generar PDF, parsear PDF, extraer texto PDF, factura PDF |
+| `xlsx` | Excel, planilla, .xlsx, Google Sheets |
+| `remotion` | video programático, lyric video, remotion, render server-side |
+| `web-artifacts-builder` | demo HTML, prototipo one-off, calculadora interactiva |
+| `review-app` | review-app, code review en HTTP, dashboard de PRs, marcar OK/Feedback |
+
+**Sub-tipo `business-with-software` (Sprint v3.1):**
+
+Si el `type` detectado es `business` Y las respuestas del usuario mencionan código, repo, PR, merge, audit, app, sistema, código de producción, ERP, GitHub — activa el sub-tipo `business-with-software`. Esto auto-propone como skills **adicionales** al stack `business`:
+
+- `superpowers-pr` (PR formal + code review)
+- `webapp-testing` (estrategia de testing)
+- `playwright` (E2E para flujos críticos)
+- `frontend-design` (si hay UI involucrada)
+- `dual-auditor-protocol` (si hay audit de código de producción)
+- `review-app` (si hay flujo de PRs a revisar)
+
+El detector implementa esto en `detector.js#enrichStackWithContrast(type, userAnswersText)`. La función devuelve `{ stack, extras, subType }` donde `extras` son las skills sugeridas por contraste + sub-tipo.
+
+**Output al usuario** cuando hay extras del contraste:
+
+```
+Esto es lo que entendí:
+...
+Stack recomendado:
+- <skills curadas del tipo>
+
+Además, detecté en tus respuestas señales para activar también:
+- <skill extra 1> — <why específico, ej. "mencionaste PRs y audit de código">
+- <skill extra 2> — <why>
+
+¿Las activamos? [Y]es / [N]o / [solo X y Y]
+```
+
 Las **skills core** (siempre activas, definidas en `CORE_SKILLS` del detector) son:
 `pipeline-v2`, `cold-reader-gate`, `multimodal-validation`, `karpathy-rules`, `confidence-loop`, `agent-template`. Estas no se discuten — se activan automáticamente. Solo presentas al usuario las RECOMENDADAS adicionales.
 
@@ -243,10 +294,13 @@ Si el usuario ajusta, integras los cambios y vuelves a mostrar este bloque hasta
 
 ## Paso 4 — persistencia (SOLO al recibir confirmación explícita)
 
-Cargas `src/memory.js` y ejecutas en este orden. Todas las llamadas son idempotentes.
+Cargas `src/memory.js` y `src/roadmap.js` y ejecutas en este orden. Todas las llamadas son idempotentes.
+
+**Política de sprints (D7):** `addSprint()` SOLO se llama al CERRAR un sprint, no al abrirlo. Esto se ajustó en Sprint v3.1 — antes `kickoff` llamaba `addSprint` al crear el sprint inicial y eso hacía que `summarize().sprints_completados` reportara `1` aunque el sprint recién hubiera abierto (confusión semántica entre "sprint vivo" en `roadmap/current-sprint.json` y "sprint cerrado" en `memory/sprint-log.md`).
 
 ```js
-import { writeProfile, addAgent, addSkill, addSprint } from '../src/memory.js';
+import { writeProfile, addSkill } from '../src/memory.js';
+import { startSprint } from '../src/roadmap.js';
 import { CORE_SKILLS, recommendStack, recommendMode, suggestInitialSprint } from '.claude/skills/kickoff/detector.js';
 
 const profile = {
@@ -265,8 +319,13 @@ writeProfile(profile);
 for (const name of CORE_SKILLS) addSkill({ name });
 for (const s of recommendStack(type)) addSkill({ name: s.name, notas: s.why });
 
+// Sprint inicial: crea SOLO roadmap/current-sprint.json. NO llamar a addSprint()
+// — ese se reserva para el cierre del sprint (vía closeSprint() en roadmap.js).
 const sprint = suggestInitialSprint(type, mode);
-addSprint({ number: 1, objective: sprint.objective, deliverables: sprint.deliverables, lessons: [] });
+startSprint({ number: 1, objective: sprint.objective });
+// startSprint() además sincroniza dashboard/state.json.current_sprint con el
+// sprint recién creado (mejor-effort vía POST /api/state, silencioso si el
+// dashboard no está arriba).
 ```
 
 ### Crear archivos del proyecto
@@ -340,7 +399,8 @@ Si existe el smoke test (Sprint 3.3), ofrece correrlo automáticamente. Si no, n
 | `writeProfile(profile)` | Una sola vez, al confirmar el diagnóstico. | El objeto del Paso 4. |
 | `addSkill({ name, notas? })` | Una vez por skill core + una vez por skill recomendada. | `notas` es el `why` cuando aplica. |
 | `addAgent(...)` | NO en el kickoff. Se llama cuando el primer agente se invoca. | — |
-| `addSprint({ number: 1, objective, deliverables, lessons: [] })` | Una sola vez, junto con el resto. | Tomado de `suggestInitialSprint`. |
+| `startSprint({ number, objective })` (de roadmap.js) | Una sola vez al crear el sprint inicial. Crea `roadmap/current-sprint.json` Y sincroniza `dashboard/state.json.current_sprint`. | Tomado de `suggestInitialSprint`. |
+| `addSprint(...)` (de memory.js) | **NO en el kickoff.** Se llama recién al CERRAR el sprint (vía `closeSprint()` en roadmap.js). Esa decisión vive en D7. | — |
 
 `addDecision` y `addLesson` NO se llaman en el kickoff salvo que el usuario tome una decisión explícita durante la entrevista (ej. "decido no usar Git en este proyecto"). En ese caso lo registras como `addDecision`.
 

@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "findings-auditor",
+  "title": "Findings of a single auditor in the dual-auditor-protocol",
+  "type": "object",
+  "required": ["auditor", "target", "audited_at", "findings", "overall_verdict", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "auditor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the model used (e.g., 'claude-opus-4.5' or 'gpt-5')."
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What was audited — file path, module name, or spec name."
+    },
+    "audited_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "category", "title", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Identifier stable within this audit run, e.g., 'A-001'."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low", "info"]
+          },
+          "category": {
+            "type": "string",
+            "enum": ["logic", "security", "performance", "architecture", "edge-case", "maintainability", "tests", "docs", "other"]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Optional — code snippet, line range, or trace that shows the issue."
+          },
+          "suggested_fix": {
+            "type": "string",
+            "description": "Optional — concrete remediation. Better if patchable."
+          },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "file": { "type": "string" },
+              "line_start": { "type": "integer", "minimum": 1 },
+              "line_end": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": ["pass", "pass_with_fixes", "fail"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1–3 paragraph executive summary written for a human reviewer."
+    }
+  }
+}

@@ -199,6 +199,29 @@ En la raíz hay un archivo `feedback.md`. Es el canal para reportar findings sob
 
 **NO arregles el starter desde este proyecto.** Tu rol es reportar. El orquestador del starter es el que corrige.
 
+## Limitaciones del runtime de Claude Code
+
+🛑 **Subagentes NO pueden hacer Write a archivos del proyecto.** El wrapper de subagentes (los que se lanzan vía la Agent tool) bloquea el uso del Write tool con "Subagents should return findings as text". Esto aplica a TODOS los subagentes, no solo a los nuestros. Decisión registrada como D6.
+
+**Workaround obligatorio en todos los briefs a subagentes:**
+
+> "Entrega tus findings como texto en tu respuesta final. **NO uses la Write tool** — el wrapper la bloquea. El orquestador (Claude principal) persistirá el archivo. Tu output va dentro del mensaje, encerrado en code fences si es markdown/JSON. Si excede 50k tokens, divídelo en N partes y dilo explícito al final ('parte 1/3, continúa en próximo turno')."
+
+**Aplica especialmente a:**
+- `dual-auditor-protocol` (los auditores entregan findings como texto; el orquestador escribe `audit/findings-deep-{A,B}.md`).
+- `pipeline-v2` cuando el architect/critic/cold-reader corren como subagentes.
+- Cualquier flujo donde un agente "produce un deliverable" — el deliverable viaja como texto, el orquestador hace el Write.
+
+**No aplica a:** el orquestador principal (Claude que conversa con el usuario), que sí puede escribir archivos libremente. La limitación es exclusiva del wrapper de subagentes.
+
+🛑 **Agentes recién creados NO cargan en la misma sesión.** Si en la sesión actual se crea o se edita el frontmatter de un agente en `~/.claude/agents/xxx.md` o `.claude/agents/xxx.md`, Claude Code no lo verá hasta que el usuario reinicie. El registro de agents se construye al arranque de sesión y no refresca en caliente.
+
+**Workaround:** crear los agentes durante `/kickoff` (Paso 0) y pedirle al usuario reiniciar antes del primer trabajo real. Si el agente surge mid-sesión, avisar explícito y usar `general-purpose` con un prompt que emule el rol del agente nuevo para esa tarea puntual.
+
+🛑 **Skills recién creadas/editadas SÍ se ven en la misma sesión** (a diferencia de agents). Las skills se leen on-demand cada vez que se invocan. Editar una skill no requiere reinicio.
+
 ## Versión
 
-**v3** (2026-05). Plan vivo en `process-log/v3-plan.md`. Decisiones cerradas en `process-log/00-decisions.md` (ley).
+**v3.1** (2026-05). Plan vivo en `process-log/v3-plan.md`. Decisiones cerradas en `process-log/00-decisions.md` (ley).
+
+Cambios v3.1 sobre v3 (Sprint v3.1): helper `src/load_env.js` para carga idempotente del `.env`; chat público orquestador↔agentes en el dashboard; skill `dual-auditor-protocol` en el catálogo; review-app oficial migrada al starter; sync `roadmap/current-sprint.json` ↔ `dashboard/state.json` automático vía `roadmap.js`; kickoff con capa de contraste post-respuestas + sub-tipo `business-with-software`; campo `sprint_number` en task schema; timeout configurable en `openrouter_client.chat()`; D6 (subagentes sin Write) y D7 (sync current-sprint canónico) cableadas.

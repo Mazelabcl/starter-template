@@ -22,8 +22,10 @@ Skills core (siempre activas) NO viven aquí — viven en `.claude/skills/<skill
 | `seo` | SEO técnico + on-page proyecto-local (meta, schema, headings) | "keyword research", "meta título", "schema markup" | build/business/content con sitio web público | sin costo |
 | `remotion` | Video programático con React (data-driven, server-side render) | "video programático", "remotion", "lyric video" | content/marketing con videos personalizados | sin costo |
 | `web-artifacts-builder` | HTML+JS+CSS autocontenido (demos, prototipos one-off) | "artifact web", "demo en html", "calculadora interactiva" | prototipos, demos, herramientas one-off | sin costo |
+| `dual-auditor-protocol` | Audita un deliverable con DOS modelos en paralelo (Claude + GPT) + synthesizer que cruza findings | "audit con doble auditor", "audit con dos modelos", "/dual-audit", "audit de código de producción" | build/business-with-software con código de producción, audits de alto riesgo | ~2.5× costo de un audit single (3 calls) |
+| `review-app` | App HTTP local (Node nativo, cero deps) para revisar PRs/bloques de un sprint marcando OK/Feedback. Cross-sprint, cross-project, hot-reload del parser | "review-app", "revisar PRs en HTTP", "marcar OK/Feedback", "/review-app" | build/business-with-software con audits de código o entregables que necesitan review humano repetido | sin costo |
 
-Total: 14 skills opcionales en `_catalog/`.
+Total: 16 skills opcionales en `_catalog/`.
 
 ## MCPs disponibles (NO son skills — son MCP servers)
 

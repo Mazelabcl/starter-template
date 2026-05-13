@@ -49,12 +49,19 @@ const EXPECTED_SKILLS = [
   'seo',
   'remotion',
   'web-artifacts-builder',
+  // Sprint v3.1 — skills promovidas desde audit-master.
+  'dual-auditor-protocol',
+  'review-app',
 ];
 
 // Skills nuevas del Sprint 5.2 que son stubs y deben seguir el formato canónico
 // estricto (4 secciones requeridas). `superpowers-pr` está exenta porque es una
 // skill ya madura (v2.0) con formato más libre, validada en Sprint 3.2.
-const STUB_SKILLS = EXPECTED_SKILLS.filter(s => s !== 'superpowers-pr');
+// `dual-auditor-protocol` y `review-app` (v3.1) también traen contenido completo
+// con secciones más libres — las eximimos del strict 4-section check.
+const STUB_SKILLS = EXPECTED_SKILLS.filter(
+  s => s !== 'superpowers-pr' && s !== 'dual-auditor-protocol' && s !== 'review-app'
+);
 
 const REQUIRED_SECTIONS = [
   /##\s+Cu[aá]ndo activar/i,

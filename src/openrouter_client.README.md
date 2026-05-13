@@ -138,6 +138,31 @@ for (const r of results) {
 
 `results` mantiene el orden de `requests`. Errores no rompen el batch — cada slot indica `{ok, response}` o `{ok: false, error}`.
 
+## Timeout configurable por call
+
+El cliente acepta `timeout_ms` por call. Default `120_000` (2 min), suficiente para la mayoría de modelos chat. Para **modelos reasoning** (gpt-5, o1, deepseek-r1) con prompts largos o contextos grandes (≥50k tokens), 2 minutos puede ser insuficiente — Sprint v3.1 corrigió esto tras descubrirse que `dual_auditor_b.js` fallaba en 5/17 módulos grandes con timeout.
+
+```javascript
+import { chat, MODELS } from './src/openrouter_client.js';
+
+const response = await chat({
+  model: MODELS.openai.gpt5,
+  messages: [{ role: 'user', content: prompt_largo }],
+  timeout_ms: 300_000, // 5 min para reasoning + context grande
+});
+```
+
+**Recomendaciones por tipo de uso:**
+
+| Caso | timeout sugerido |
+|---|---|
+| Chat normal, prompts cortos | `120_000` (default) |
+| Modelo reasoning (gpt-5, o1, r1) con context grande | `300_000` (5 min) |
+| Modelo reasoning + JSON estructurado + 50k+ tokens | `600_000` (10 min) |
+| Sonar deep research (Perplexity) | `300_000` (5 min) |
+
+Si el timeout se vence, `chat()` lanza `OpenRouterError` con `code: 'aborted'`. La política recomendada en `dual-auditor-protocol` y similares es: timeout extendido + reintentos exponenciales acotados, y si fallan, fragmentar el módulo grande en sub-chunks antes de pedirle al LLM.
+
 ## Agregar un modelo nuevo al catálogo
 
 1. Verifica el slug en [openrouter.ai/models](https://openrouter.ai/models) (ej. `mistralai/mistral-large-2411`).

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dual-audit-synthesis",
+  "title": "Synthesis of two adversarial auditors in the dual-auditor-protocol",
+  "type": "object",
+  "required": ["synthesized_at", "target", "auditor_a_summary", "auditor_b_summary", "consensus_findings", "divergent_findings", "consolidated_verdict", "verdict_reasoning"],
+  "additionalProperties": false,
+  "properties": {
+    "synthesized_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "auditor_a_summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1-line synthesis of auditor A's overall take."
+    },
+    "auditor_b_summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1-line synthesis of auditor B's overall take."
+    },
+    "consensus_findings": {
+      "type": "array",
+      "description": "Findings flagged by BOTH auditors (high confidence).",
+      "items": {
+        "type": "object",
+        "required": ["title", "severity", "category", "a_finding_id", "b_finding_id", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+          "category": { "type": "string", "enum": ["logic", "security", "performance", "architecture", "edge-case", "maintainability", "tests", "docs", "other"] },
+          "a_finding_id": { "type": "string", "minLength": 1 },
+          "b_finding_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "suggested_fix": { "type": "string" }
+        }
+      }
+    },
+    "divergent_findings": {
+      "type": "array",
+      "description": "Findings flagged by only ONE auditor (medium-low confidence; still worth investigating).",
+      "items": {
+        "type": "object",
+        "required": ["source", "finding_id", "title", "severity", "category", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "source": { "type": "string", "enum": ["A", "B"] },
+          "finding_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+          "category": { "type": "string", "enum": ["logic", "security", "performance", "architecture", "edge-case", "maintainability", "tests", "docs", "other"] },
+          "description": { "type": "string", "minLength": 1 },
+          "why_only_one": { "type": "string", "description": "Synthesizer's brief reasoning on why the other model probably missed it." }
+        }
+      }
+    },
+    "consolidated_verdict": {
+      "type": "string",
+      "enum": ["pass", "pass_with_fixes", "fail"]
+    },
+    "verdict_reasoning": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommended_next_steps": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

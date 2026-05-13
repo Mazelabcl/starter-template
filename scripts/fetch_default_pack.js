@@ -7,6 +7,10 @@
 // Diseño testeable: exporta funciones puras (computeSHA256, parseZipEntries,
 // extractZip, validateManifest) para mock desde tests sin red.
 
+// Carga .env explícita vía el helper interno. Mantiene el script utilizable
+// desde npm run, agentes con Bash tool y CI/CD sin sorpresas con env vars.
+import '../src/load_env.js';
+
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

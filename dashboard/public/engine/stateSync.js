@@ -105,6 +105,19 @@ function openSSE() {
     // Greeting del server — no requiere fetch.
   });
 
+  // Sprint v3.1: el chat público viaja por SSE como evento 'chat-msg'. Re-emite
+  // por el bus para que la pestaña Chat del panel lo recoja en vivo.
+  eventSource.addEventListener('chat-msg', (ev) => {
+    let parsed = null;
+    try { parsed = JSON.parse(ev.data); } catch { return; }
+    if (!parsed || typeof parsed !== 'object') return;
+    try {
+      bus.dispatchEvent(new CustomEvent('chat-msg', { detail: parsed }));
+    } catch (e) {
+      console.debug('[stateSync] dispatch chat-msg falló:', e && e.message ? e.message : e);
+    }
+  });
+
   eventSource.addEventListener('error', () => {
     // EventSource auto-reintenta, pero queremos backoff explícito + cierre
     // controlado para evitar tormentas si el server está caído.

@@ -27,9 +27,42 @@ npm run dashboard
 | `GET /api/sprint` | Lee `roadmap/current-sprint.json` y lo devuelve (200 con `{}` si no existe). |
 | `GET /api/roadmap` | Lee `roadmap/roadmap.md` y devuelve `{ markdown: "<contenido>" }`. 200 con `{ markdown: "" }` si no existe. |
 | `GET /api/sprints/history` | Parsea `memory/sprint-log.md` y devuelve array de sprints cerrados ordenado descendente por número. 200 con `[]` si no existe. |
+| `POST /api/chat` | Sprint v3.1 — chat público orquestador ↔ agentes. Body: `{ from, to, message, timestamp? }`. Persiste a `chat-log.jsonl` + emite SSE `chat-msg`. |
+| `GET /api/chat/history` | Devuelve los últimos N mensajes del chat (default 200). |
 | `GET /api/pack-name` | Nombre del pack activo. |
 | `GET /assets/<rel>` | Binarios CC0 con whitelist. |
 | `GET /files/<rel>` | Archivos del repo bajo subcarpetas permitidas. |
+
+## Chat público (Sprint v3.1)
+
+Pestaña **Chat** en el panel muestra un feed cronológico de comunicación entre el orquestador y los agentes. Cada mensaje incluye `from`, `to`, body y timestamp, con un avatar pixel-art mínimo (inicial del `from`).
+
+**Cómo los agentes reportan vía chat:**
+
+```bash
+node scripts/update_state.js say <from> <to> <message>
+```
+
+Ejemplos:
+```bash
+# Architect reporta milestone al orquestador
+node scripts/update_state.js say architect orquestador "research done, escribiendo proposal"
+
+# Critic le habla al architect
+node scripts/update_state.js say critic architect "missing section about edge cases"
+
+# Orquestador habla al humano
+node scripts/update_state.js say orquestador aldot "todos los tests verdes, listo para review"
+```
+
+**Política:**
+
+- El helper escribe SIEMPRE al `chat-log.jsonl` local (incluso si el dashboard no está corriendo).
+- Si el dashboard SÍ está corriendo, además POSTea a `/api/chat` para que se emita por SSE y aparezca en vivo en la pestaña Chat.
+- Mensajes limitados a 4000 chars; control chars stripped; `from`/`to` máx 80 chars.
+- TODO render del body del mensaje usa `textContent` (ADR-02, XSS-safe).
+
+Los briefs canónicos a sub-agentes en pipeline-v2 / kickoff incluyen instrucción: "cuando termines un milestone llama `node scripts/update_state.js say <tu-nombre> orquestador 'milestone X done'`. El owner verá tu avance en el dashboard."
 
 ## Schema extendido del task
 

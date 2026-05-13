@@ -39,9 +39,11 @@ const STATE_PATH = join(__dirname, 'state.json');
 const PUBLIC_DIR = join(__dirname, 'public');
 const HISTORY_DIR = join(__dirname, 'history');
 const HISTORY_LOG = join(HISTORY_DIR, 'events.log');
+const CHAT_LOG_PATH = join(__dirname, 'chat-log.jsonl');
 const CONTRACTS_DIR = join(REPO_ROOT, 'contracts', 'declared');
 const PORT = parseInt(process.env.DASHBOARD_PORT || '7777', 10);
 const HISTORY_LIMIT = 100;
+const CHAT_HISTORY_LIMIT = 200;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -120,6 +122,11 @@ function ensureTaskV2Fields(task) {
   // v2.2 (fase 7): agrupación organizativa por fase y épica. Default null.
   if (task.phase === undefined) task.phase = null;
   if (task.epic === undefined) task.epic = null;
+  // v2.3 (Sprint v3.1): asociación al sprint vivo. Default null.
+  if (task.sprint_number === undefined) task.sprint_number = null;
+  if (task.sprint_number !== null && (!Number.isInteger(task.sprint_number) || task.sprint_number < 0)) {
+    task.sprint_number = null;
+  }
   return task;
 }
 
@@ -166,6 +173,38 @@ function readHistoryTail(limit = HISTORY_LIMIT) {
   if (!existsSync(HISTORY_LOG)) return [];
   // Lectura simple: archivo estará acotado en práctica (rotación pendiente).
   const raw = readFileSync(HISTORY_LOG, 'utf8');
+  const lines = raw.split('\n').filter(Boolean);
+  const tail = lines.slice(-limit);
+  const parsed = [];
+  for (const line of tail) {
+    try { parsed.push(JSON.parse(line)); } catch { /* skip línea corrupta */ }
+  }
+  return parsed;
+}
+
+// ---------- chat log (NDJSON append-only) ----------
+// Sprint v3.1: chat público orquestador ↔ agentes. Cada entry es un objeto:
+//   { from, to, message, timestamp }
+// Persiste en dashboard/chat-log.jsonl. Endpoint POST /api/chat lo escribe Y
+// emite por SSE como evento `chat-msg`. El frontend lo renderiza con avatares
+// pixel-art. NO se mezcla con events.log porque chat tiene shape distinto y
+// volumen propio.
+
+function sanitizeChatField(v, max = 4000) {
+  if (typeof v !== 'string') return '';
+  // Strip caracteres de control (excepto \n \t) y limita longitud.
+  const cleaned = v.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '').trim();
+  return cleaned.length > max ? cleaned.slice(0, max) : cleaned;
+}
+
+function appendChatEntry(entry) {
+  mkdirSync(dirname(CHAT_LOG_PATH), { recursive: true });
+  appendFileSync(CHAT_LOG_PATH, JSON.stringify(entry) + '\n', 'utf8');
+}
+
+function readChatTail(limit = CHAT_HISTORY_LIMIT) {
+  if (!existsSync(CHAT_LOG_PATH)) return [];
+  const raw = readFileSync(CHAT_LOG_PATH, 'utf8');
   const lines = raw.split('\n').filter(Boolean);
   const tail = lines.slice(-limit);
   const parsed = [];
@@ -708,6 +747,7 @@ function readSprintHistory() {
 
 // Exportamos los parsers internos para los tests.
 export { parseSprintLogMarkdown, readSprintHistory, readRoadmapMarkdown };
+export { readChatTail, appendChatEntry, sanitizeChatField, CHAT_LOG_PATH };
 
 function handleRequest(req, res) {
   const t0 = Date.now();
@@ -766,6 +806,47 @@ function handleRequest(req, res) {
     }
     if ((method === 'GET' || method === 'HEAD') && path.startsWith('/assets/')) {
       return serveAssetFile(req, res, path);
+    }
+    if (method === 'POST' && path === '/api/chat') {
+      // Sprint v3.1: endpoint del chat público orquestador ↔ agentes.
+      readRequestBody(req, 200_000).then(raw => {
+        let body;
+        try { body = JSON.parse(raw || '{}'); }
+        catch (e) { return sendJSON(res, 400, { error: `JSON inválido: ${e.message}` }); }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+          return sendJSON(res, 400, { error: 'payload debe ser objeto' });
+        }
+        const from = sanitizeChatField(body.from, 80);
+        const to = sanitizeChatField(body.to, 80);
+        const message = sanitizeChatField(body.message, 4000);
+        if (!from || !to || !message) {
+          return sendJSON(res, 400, { error: 'from, to y message son requeridos y deben ser strings no vacíos' });
+        }
+        const timestamp = (typeof body.timestamp === 'string' && body.timestamp)
+          ? body.timestamp
+          : new Date().toISOString();
+        const entry = { from, to, message, timestamp };
+        try {
+          appendChatEntry(entry);
+          sseBroadcast('chat-msg', entry);
+          sendJSON(res, 200, { ok: true });
+        } catch (e) {
+          sendJSON(res, 500, { error: `no pude persistir chat: ${e.message}` });
+        }
+      }).catch(e => sendJSON(res, 400, { error: e.message }));
+      return;
+    }
+    if ((method === 'GET' || method === 'HEAD') && path === '/api/chat/history') {
+      const limit = Math.min(parseInt(urlObj.searchParams.get('limit') || CHAT_HISTORY_LIMIT, 10) || CHAT_HISTORY_LIMIT, 1000);
+      const body = JSON.stringify({ messages: readChatTail(limit) });
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      if (method === 'HEAD') res.end();
+      else res.end(body);
+      return;
     }
     if ((method === 'GET' || method === 'HEAD') && path === '/api/state') {
       const snap = buildSnapshot();

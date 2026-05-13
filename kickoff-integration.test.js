@@ -24,7 +24,6 @@ import {
   writeProfile,
   readProfile,
   addSkill,
-  addSprint,
   getActiveTeam,
   summarize,
 } from './src/memory.js';
@@ -35,6 +34,7 @@ import {
   recommendMode,
   suggestInitialSprint,
   CORE_SKILLS,
+  enrichStackWithContrast,
 } from './.claude/skills/kickoff/detector.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -101,12 +101,10 @@ function runKickoff({ memDir, input, owner, description }) {
     addSkill({ name: s.name, notas: s.why }, memDir);
   }
 
-  addSprint({
-    number: 1,
-    objective: sprint.objective,
-    deliverables: sprint.deliverables,
-    lessons: [],
-  }, memDir);
+  // v3.1: NO se llama addSprint() en kickoff. El sprint inicial vive en
+  // roadmap/current-sprint.json (gestionado por src/roadmap.js#startSprint).
+  // addSprint() se reserva para closeSprint() — escribe a memory/sprint-log.md
+  // solo cuando el sprint se CIERRA. Ver D7 en process-log/00-decisions.md.
 
   return {
     signals,
@@ -186,9 +184,12 @@ try {
     }
   });
 
-  check('A8 — sprint 1 registrado con objective de content', () => {
-    if (resultA.summary.sprints_completados !== 1) {
-      throw new Error(`sprints esperaba 1, fue ${resultA.summary.sprints_completados}`);
+  check('A8 — sprint 1 sugerido con objective de content (sin contar como completado)', () => {
+    // v3.1: kickoff NO llama addSprint(), así que sprints_completados queda en 0.
+    // El sprint inicial vive en roadmap/current-sprint.json. Aquí solo verificamos
+    // que suggestInitialSprint() produjo un objective coherente con el tipo content.
+    if (resultA.summary.sprints_completados !== 0) {
+      throw new Error(`sprints_completados esperaba 0 (kickoff no debe llamar addSprint), fue ${resultA.summary.sprints_completados}`);
     }
     if (!/creativo|creatividad|artefacto/i.test(resultA.sprint.objective)) {
       throw new Error(`objective no es de content: ${resultA.sprint.objective}`);
@@ -438,6 +439,87 @@ try {
       if (distinct.size !== names.length) {
         const dups = names.filter((n, i) => names.indexOf(n) !== i);
         throw new Error(`stack ${type} tiene duplicados: ${dups.join(', ')}`);
+      }
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Sprint v3.1 — enrichStackWithContrast: capa de contraste post-Paso-3
+  // ──────────────────────────────────────────────────────────────────────
+
+  check('V31-A — business + menciones a PRs/audit/código activa sub-tipo business-with-software', () => {
+    const text = 'voy a hacer un audit de mi ERP que vive en producción, hay PRs a master constantemente';
+    const r = enrichStackWithContrast('business', text);
+    if (r.subType !== 'business-with-software') {
+      throw new Error(`subType esperado business-with-software, fue ${r.subType}`);
+    }
+    const extraNames = r.extras.map(e => e.name);
+    if (!extraNames.includes('superpowers-pr')) {
+      throw new Error(`extras no incluye superpowers-pr. extras: ${extraNames.join(', ')}`);
+    }
+    if (!extraNames.includes('dual-auditor-protocol')) {
+      throw new Error(`extras no incluye dual-auditor-protocol. extras: ${extraNames.join(', ')}`);
+    }
+  });
+
+  check('V31-B — business "puro" (sin código) NO activa business-with-software', () => {
+    const text = 'quiero mapear el proceso de ventas y proponer 3 cambios al CRM';
+    const r = enrichStackWithContrast('business', text);
+    if (r.subType !== null) {
+      throw new Error(`subType esperado null, fue ${r.subType}`);
+    }
+    // En este caso superpowers-pr NO debería aparecer como extra.
+    const extraNames = r.extras.map(e => e.name);
+    if (extraNames.includes('superpowers-pr')) {
+      throw new Error(`extras NO debería incluir superpowers-pr cuando no hay señal código`);
+    }
+  });
+
+  check('V31-C — build con menciones a PRs propone superpowers-pr aunque ya esté en el stack curado', () => {
+    // El stack `build` ya incluye superpowers-pr — en ese caso la extra NO se duplica.
+    const text = 'voy a construir una app con muchos PRs a master, code review formal';
+    const r = enrichStackWithContrast('build', text);
+    const stackNames = r.stack.map(s => s.name);
+    const extraNames = r.extras.map(e => e.name);
+    // superpowers-pr debe estar en el stack curado (ya viene de STACK_BY_TYPE.build).
+    if (!stackNames.includes('superpowers-pr')) {
+      throw new Error('build stack debería incluir superpowers-pr curado');
+    }
+    // Y NO debe duplicarse como extra.
+    if (extraNames.includes('superpowers-pr')) {
+      throw new Error('superpowers-pr no debe aparecer como extra cuando ya está en stack');
+    }
+  });
+
+  check('V31-D — content con menciones a SEO sugiere skill seo aunque no esté en stack content', () => {
+    const text = 'quiero escribir un blog con buen SEO para rankear en Google';
+    const r = enrichStackWithContrast('content', text);
+    const extraNames = r.extras.map(e => e.name);
+    if (!extraNames.includes('seo')) {
+      throw new Error(`extras esperaba incluir seo. extras: ${extraNames.join(', ')}`);
+    }
+  });
+
+  check('V31-E — sin keywords matching, extras está vacío', () => {
+    const text = 'quiero algo bonito';
+    const r = enrichStackWithContrast('content', text);
+    if (r.extras.length !== 0) {
+      throw new Error(`extras esperaba vacío, fue [${r.extras.map(e => e.name).join(', ')}]`);
+    }
+  });
+
+  check('V31-F — cada extra tiene `why` no vacío + source declarado', () => {
+    const text = 'audit del repo con PRs, planillas Excel, SEO, generar PDFs';
+    const r = enrichStackWithContrast('business', text);
+    for (const e of r.extras) {
+      if (!e.why || !e.why.trim()) {
+        throw new Error(`extra ${e.name} sin "why"`);
+      }
+      if (!e.source) {
+        throw new Error(`extra ${e.name} sin "source"`);
+      }
+      if (e.source !== 'catalog-keywords' && e.source !== 'business-with-software') {
+        throw new Error(`extra ${e.name} con source inválido: ${e.source}`);
       }
     }
   });

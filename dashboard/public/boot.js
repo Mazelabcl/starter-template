@@ -84,6 +84,12 @@ try {
       bus.dispatchEvent(new CustomEvent('open-roadmap'));
     });
   }
+  const chatBtn = document.getElementById('chat-toggle');
+  if (chatBtn) {
+    chatBtn.addEventListener('click', () => {
+      bus.dispatchEvent(new CustomEvent('open-chat'));
+    });
+  }
   console.log('[dashboard v3] side panel montado');
 
   loading.style.display = 'none';

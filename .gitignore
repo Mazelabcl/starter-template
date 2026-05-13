@@ -22,3 +22,12 @@ process-log/_*.md
 
 # Dashboard v3 — assets binarios CC0 (poblados por scripts/fetch_default_pack.js)
 assets/vendor/
+
+# Dashboard v3.1 — chat público (runtime data, generado por POST /api/chat)
+dashboard/chat-log.jsonl
+
+# review-app (Sprint v3.1) — reviews persistidas (datos del proyecto consumer, no del template)
+review-app/audit/reviews/
+
+# 00-decisions.md sí va al template — es ley canónica
+!process-log/00-decisions.md
