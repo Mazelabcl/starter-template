@@ -4,6 +4,8 @@ Buzón para reportar findings sobre el **starter-template Mazelab** (skills falt
 
 **Para reportar algo del starter, agrega tu finding bajo `## NUEVO`.** El usuario solo dice "anota en feedback.md" — la estructura de abajo es self-documented, no necesitas preguntar formato. Fecha + contexto + finding + acción sugerida (opcional). Texto libre OK si es claro.
 
+**Si parcheaste a mano un script/archivo DEL STARTER en este proyecto** (no del consumer), anótalo con el tag `[UPSTREAM-FIX]` al inicio del título — el orquestador del starter lo prioriza sobre features para que el fix suba al starter rápido. Ejemplo: `## 2026-06-02 — [UPSTREAM-FIX] openai_images.py ignora refs .webp`.
+
 **Cómo se procesa:** cuando aldot retoma sesión sobre el starter, le da esta ruta al orquestador del starter, que lee `## NUEVO`, sincroniza al inbox global, aplica fixes y mueve lo procesado a `## Archivo` con fecha. **No arregles el starter desde el proyecto consumer** — tu rol es reportar.
 
 ---

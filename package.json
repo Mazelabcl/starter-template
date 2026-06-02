@@ -15,6 +15,7 @@
     "test:roadmap-sync": "node roadmap-state-sync.test.js",
     "test:review-app": "node review-app.test.js",
     "test:image-refs": "node dashboard-image-refs.test.js",
+    "test:image-wrappers": "node image-wrappers.test.js",
     "review-app": "node review-app/server.js",
     "smoke": "node scripts/smoke_test.js",
     "smoke:quick": "node scripts/smoke_test.js --quick",
