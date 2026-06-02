@@ -14,7 +14,7 @@ npm install
 
 # 3. Arrancar todo en un solo comando
 npm start
-# Esto baja los assets del dashboard pixel-art, levanta el servidor en background, abre el browser
+# Esto levanta el dashboard (HTML simple de estado) en background, abre el browser
 # en http://localhost:7777, y te muestra el próximo paso.
 
 # 4. Abre Claude Code en esta carpeta y dile: /kickoff
@@ -71,7 +71,7 @@ Catálogo completo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog
 
 ### Capacidades nuevas en v3.1
 
-- **Chat público en el dashboard** — pestaña "Chat" en el panel; agentes y orquestador reportan milestones vía `node scripts/update_state.js say <from> <to> <message>`. Feed cronológico con avatares pixel-art mini, SSE en vivo, persistencia en `dashboard/chat-log.jsonl`. Reduce fricción del owner: ya no tiene que preguntar "cómo vamos". Detalle: `dashboard/README.md`.
+- **Chat público en el dashboard** — pestaña "Chat" en el dashboard HTML simple; agentes y orquestador reportan milestones vía `node scripts/update_state.js say <from> <to> <message>`. Feed cronológico, SSE en vivo, persistencia en `dashboard/chat-log.jsonl`. Reduce fricción del owner: ya no tiene que preguntar "cómo vamos". Detalle: `dashboard/README.md`.
 - **review-app oficial** — app HTTP local cero deps (`node review-app/server.js`) para revisar PRs/bloques de un sprint marcando OK/Feedback. Cross-sprint, cross-project (`--data-dir` flag), hot-reload del parser, regex `\d+` (sin hardcodes). Promovida desde audit-master. Detalle: `review-app/README.md`.
 - **Skill `dual-auditor-protocol`** — audita un deliverable con DOS modelos en paralelo (Anthropic + OpenAI) + synthesizer que cruza findings. Reduce sesgos de un solo modelo. Promovida desde audit-master con schemas formales en `contracts/schemas/`. Detalle: `.claude/skills/_catalog/dual-auditor-protocol/SKILL.md`.
 - **Helper `src/load_env.js`** — carga `.env` idempotente desde scripts standalone. Necesario cuando un agente invoca un script vía Bash tool (Node no carga `.env` automáticamente fuera de `npm run`).

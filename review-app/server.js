@@ -37,6 +37,10 @@ const REPO_ROOT = resolve(__dirname, '..');
 const PUBLIC_DIR = join(__dirname, 'public');
 const PORT = parseInt(process.env.REVIEW_APP_PORT || '7788', 10);
 
+const SPRINT_DIR_RE = /^sprint(\d+)-prs$/;
+const BLOQUE_FILE_RE = /^bloque-(\d+)-.+\.md$/;
+const VIEWER_FILE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.md$/;
+
 // CLI flag --data-dir gana sobre env var.
 function resolveDataDir() {
   const argv = process.argv.slice(2);
@@ -50,11 +54,41 @@ function resolveDataDir() {
   return join(REPO_ROOT, 'audit');
 }
 
+// Modo: "sprint" (revisar bloques de un sprint marcando OK/Feedback) o
+// "viewer" (listar CUALQUIER .md del dataDir como output de agentes a leer).
+// Resolución: flag --mode viewer|sprint gana; si no, autodetect — si NO hay
+// carpetas sprint<N>-prs pero SÍ hay .md sueltos, es viewer; en otro caso sprint.
+function resolveMode(dataDir) {
+  const argv = process.argv.slice(2);
+  const flagIdx = argv.indexOf('--mode');
+  if (flagIdx !== -1 && argv[flagIdx + 1]) {
+    const v = String(argv[flagIdx + 1]).toLowerCase();
+    if (v === 'viewer' || v === 'sprint') return v;
+  }
+  if (process.env.REVIEW_APP_MODE) {
+    const v = String(process.env.REVIEW_APP_MODE).toLowerCase();
+    if (v === 'viewer' || v === 'sprint') return v;
+  }
+  return autodetectMode(dataDir);
+}
+
+export function autodetectMode(dataDir) {
+  if (!existsSync(dataDir)) return 'sprint';
+  let hasSprintDir = false;
+  let hasMd = false;
+  try {
+    for (const entry of readdirSync(dataDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && SPRINT_DIR_RE.test(entry.name)) hasSprintDir = true;
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) hasMd = true;
+    }
+  } catch { /* ignore */ }
+  if (!hasSprintDir && hasMd) return 'viewer';
+  return 'sprint';
+}
+
 const DATA_DIR = resolveDataDir();
 const REVIEWS_DIR = join(DATA_DIR, 'reviews');
-
-const SPRINT_DIR_RE = /^sprint(\d+)-prs$/;
-const BLOQUE_FILE_RE = /^bloque-(\d+)-.+\.md$/;
+const MODE = resolveMode(DATA_DIR);
 
 // ---- Parser & cache --------------------------------------------------------
 
@@ -160,6 +194,85 @@ export function readBlock(sprintNumber, bloqueNumber, dataDir = DATA_DIR) {
   } catch {
     return null;
   }
+}
+
+// ---- Viewer mode (A1) ------------------------------------------------------
+// Lista CUALQUIER .md del dataDir (no recursivo) como output de agentes para
+// leer. Cada archivo trae un TLDR derivado: H1 + primer párrafo. Si el .md tiene
+// front-matter con `model:`, se expone para trazabilidad.
+
+/**
+ * Extrae metadata ligera de un markdown:
+ *   - title: primer `# H1` (o el nombre del archivo si no hay).
+ *   - tldr: primer párrafo de texto después del H1 (no header, no bullet, no fence).
+ *   - model: valor de `model:` en el front-matter YAML si existe.
+ */
+export function extractTldr(md, fallbackTitle = '') {
+  const out = { title: fallbackTitle, tldr: '', model: null };
+  if (typeof md !== 'string' || !md.trim()) return out;
+  let body = md;
+  // Front-matter: capturamos `model:` si está entre los primeros `---`.
+  const fmMatch = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(md);
+  if (fmMatch) {
+    const fm = fmMatch[1];
+    const mm = /^model:\s*(.+)$/m.exec(fm);
+    if (mm) out.model = mm[1].trim().replace(/^["']|["']$/g, '');
+    body = md.slice(fmMatch[0].length);
+  }
+  const lines = body.split(/\r?\n/);
+  let sawH1 = false;
+  let inFence = false;
+  for (const lineRaw of lines) {
+    const line = lineRaw.trim();
+    if (/^```/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    if (!sawH1) {
+      const h1 = /^#\s+(.+)$/.exec(line);
+      if (h1) { out.title = h1[1].trim(); sawH1 = true; continue; }
+      // Permitimos texto antes del H1 también como TLDR si nunca hay H1.
+    }
+    if (!out.tldr && line && !/^#{1,6}\s/.test(line) && !/^[-*]\s/.test(line) && !/^>/.test(line) && !/^\|/.test(line)) {
+      out.tldr = line.replace(/\*\*/g, '').replace(/`/g, '');
+      if (sawH1) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Lista los .md del dataDir (no recursivo) con su TLDR. Hot-reload via mtime
+ * dedup sobre el dataDir.
+ */
+const viewerCache = { mtime: -1, files: [] };
+export function listViewerFiles(dataDir = DATA_DIR) {
+  if (!existsSync(dataDir)) return [];
+  let mt = 0;
+  try { mt = statSync(dataDir).mtimeMs; } catch { /* ignore */ }
+  if (viewerCache.mtime === mt && dataDir === DATA_DIR) return viewerCache.files;
+  const out = [];
+  let entries = [];
+  try { entries = readdirSync(dataDir, { withFileTypes: true }); } catch { return []; }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!VIEWER_FILE_RE.test(entry.name)) continue;
+    let raw = '';
+    try { raw = readFileSync(join(dataDir, entry.name), 'utf8'); } catch { /* ignore */ }
+    const meta = extractTldr(raw, entry.name);
+    out.push({ name: entry.name, title: meta.title, tldr: meta.tldr, model: meta.model });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  if (dataDir === DATA_DIR) { viewerCache.mtime = mt; viewerCache.files = out; }
+  return out;
+}
+
+/** Lee un .md del viewer por nombre (con guard anti-traversal). */
+export function readViewerFile(name, dataDir = DATA_DIR) {
+  if (typeof name !== 'string' || !VIEWER_FILE_RE.test(name)) return null;
+  const target = resolve(dataDir, name);
+  // Guard: el archivo resuelto tiene que vivir DIRECTO dentro de dataDir.
+  if (resolve(target) !== resolve(join(dataDir, name))) return null;
+  if (!existsSync(target) || !statSync(target).isFile()) return null;
+  try { return readFileSync(target, 'utf8'); } catch { return null; }
 }
 
 // ---- Reviews persistence ---------------------------------------------------
@@ -273,6 +386,8 @@ const RE_BLOQUE = /^\/api\/bloque\/(\d+)\/(\d+)$/;
 const RE_RAW_BLOQUE = /^\/raw\/bloque\/(\d+)\/(\d+)$/;
 const RE_REVIEW_GET = /^\/api\/review\/(\d+)\/(\d+)$/;
 const RE_REVIEW_POST = /^\/api\/review\/(\d+)\/(\d+)\/(\d+)$/;
+const RE_VIEWER_FILE = /^\/api\/viewer\/file\/(.+)$/;
+const RE_RAW_VIEWER = /^\/raw\/viewer\/(.+)$/;
 
 async function handleRequest(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`);
@@ -283,12 +398,36 @@ async function handleRequest(req, res) {
 
   try {
     if (method === 'GET' && path === '/api/health') {
-      return sendJSON(res, 200, { ok: true, data_dir: DATA_DIR, sprints_loaded: listSprints().length });
+      return sendJSON(res, 200, { ok: true, mode: MODE, data_dir: DATA_DIR, sprints_loaded: listSprints().length });
+    }
+    if (method === 'GET' && path === '/api/mode') {
+      return sendJSON(res, 200, { mode: MODE, data_dir: DATA_DIR });
     }
     if (method === 'GET' && path === '/api/sprints') {
       return sendJSON(res, 200, listSprints());
     }
+    // ---- Viewer mode (A1) ----
+    if (method === 'GET' && path === '/api/viewer/files') {
+      return sendJSON(res, 200, listViewerFiles());
+    }
     let m;
+    if (method === 'GET' && (m = RE_VIEWER_FILE.exec(path))) {
+      let name;
+      try { name = decodeURIComponent(m[1]); } catch { return send404(res, 'nombre inválido'); }
+      const content = readViewerFile(name);
+      if (content === null) return send404(res, `archivo viewer no encontrado: ${name}`);
+      const meta = extractTldr(content, name);
+      return sendJSON(res, 200, { name, title: meta.title, model: meta.model, content });
+    }
+    if (method === 'GET' && (m = RE_RAW_VIEWER.exec(path))) {
+      let name;
+      try { name = decodeURIComponent(m[1]); } catch { return send404(res, 'nombre inválido'); }
+      const content = readViewerFile(name);
+      if (content === null) return send404(res, `archivo viewer no encontrado: ${name}`);
+      res.writeHead(200, { ...CORS, 'Content-Type': 'text/markdown; charset=utf-8' });
+      res.end(content);
+      return;
+    }
     if (method === 'GET' && (m = RE_SPRINT.exec(path))) {
       const sn = parseInt(m[1], 10);
       const blocks = listBlocks(sn);
@@ -348,6 +487,7 @@ function setupWatcher() {
     const handle = watch(DATA_DIR, () => {
       // invalida toda la cache al cambiar la dir raíz
       sprintCache.clear();
+      viewerCache.mtime = -1;
     });
     if (handle && handle.unref) handle.unref();
     watchers.push(handle);

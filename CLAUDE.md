@@ -20,44 +20,26 @@ Cada vez que se abre el proyecto:
 
 ## Capacidades disponibles
 
-Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/skills/_catalog/` y se activan vía `/kickoff` o copia manual.
+Capacidades completas (research, imágenes, councils, orquestación, memoria, dashboard, review-app, tests) en `docs/capacidades.md` — cárgalo cuando evalúes qué skill usar o qué test correr. La fuente machine-readable del catálogo de skills es `.claude/skills/_catalog/skills-catalog.json`.
 
-### Texto y research
+## Selección de modelo
 
-- **Research vía Perplexity (OpenRouter)**: `node src/research.js <quick|pro|search|reason|deep> "<pregunta>"`. Default `pro`. Para info actualizada, **siempre** úsalo — no inventes datos.
-- **Cliente OpenRouter unificado** (`src/openrouter_client.js`): acceso a Anthropic, OpenAI, Google, DeepSeek, Qwen, Meta, Perplexity con una sola key. Base de councils y de cualquier flujo multi-modelo. Detalle: `src/openrouter_client.README.md`.
+Qué modelo usar según el tipo de tarea:
 
-### Imágenes
+| Tipo de tarea | Modelo | Por qué |
+|---|---|---|
+| Mecánica/repetitiva (formato, listas, parseo) | haiku | barato y rápido |
+| Construcción normal (código, contenido, research) | sonnet | el default equilibrado |
+| Decisión crítica, arquitectura, audit de riesgo, creatividad fina | opus | caro, solo cuando de verdad importa |
 
-- **gpt-image-2** (Python): `python scripts/openai_images.py generate|edit|batch …`. La skill `image-gen` lo orquesta con identity lock, refs declaradas en el prompt, y batch async.
-- **image-explorer multi-modelo** (`src/image_explorer.js`): compara mismo prompt en gpt-image-2, FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 y arma grilla HTML para elegir ganador. Útil para concept art, branding, exploración de "mano de modelo". Detalle: `src/image_explorer.README.md`.
-- **multimodal-validation** (skill): fuerza Read del PNG después de cualquier `generate_image()` / `edit_image()`. Sin esto no hay PASS.
+El orquestador elige por defecto; tú puedes pedir "usa opus para esto" si lo crees crítico.
 
-### Decisiones complejas
+## /goal — Claude itera solo hasta cumplir una condición
 
-- **council** (skill + `src/council.js`): convoca 3-5 modelos distintos para deliberar. 4 councils predefinidos (`creative-ideation` Tier 1, `strategy-calls` y `mazelab-council` Tier 2, `architecture-decision` Tier 3). Auto-invocable bajo señales implícitas (con confirmación). Slash directo: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
-
-### Orquestación y calidad
-
-- **kickoff**: entrevista adaptativa, autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.
-- **pipeline-v2**: orquesta architect → critic → cold-reader → humano. Cada transición valida hand-off contract. Mantiene memoria del proyecto sincronizada.
-- **cold-reader-gate**: lectura cold con voto binario GO/NO-GO y veto absoluto. Independiente — no se le pasa debate previo ni scores de critic.
-- **agent-template**: genera agente nuevo con score base ~92/100. Pásalo por `confidence-loop` para llegar a 95+.
-- **karpathy-rules**: 4 reglas para escribir código limpio. Auto al editar código.
-- **quality-mindset** (core, siempre activa): disciplina mínima viable — spec → plan → ejecución → cierre validado. Sin Git formal.
-- **confidence-loop**: itera artefacto hasta 95+/100 (5 iteraciones máx). Útil sobre agentes, skills, planes, código no trivial.
-- **superpowers-pr** (catálogo, opcional): 5 reglas duras para Git/PR/code review formal. Vive en `.claude/skills/_catalog/superpowers-pr/`. Activarla solo si el proyecto usa flujo PR formal — kickoff lo decide.
-
-### Memoria, roadmap y voz
-
-- **memory.js** (`src/memory.js`): lectura/escritura de la memoria del proyecto. Helpers: `summarize`, `readProfile`, `writeProfile`, `addDecision`, `addLesson`, `addAgent`, `addSkill`, `touchAgent`, `addSprint`, `getActiveTeam`. Detalle: `memory/README.md`.
-- **roadmap.js** (`src/roadmap.js`): gestión de sprint actual + backlog priorizado. Helpers: `addIdea`, `getCurrentSprint`, `closeSprint`. Slash command `/idea` para captura sin desvío.
-- **voice-mode** (skill + `scripts/voice_tts.js`): TTS de respuestas largas con OpenAI TTS. Comandos `/voz-on`, `/voz-off`, `/voz-leer`. Defaults en `memory/voice-mode-state.json`.
-
-### Observabilidad — dashboard v3
-
-- **Dashboard pixel-art** (Phaser 3) con avatares vivos por agente, drill-down por agente, vista Sprint con hitos cruzados, vista Roadmap macro + historial de sprints. `npm run dashboard` lo levanta en `http://localhost:7777`. **Requiere `npm run dashboard:assets` la primera vez** para bajar el pack CC0 default (`kenney-roguelike`). Modo público read-only con `DASHBOARD_PUBLIC=1`. Detalle: `dashboard/README.md`.
-- **Cómo lo alimentan los agentes**: `node scripts/update_state.js task-start <id> <agent> <role> <title> [files...] [--prompt ...] [--plan-step ...]... [--current-step N] [--phase ...] [--epic ...]` + `task-update <id> '<json-patch>'` + `task-complete <id> [tokens]`. El helper escribe atómico a `dashboard/state.json` y notifica al server. Schema completo de la task en `dashboard/README.md`.
+- **Qué es:** Claude trabaja en loop por sí mismo hasta cumplir una condición verificable (tests pasan, el proyecto compila, los archivos se generaron).
+- **Guardrail OBLIGATORIO:** siempre incluir un tope de turnos, p. ej. "...or stop after 8 turns". Sin tope, un loop puede gastar mucho dinero.
+- **Cuándo usarlo:** condiciones determinísticas y comprobables. NO para metas vagas ("hazlo mejor", "que quede lindo") — esas no tienen criterio de parada claro.
+- **Costo típico:** ~USD 1-4 por sesión.
 
 ## Hand-off contracts
 
@@ -170,23 +152,9 @@ Cada hand-off entre capas pasa por validador de contracts. Si falla, error claro
 - Directo, sin jerga gratuita.
 - Sin emojis salvo que el usuario los pida.
 
-## Referencia rápida — tests del repo
+## Referencia rápida — tests
 
-Cuando algo se rompa, estos tests son el primer chequeo:
-
-| Test | Qué valida |
-|---|---|
-| `npm run smoke` | Sistema completo end-to-end (8 checks, ~90s, gasta API). |
-| `npm run smoke:quick` | Estructura solamente, sin red. |
-| `npm run test:contracts` | Schemas + emit/consume del sistema de hand-offs. |
-| `npm run test:dashboard` | Server HTTP + SSE + history + helper update_state.js + endpoints v3 (32 checks). |
-| `npm run test:dashboard:scene` | Suite completa del frontend Phaser 3: phaser smoke + pack resolver + fetch pack + public mode + seating + event bus + panel render + sprint cross + roadmap render + sprints history. |
-| `npm run test:dashboard:panel` | Solo render del side panel (agente / sprint / roadmap). Más rápido cuando iteras sobre la UI. |
-| `node memory/test.js` | Helpers de memoria del proyecto. |
-| `node pipeline-v2-integration.test.js` | Flujo completo pipeline v2. |
-| `node docs-v3.test.js` | Documentación v3 al día. |
-
-No corras `npm run smoke` en cada commit — gasta credits reales. Para CI continuo, usa los tests específicos.
+Tabla completa de tests + qué valida cada uno en `docs/capacidades.md` (sección "Referencia rápida — tests"). Regla de oro: `npm run smoke` gasta credits reales, no lo corras en cada commit — usa los tests específicos para CI continuo.
 
 ## Feedback al starter Mazelab
 

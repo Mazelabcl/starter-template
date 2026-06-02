@@ -98,15 +98,3 @@ test('OPTIONS /api/state retorna 200 o 204', async () => {
   const r = await fetch(`http://localhost:${serverPort}/api/state`, { method: 'OPTIONS' });
   assert.ok(r.status === 200 || r.status === 204, `status ${r.status}`);
 });
-
-test('GET /api/pack-name funciona en read-only', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/pack-name`);
-  assert.strictEqual(r.status, 200);
-  const j = await r.json();
-  assert.strictEqual(j.pack, 'kenney-roguelike');
-});
-
-test('GET /assets/packs/kenney-roguelike/manifest.json funciona en read-only', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/assets/packs/kenney-roguelike/manifest.json`);
-  assert.strictEqual(r.status, 200);
-});

@@ -4,6 +4,9 @@
 // textContent. NUNCA innerHTML con datos del backend.
 
 const healthEl = document.getElementById('health');
+const appTitleEl = document.getElementById('app-title');
+const mainSprintEl = document.getElementById('main-sprint');
+const mainViewerEl = document.getElementById('main-viewer');
 const sprintListEl = document.getElementById('sprint-list');
 const emptyEl = document.getElementById('empty');
 const blockViewEl = document.getElementById('block-view');
@@ -24,7 +27,11 @@ async function loadHealth() {
   try {
     const j = await fetchJSON('/api/health');
     // textContent only — datos del backend.
-    healthEl.textContent = `${j.sprints_loaded} sprints · data: ${j.data_dir}`;
+    if (j.mode === 'viewer') {
+      healthEl.textContent = `modo viewer · data: ${j.data_dir}`;
+    } else {
+      healthEl.textContent = `${j.sprints_loaded} sprints · data: ${j.data_dir}`;
+    }
   } catch (e) {
     healthEl.textContent = `error: ${e.message}`;
   }
@@ -188,5 +195,164 @@ async function save(sprintId, bloqueNumber, testIndex, status, comment, wrap, bt
   }
 }
 
+// ---- Viewer mode (A1) ------------------------------------------------------
+// Lista cualquier .md del dataDir con TLDR; click abre el .md renderizado.
+// XSS-safe: markdown renderizado con createElement + textContent, nunca innerHTML.
+
+const viewerListEl = document.getElementById('viewer-list');
+const viewerEmptyEl = document.getElementById('viewer-empty');
+const viewerViewEl = document.getElementById('viewer-view');
+const viewerTitleEl = document.getElementById('viewer-title');
+const viewerModelEl = document.getElementById('viewer-model');
+const viewerMdEl = document.getElementById('viewer-md');
+
+async function loadViewerFiles() {
+  try {
+    const files = await fetchJSON('/api/viewer/files');
+    while (viewerListEl.firstChild) viewerListEl.removeChild(viewerListEl.firstChild);
+    if (!files.length) {
+      const li = document.createElement('li');
+      li.textContent = 'no hay .md en el directorio.';
+      li.style.color = '#64748b';
+      viewerListEl.appendChild(li);
+      return;
+    }
+    for (const f of files) {
+      const li = document.createElement('li');
+      li.dataset.name = f.name;
+      const title = document.createElement('div');
+      title.className = 'viewer-item-title';
+      title.textContent = f.title || f.name; // textContent only
+      li.appendChild(title);
+      if (f.tldr) {
+        const tldr = document.createElement('div');
+        tldr.className = 'viewer-item-tldr';
+        tldr.textContent = f.tldr; // textContent only
+        li.appendChild(tldr);
+      }
+      if (f.model) {
+        const model = document.createElement('small');
+        model.className = 'viewer-item-model';
+        model.textContent = `modelo: ${f.model}`;
+        li.appendChild(model);
+      }
+      li.addEventListener('click', () => selectViewerFile(f.name, li));
+      viewerListEl.appendChild(li);
+    }
+  } catch (e) {
+    console.error('loadViewerFiles:', e);
+  }
+}
+
+async function selectViewerFile(name, li) {
+  for (const sib of viewerListEl.children) sib.classList.remove('active');
+  if (li) li.classList.add('active');
+  viewerEmptyEl.hidden = true;
+  viewerViewEl.hidden = false;
+  try {
+    const j = await fetchJSON(`/api/viewer/file/${encodeURIComponent(name)}`);
+    viewerTitleEl.textContent = j.title || name; // textContent only
+    viewerModelEl.textContent = j.model ? `modelo: ${j.model}` : '';
+    renderMarkdownToDOM(viewerMdEl, j.content);
+  } catch (e) {
+    console.error('selectViewerFile:', e);
+    viewerTitleEl.textContent = name;
+    viewerModelEl.textContent = '';
+    while (viewerMdEl.firstChild) viewerMdEl.removeChild(viewerMdEl.firstChild);
+    const err = document.createElement('p');
+    err.textContent = `error: ${e.message}`;
+    viewerMdEl.appendChild(err);
+  }
+}
+
+// Mini-parser markdown XSS-safe (createElement + textContent). Soporta
+// # H1-H3, bullets, **bold**, code fences (como <pre>), párrafos.
+function renderMarkdownToDOM(parent, markdown) {
+  while (parent.firstChild) parent.removeChild(parent.firstChild);
+  const raw = typeof markdown === 'string' ? markdown : '';
+  // Stripping de front-matter para no mostrarlo crudo.
+  const noFm = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+  const lines = noFm.split(/\r?\n/);
+  let currentList = null;
+  let inFence = false;
+  let fenceBuf = [];
+  for (const lineRaw of lines) {
+    const line = lineRaw.replace(/\s+$/, '');
+    if (/^```/.test(line.trim())) {
+      if (inFence) {
+        const pre = document.createElement('pre');
+        pre.textContent = fenceBuf.join('\n');
+        parent.appendChild(pre);
+        fenceBuf = [];
+        inFence = false;
+      } else {
+        currentList = null;
+        inFence = true;
+      }
+      continue;
+    }
+    if (inFence) { fenceBuf.push(lineRaw); continue; }
+    if (!line.trim()) { currentList = null; continue; }
+    const hMatch = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (hMatch) {
+      currentList = null;
+      const h = document.createElement('h' + hMatch[1].length);
+      appendInlineWithBold(h, hMatch[2]);
+      parent.appendChild(h);
+      continue;
+    }
+    const bMatch = /^[-*]\s+(.*)$/.exec(line);
+    if (bMatch) {
+      if (!currentList) { currentList = document.createElement('ul'); parent.appendChild(currentList); }
+      const liEl = document.createElement('li');
+      appendInlineWithBold(liEl, bMatch[1]);
+      currentList.appendChild(liEl);
+      continue;
+    }
+    currentList = null;
+    const p = document.createElement('p');
+    appendInlineWithBold(p, line);
+    parent.appendChild(p);
+  }
+  if (inFence && fenceBuf.length) {
+    const pre = document.createElement('pre');
+    pre.textContent = fenceBuf.join('\n');
+    parent.appendChild(pre);
+  }
+}
+
+function appendInlineWithBold(el, text) {
+  if (!text) { el.appendChild(document.createTextNode('')); return; }
+  const re = /\*\*([^*]+)\*\*/g;
+  let lastIdx = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIdx) el.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+    const strong = document.createElement('strong');
+    strong.textContent = m[1];
+    el.appendChild(strong);
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) el.appendChild(document.createTextNode(text.slice(lastIdx)));
+}
+
+// ---- Boot (mode-aware) -----------------------------------------------------
+
 await loadHealth();
-await loadSprints();
+try {
+  const { mode } = await fetchJSON('/api/mode');
+  if (mode === 'viewer') {
+    appTitleEl.textContent = 'Output Viewer';
+    mainViewerEl.hidden = false;
+    await loadViewerFiles();
+  } else {
+    appTitleEl.textContent = 'Sprint Reviewer';
+    mainSprintEl.hidden = false;
+    await loadSprints();
+  }
+} catch (e) {
+  // Fallback: modo sprint.
+  console.error('boot mode:', e);
+  mainSprintEl.hidden = false;
+  await loadSprints();
+}

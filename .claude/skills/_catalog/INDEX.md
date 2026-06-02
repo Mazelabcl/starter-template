@@ -23,9 +23,13 @@ Skills core (siempre activas) NO viven aquí — viven en `.claude/skills/<skill
 | `remotion` | Video programático con React (data-driven, server-side render) | "video programático", "remotion", "lyric video" | content/marketing con videos personalizados | sin costo |
 | `web-artifacts-builder` | HTML+JS+CSS autocontenido (demos, prototipos one-off) | "artifact web", "demo en html", "calculadora interactiva" | prototipos, demos, herramientas one-off | sin costo |
 | `dual-auditor-protocol` | Audita un deliverable con DOS modelos en paralelo (Claude + GPT) + synthesizer que cruza findings | "audit con doble auditor", "audit con dos modelos", "/dual-audit", "audit de código de producción" | build/business-with-software con código de producción, audits de alto riesgo | ~2.5× costo de un audit single (3 calls) |
-| `review-app` | App HTTP local (Node nativo, cero deps) para revisar PRs/bloques de un sprint marcando OK/Feedback. Cross-sprint, cross-project, hot-reload del parser | "review-app", "revisar PRs en HTTP", "marcar OK/Feedback", "/review-app" | build/business-with-software con audits de código o entregables que necesitan review humano repetido | sin costo |
+| `review-app` | App HTTP local (Node nativo, cero deps) para revisar PRs/bloques de un sprint marcando OK/Feedback. Modo viewer: lee cualquier `.md` de un directorio con TLDR. Cross-sprint, cross-project, hot-reload | "review-app", "revisar PRs en HTTP", "marcar OK/Feedback", "/review-app", "ver output de agentes" | build/business-with-software con audits de código o entregables que necesitan review humano repetido | sin costo |
+| `client-language` | Fuerza lenguaje humano sin jerga técnica cuando el deliverable es para cliente/audiencia final. Lista negra de términos + reemplazos | "lenguaje de cliente", "sin jerga técnica", "para el cliente", "audiencia no técnica", "/client-language" | business/content/marketing con audiencia final no técnica | sin costo |
+| `non-technical-cold-reader` | Gate binario GO/NO-GO que veta un deliverable de cliente si contiene jerga técnica. Complemento de `client-language` (esa reescribe, esta veta) | "veta jerga técnica", "lo entendería un no técnico", "cold reader no técnico", "/non-technical-cold-reader" | business/content/marketing antes de mostrar al cliente final | sin costo |
 
-Total: 16 skills opcionales en `_catalog/`.
+Total: 18 skills opcionales en `_catalog/`.
+
+> **Fuente machine-readable:** `_catalog/skills-catalog.json` es la fuente única para el kickoff (lista core + catalog con `triggers`, `when_to_use`, `output`, `status`, `cost_hint`). Este INDEX.md es la vista humana. El JSON se regenera con `node scripts/build_skills_catalog.js`. Si agregas/quitas una skill, regenera el JSON y corre `npm run test:skills-catalog`.
 
 ## MCPs disponibles (NO son skills — son MCP servers)
 

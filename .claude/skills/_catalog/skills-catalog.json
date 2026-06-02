@@ -1,0 +1,454 @@
+[
+  {
+    "name": "agent-template",
+    "location": "core",
+    "triggers": [
+      "crea un agente",
+      "nuevo agente para X",
+      "agentifica X",
+      "/agent-template"
+    ],
+    "when_to_use": "Antes de escribir un agent.md a mano: da scaffold con las 6 secciones y score base ~92/100.",
+    "output": "Archivo de agente en ~/.claude/agents/<slug>.md",
+    "status": "v1.0",
+    "cost_hint": "sin costo de API"
+  },
+  {
+    "name": "cold-reader-gate",
+    "location": "core",
+    "triggers": [
+      "evalúa cold",
+      "cold reader",
+      "/cold-reader-gate"
+    ],
+    "when_to_use": "Al cerrar un artefacto creativo antes de mostrarlo al humano: voto binario GO/NO-GO con veto absoluto.",
+    "output": "Veredicto GO/NO-GO + justificación",
+    "status": "v1.0",
+    "cost_hint": "~USD 0.02-0.10 (1 modelo)"
+  },
+  {
+    "name": "confidence-loop",
+    "location": "core",
+    "triggers": [
+      "revisa con confidence loop",
+      "mejora hasta 95",
+      "/confidence-loop",
+      "loop de confianza",
+      "iterar calidad"
+    ],
+    "when_to_use": "Para subir la calidad de un artefacto (agente, skill, código, plan) hasta 95+/100, máx 5 iteraciones.",
+    "output": "Artefacto mejorado + score final",
+    "status": "v1.0",
+    "cost_hint": "variable según iteraciones"
+  },
+  {
+    "name": "council",
+    "location": "core",
+    "triggers": [
+      "convoca un council",
+      "/council",
+      "consulta al council",
+      "qué piensa el council de X"
+    ],
+    "when_to_use": "Decisión compleja con tradeoffs reales, naming/ideación, debate de arquitectura. NO para decisiones triviales.",
+    "output": "Deliberación multi-modelo + síntesis en councils/results/",
+    "status": "v1.0",
+    "cost_hint": "Tier 1 ~USD 0.02-0.10; Tier 2/3 más caro, confirmar"
+  },
+  {
+    "name": "image-explorer",
+    "location": "core",
+    "triggers": [
+      "mano",
+      "/image-explorer",
+      "explora este prompt en varios modelos",
+      "compara distintas manos",
+      "qué modelo da mejor X"
+    ],
+    "when_to_use": "Cuando importa la \"mano\" del modelo de imagen y aún no sabes cuál usar (concept art, branding).",
+    "output": "Grilla HTML comparando 3-4 modelos",
+    "status": "v1.0",
+    "cost_hint": "~USD 0.18-0.20 por 4 modelos"
+  },
+  {
+    "name": "image-gen",
+    "location": "core",
+    "triggers": [
+      "genera imagen",
+      "crea concept art",
+      "render de",
+      "/image-gen"
+    ],
+    "when_to_use": "Generar imágenes con gpt-image-2 cuando ya sabes el modelo. Identity lock + refs en el prompt.",
+    "output": "PNG(s) en content/output/<scene>/",
+    "status": "v1.0",
+    "cost_hint": "~USD 0.04-0.40 por imagen según calidad"
+  },
+  {
+    "name": "karpathy-rules",
+    "location": "core",
+    "triggers": [],
+    "when_to_use": "Auto al escribir/editar código: 4 reglas para mantenerlo limpio y surgical.",
+    "output": "Disciplina de código (no genera archivos)",
+    "status": "v1.0",
+    "cost_hint": "sin costo de API"
+  },
+  {
+    "name": "kickoff",
+    "location": "core",
+    "triggers": [
+      "/kickoff",
+      "vamos a empezar",
+      "nuevo proyecto",
+      "qué construimos hoy"
+    ],
+    "when_to_use": "Al iniciar un proyecto o repo recién clonado, antes de construir nada con canon.",
+    "output": "project-profile.json + active-team.json + principles.md + sprint inicial",
+    "status": "v1.0",
+    "cost_hint": "variable (entrevista)"
+  },
+  {
+    "name": "multimodal-validation",
+    "location": "core",
+    "triggers": [],
+    "when_to_use": "Auto después de generar/editar imágenes: fuerza Read multimodal del PNG. Sin esto no hay PASS.",
+    "output": "Veredicto visual PASS/FAIL",
+    "status": "v1.0",
+    "cost_hint": "sin costo extra de API"
+  },
+  {
+    "name": "pipeline-v2",
+    "location": "core",
+    "triggers": [
+      "construye X",
+      "vamos a crear Y",
+      "/pipeline-v2"
+    ],
+    "when_to_use": "Creación no trivial de un deliverable: architect → critic → cold-reader → humano con contracts validados.",
+    "output": "Deliverable validado + memoria sincronizada",
+    "status": "v1.0",
+    "cost_hint": "variable según capas"
+  },
+  {
+    "name": "quality-mindset",
+    "location": "core",
+    "triggers": [
+      "vamos a hacer X",
+      "ayúdame con Y",
+      "/quality-mindset"
+    ],
+    "when_to_use": "Siempre activa para cualquier tarea no trivial: spec → plan → ejecución → cierre validado.",
+    "output": "Disciplina de proceso (no genera archivos)",
+    "status": "v1.0",
+    "cost_hint": "sin costo de API"
+  },
+  {
+    "name": "voice-mode",
+    "location": "core",
+    "triggers": [
+      "/voz-on",
+      "/voz-off",
+      "/voz-leer",
+      "lee esta respuesta",
+      "modo voz"
+    ],
+    "when_to_use": "Cuando una respuesta larga se procesa mejor escuchándola. NO para respuestas con código/JSON/tablas.",
+    "output": "Audio TTS de la respuesta",
+    "status": "v1.0",
+    "cost_hint": "~USD 0.015 por 1k chars (OpenAI TTS)"
+  },
+  {
+    "name": "brand-guidelines",
+    "location": "catalog",
+    "triggers": [
+      "/brand-guidelines",
+      "guía de marca",
+      "identidad visual",
+      "paleta",
+      "tipografía",
+      "tone of voice",
+      "tokens de color"
+    ],
+    "when_to_use": "Content recurrente, business con marca, o build con UI: mantiene content/brand.md (color, tipografía, voz).",
+    "output": "content/brand.md",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "canvas-design",
+    "location": "catalog",
+    "triggers": [
+      "/canvas-design",
+      "diseño canvas",
+      "svg generativo",
+      "infografía programática",
+      "dashboard visual custom",
+      "p5js",
+      "d3"
+    ],
+    "when_to_use": "Visualización custom programática: SVG generativo, infografías, gráficos con D3/p5/three.",
+    "output": "SVG/canvas + código",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "client-language",
+    "location": "catalog",
+    "triggers": [
+      "/client-language",
+      "lenguaje de cliente",
+      "lenguaje no técnico",
+      "sin jerga técnica",
+      "para el cliente",
+      "que lo entienda mi mamá",
+      "audiencia no técnica"
+    ],
+    "when_to_use": "Cuando un deliverable es para CLIENTE/audiencia final (business, content, marketing), no para devs: prohíbe jerga técnica y fuerza lenguaje humano.",
+    "output": "Texto reescrito sin jerga + glosario aplicado",
+    "status": "v1.0",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "dual-auditor-protocol",
+    "location": "catalog",
+    "triggers": [
+      "audit con doble auditor",
+      "audit con dos modelos",
+      "/dual-audit",
+      "audit de código de producción",
+      "/dual-auditor"
+    ],
+    "when_to_use": "Audit de código de producción de alto riesgo: dos auditores adversariales (Claude + GPT) + synthesizer.",
+    "output": "findings A/B + synthesis-output",
+    "status": "v1.0",
+    "cost_hint": "~2.5x un audit single (3 calls)"
+  },
+  {
+    "name": "frontend-design",
+    "location": "catalog",
+    "triggers": [
+      "/frontend-design",
+      "diseña componente",
+      "diseña pantalla web",
+      "diseña UI",
+      "componente accesible",
+      "landing page"
+    ],
+    "when_to_use": "Build con superficie UI (web, dashboard, landing): componentes UI accesibles y semánticos.",
+    "output": "Componentes UI (HTML/CSS/JS o framework)",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "marketing",
+    "location": "catalog",
+    "triggers": [
+      "/marketing",
+      "copy publicitario",
+      "post redes",
+      "email marketing",
+      "anuncio",
+      "lanzamiento",
+      "campaña"
+    ],
+    "when_to_use": "Lado comercial (business/content): copy publicitario, posts, anuncios, email (AIDA, PAS, BAB).",
+    "output": "Copy/contenido de marketing",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "non-technical-cold-reader",
+    "location": "catalog",
+    "triggers": [
+      "/non-technical-cold-reader",
+      "veta jerga técnica",
+      "lo entendería un no técnico",
+      "gate de lenguaje cliente",
+      "revisa que no tenga jerga",
+      "cold reader no técnico"
+    ],
+    "when_to_use": "Gate final sobre un deliverable de cliente: veta (NO-GO) si contiene jerga técnica. Voto binario de legibilidad para no-técnicos.",
+    "output": "Veredicto GO/NO-GO + lista de términos prohibidos detectados",
+    "status": "v1.0",
+    "cost_hint": "sin costo (o ~USD 0.02 si usa modelo)"
+  },
+  {
+    "name": "pdf-skill",
+    "location": "catalog",
+    "triggers": [
+      "/pdf-skill",
+      "generar pdf",
+      "parsear pdf",
+      "extraer texto pdf",
+      "merge pdf",
+      "rellenar formulario pdf",
+      "pdf to text"
+    ],
+    "when_to_use": "Build/business que produce o recibe PDFs: generación, parsing, extracción, merge/split.",
+    "output": "PDFs o datos extraídos",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "playwright",
+    "location": "catalog",
+    "triggers": [
+      "/playwright",
+      "test e2e",
+      "test ui",
+      "playwright test",
+      "automatizar test web",
+      "regresión visual"
+    ],
+    "when_to_use": "Build con webapp y flujos críticos: tests E2E con selectores resilientes y traces.",
+    "output": "Tests Playwright",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "remotion",
+    "location": "catalog",
+    "triggers": [
+      "/remotion",
+      "video programático",
+      "remotion",
+      "video desde react",
+      "video con datos",
+      "lyric video",
+      "explainer animado"
+    ],
+    "when_to_use": "Content/marketing con video data-driven: video programático con React, render server-side.",
+    "output": "Video (mp4) renderizado",
+    "status": "stub",
+    "cost_hint": "sin costo (compute local)"
+  },
+  {
+    "name": "review-app",
+    "location": "catalog",
+    "triggers": [
+      "review-app",
+      "revisar PRs en HTTP",
+      "marcar OK/Feedback",
+      "/review-app",
+      "abrir review-app"
+    ],
+    "when_to_use": "Revisar PRs/bloques de un sprint marcando OK/Feedback, o leer output .md de agentes (modo viewer). Superficie HTML preferida del usuario.",
+    "output": "App HTTP local en localhost",
+    "status": "v1.0",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "seo",
+    "location": "catalog",
+    "triggers": [
+      "/seo",
+      "keyword research",
+      "optimizar página seo",
+      "meta título",
+      "meta descripción",
+      "schema markup",
+      "audit seo",
+      "contenido orgánico"
+    ],
+    "when_to_use": "Build/business/content con sitio web público: SEO técnico + on-page (meta, schema, headings) proyecto-local.",
+    "output": "Meta tags, schema, recomendaciones SEO",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "skill-creator",
+    "location": "catalog",
+    "triggers": [
+      "/skill-creator",
+      "crea una skill",
+      "necesito una skill nueva",
+      "skill custom para X",
+      "agrega skill al catálogo"
+    ],
+    "when_to_use": "Cuando aparece disciplina recurrente que conviene capturar como skill del proyecto.",
+    "output": "SKILL.md + CHANGELOG.md",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "superpowers-full",
+    "location": "catalog",
+    "triggers": [
+      "/superpowers-full",
+      "spec driven",
+      "code review profundo",
+      "debug riguroso",
+      "refactor seguro",
+      "tdd estricto"
+    ],
+    "when_to_use": "Build complejo (>1000 LOC, equipo exigente): set completo spec-driven + TDD estricto + debug riguroso.",
+    "output": "Disciplinas + artefactos según uso",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "superpowers-pr",
+    "location": "catalog",
+    "triggers": [
+      "/superpowers-pr",
+      "antes de PR",
+      "code review formal",
+      "merge a main",
+      "abrir pull request",
+      "review de PR"
+    ],
+    "when_to_use": "Build con flujo PR formal (equipo, GitHub flow, CI/CD): 5 reglas duras de Git/PR/code review.",
+    "output": "Disciplina de Git/PR (no genera archivos)",
+    "status": "v1.0",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "web-artifacts-builder",
+    "location": "catalog",
+    "triggers": [
+      "/web-artifacts-builder",
+      "artifact web",
+      "demo en html",
+      "calculadora interactiva",
+      "prototipo en una página",
+      "herramienta one-off"
+    ],
+    "when_to_use": "Prototipos, demos, herramientas one-off: HTML+JS+CSS autocontenido en un archivo. Preguntar standalone (inline) vs server (fetch).",
+    "output": "Archivo HTML autocontenido",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "webapp-testing",
+    "location": "catalog",
+    "triggers": [
+      "/webapp-testing",
+      "qué test poner",
+      "estrategia de testing",
+      "pirámide de tests",
+      "test coverage",
+      "decidir test e2e o unit"
+    ],
+    "when_to_use": "Build sin estrategia de testing decidida: pirámide saludable unit/integration/E2E.",
+    "output": "Estrategia + tests",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
+    "name": "xlsx",
+    "location": "catalog",
+    "triggers": [
+      "/xlsx",
+      "generar excel",
+      "leer xlsx",
+      "parsear planilla",
+      "exportar a excel",
+      "reporte excel",
+      "xlsx to json"
+    ],
+    "when_to_use": "Business donde el cliente vive en planillas: lectura/escritura/generación de Excel.",
+    "output": "Archivos .xlsx o datos parseados",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  }
+]

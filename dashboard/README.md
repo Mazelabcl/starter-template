@@ -1,43 +1,55 @@
-# Dashboard v3
+# Dashboard v3 — HTML simple de estado
 
-Pixel-art office scene en Phaser 3. Pixel-art ↔ `state.json` en vivo vía SSE.
+Dashboard HTML plano (vanilla JS, cero deps de frontend) que muestra el estado en vivo de los agentes leyendo `state.json` vía `/api/state` + SSE.
 
-**Estado:** v3.0 completo — fases 1-7 implementadas. Avatares dinámicos con label flotante, side panel rico con drill-down por agente, vista de Sprint con hitos cruzados contra tasks, vista Roadmap macro con render markdown XSS-safe + historial de sprints colapsable.
+**Estado:** v4 — degradado desde el pixel-art Phaser (decisión D8). El frontend Phaser nunca se usó en la práctica; la review-app HTML es la superficie preferida del usuario. El backend (server.js, endpoints, SSE, chat) se conservó intacto. El frontend ahora es una tabla de estado + pestañas Sprint / Roadmap / Chat, sin dependencias ni assets binarios.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dashboard:assets    # primera vez: baja pack CC0 default (Kenney)
 npm run dashboard
 # abre http://localhost:7777
 ```
 
-`npm run dashboard:assets` solo es necesario la primera vez (o cuando borras `assets/vendor/`). El default es `kenney-roguelike`.
+No necesita bajar assets ni packs — es HTML estático servido por el server Node nativo.
+
+## Qué muestra
+
+- **Tareas** (vista por defecto): tabla en vivo con columnas Agente, Estado, Modelo, Tokens, Summary. Lee `/api/state` y se refresca por SSE cuando `state.json` cambia. Barra de métricas (tokens, done, failed, councils) en el header.
+- **Sprint**: objetivo del sprint vivo (`roadmap/current-sprint.json`), tareas completadas (filtradas por `sprint_number` cuando las tasks lo declaran) y métricas.
+- **Roadmap**: render del `roadmap/roadmap.md` (mini-parser markdown XSS-safe) + historial colapsable de sprints cerrados (`memory/sprint-log.md`).
+- **Chat**: feed cronológico de comunicación orquestador ↔ agentes.
+
+## Archivos del frontend
+
+| Archivo | Qué hace |
+|---|---|
+| `public/index.html` | Estructura HTML plana: topbar, pestañas, tabla de tareas, contenedores de vistas. |
+| `public/app.js` | Vanilla JS: fetch `/api/state`, render tabla + métricas, suscripción SSE, render de las pestañas Sprint/Roadmap/Chat. Mini-parser markdown XSS-safe portado del panel viejo. |
+| `public/style.css` | CSS plano limpio (modo oscuro legible). NO pixel-art. |
+
+**Invariante XSS (ADR-02):** todo render de datos (`state`, `sprint`, `roadmap`, `chat`) usa `textContent` / `createElement`. Nunca `innerHTML` con datos.
 
 ## Endpoints
 
 | Endpoint | Qué hace |
 |---|---|
-| `GET /` | Sirve el frontend estático (Phaser 3 + ESM). |
+| `GET /` | Sirve el frontend HTML plano estático. |
 | `GET /api/state` | Snapshot completo: tasks, eventos, métricas, memoria derivada. |
-| `GET /api/events` | Server-Sent Events; emite cuando `state.json` cambia. |
+| `GET /api/events` | Server-Sent Events; emite `state` cuando `state.json` cambia + `chat-msg`. |
 | `POST /api/state` | Merge atómico (validación básica). Bloqueado en modo público. |
 | `GET /api/history` | Últimos 100 eventos persistidos del session log. |
-| `GET /api/sprint` | Lee `roadmap/current-sprint.json` y lo devuelve (200 con `{}` si no existe). |
-| `GET /api/roadmap` | Lee `roadmap/roadmap.md` y devuelve `{ markdown: "<contenido>" }`. 200 con `{ markdown: "" }` si no existe. |
-| `GET /api/sprints/history` | Parsea `memory/sprint-log.md` y devuelve array de sprints cerrados ordenado descendente por número. 200 con `[]` si no existe. |
-| `POST /api/chat` | Sprint v3.1 — chat público orquestador ↔ agentes. Body: `{ from, to, message, timestamp? }`. Persiste a `chat-log.jsonl` + emite SSE `chat-msg`. |
-| `GET /api/chat/history` | Devuelve los últimos N mensajes del chat (default 200). |
-| `GET /api/pack-name` | Nombre del pack activo. |
-| `GET /assets/<rel>` | Binarios CC0 con whitelist. |
-| `GET /files/<rel>` | Archivos del repo bajo subcarpetas permitidas. |
+| `GET /api/sprint` | Lee `roadmap/current-sprint.json` (200 con `{}` si no existe). |
+| `GET /api/roadmap` | Lee `roadmap/roadmap.md` y devuelve `{ markdown }` (200 con `""` si no existe). |
+| `GET /api/sprints/history` | Parsea `memory/sprint-log.md` → array de sprints cerrados (200 con `[]` si no existe). |
+| `POST /api/chat` | Chat público. Body `{ from, to, message, timestamp? }`. Persiste a `chat-log.jsonl` + emite SSE `chat-msg`. |
+| `GET /api/chat/history` | Últimos N mensajes del chat (default 200). |
+| `GET /files/<rel>` | Archivos del repo bajo subcarpetas permitidas (whitelist + anti-traversal). |
 
-## Chat público (Sprint v3.1)
+## Chat público
 
-Pestaña **Chat** en el panel muestra un feed cronológico de comunicación entre el orquestador y los agentes. Cada mensaje incluye `from`, `to`, body y timestamp, con un avatar pixel-art mínimo (inicial del `from`).
-
-**Cómo los agentes reportan vía chat:**
+Pestaña **Chat**: feed cronológico de comunicación entre orquestador y agentes.
 
 ```bash
 node scripts/update_state.js say <from> <to> <message>
@@ -45,141 +57,33 @@ node scripts/update_state.js say <from> <to> <message>
 
 Ejemplos:
 ```bash
-# Architect reporta milestone al orquestador
 node scripts/update_state.js say architect orquestador "research done, escribiendo proposal"
-
-# Critic le habla al architect
-node scripts/update_state.js say critic architect "missing section about edge cases"
-
-# Orquestador habla al humano
 node scripts/update_state.js say orquestador aldot "todos los tests verdes, listo para review"
 ```
 
-**Política:**
-
-- El helper escribe SIEMPRE al `chat-log.jsonl` local (incluso si el dashboard no está corriendo).
-- Si el dashboard SÍ está corriendo, además POSTea a `/api/chat` para que se emita por SSE y aparezca en vivo en la pestaña Chat.
-- Mensajes limitados a 4000 chars; control chars stripped; `from`/`to` máx 80 chars.
-- TODO render del body del mensaje usa `textContent` (ADR-02, XSS-safe).
-
-Los briefs canónicos a sub-agentes en pipeline-v2 / kickoff incluyen instrucción: "cuando termines un milestone llama `node scripts/update_state.js say <tu-nombre> orquestador 'milestone X done'`. El owner verá tu avance en el dashboard."
+- El helper escribe SIEMPRE al `chat-log.jsonl` local (incluso sin dashboard corriendo).
+- Si el dashboard corre, además POSTea a `/api/chat` para SSE en vivo.
+- Mensajes máx 4000 chars; control chars stripped; `from`/`to` máx 80 chars.
+- Body siempre por `textContent` (XSS-safe).
 
 ## Schema extendido del task
 
-Aditivos retro-compatibles. Tasks sin estos campos siguen funcionando — el server inyecta defaults seguros.
+Aditivos retro-compatibles. Tasks sin estos campos siguen funcionando — el server inyecta defaults seguros. Campos: `summary`, `prompt_brief`, `plan_steps[]`, `current_step`, `phase`, `epic`, `sprint_number`, `model`. La tabla de tareas muestra `agent`, `status`, `model`, `tokens_estimated`, `summary` (con fallback a `title`/`prompt_brief`).
 
-### v2.1 (fase 6 expandida) — drill-down por agente
-
-| Campo | Tipo | Default | Uso |
-|---|---|---|---|
-| `prompt_brief` | string \| null | `null` | Brief en lenguaje humano del prompt completo. Se muestra como BRIEF en el side panel. Si está ausente, el panel cae a `summary` y luego a `title`. |
-| `plan_steps` | string[] | `[]` | Pasos planificados que el agente declara seguir. Se renderiza como lista numerada en la sección PLAN del panel. |
-| `current_step` | integer | `0` | Índice 0-based del paso actual. Marca con ▶ el paso vivo; ✓ los anteriores; ○ los siguientes. |
-
-### v2.2 (fase 7) — agrupación organizativa
-
-| Campo | Tipo | Default | Uso |
-|---|---|---|---|
-| `phase` | string \| null | `null` | Fase del proyecto en la que vive la task (ej. `"design"`, `"build"`, `"validate"`). Se muestra en la sección CONTEXTO ORGANIZATIVO del panel agente, y agrupa las tareas completadas en la vista Sprint cuando alguna las declara. |
-| `epic` | string \| null | `null` | Épica que agrupa varias tasks bajo un objetivo mayor (ej. `"dashboard-v3"`). Acompaña a `phase` en el panel agente y aparece como sufijo `[epic]` en la vista Sprint. |
-
-### Declarar plan + brief + phase/epic al iniciar la task
-
-CLI flags (sintaxis natural):
+Declarar al iniciar:
 ```bash
 node scripts/update_state.js task-start demo-1 ArchitectAgent "Arquitecto" "Sistema de auth" auth.js \
-  --prompt "Diseñar el sistema de auth con OAuth2" \
-  --plan-step "Investigar opciones" \
-  --plan-step "Elegir librería" \
-  --plan-step "Implementar flujo" \
-  --plan-step "Tests" \
-  --current-step 0 \
-  --phase design \
-  --epic dashboard-v3
+  --prompt "Diseñar el sistema de auth con OAuth2" --plan-step "Investigar" --current-step 0 --phase design
 ```
 
-JSON patch en mitad del trabajo (avanza el paso actual sin reiniciar):
+Patch en mitad del trabajo:
 ```bash
-node scripts/update_state.js task-update demo-1 '{"current_step":1}'
+node scripts/update_state.js task-update demo-1 '{"current_step":1,"phase":"build"}'
 ```
-
-Patch combinado (cambia plan + brief + phase/epic):
-```bash
-node scripts/update_state.js task-update demo-1 \
-  '{"prompt_brief":"Diseñar auth OAuth2","plan_steps":["Investigar","Elegir","Implementar","Tests"],"current_step":2,"phase":"build","epic":"auth-system"}'
-```
-
-Para limpiar phase o epic, pasa `null`:
-```bash
-node scripts/update_state.js task-update demo-1 '{"phase":null,"epic":null}'
-```
-
-## Side panel
-
-Tres modos accesibles desde la barra de modo en el header del panel:
-
-- **Agente** — click en cualquier avatar abre el panel acá: brief, plan, task actual (id/gate/origin/tokens), contexto organizativo (fase/épica) cuando se declaran, entregables, eventos recientes.
-- **Sprint** — botón `Sprint` en la topbar (esquina superior derecha): objetivo, hitos planificados cruzados con tasks completadas, tareas done (agrupadas por phase cuando se usa), entregables agrupados del sprint, métricas.
-- **Roadmap** — botón `Roadmap` en la topbar: render del `roadmap/roadmap.md` como texto pixel-art monoespaciado + historial colapsable de sprints cerrados leído de `memory/sprint-log.md`.
-
-Cierre del panel: tecla **ESC**, click fuera del card, o botón **×**.
-
-### Cruce de hitos con tasks
-
-El frontend acepta varios shapes para los milestones del sprint:
-
-1. `sprint.milestones[]` — array de `{ title, task_id?, status? }`.
-2. `sprint.hitos[]` — alias en español, mismo shape.
-3. **Fallback (shape real actual):** si no hay milestones formales, se usan `sprint.tasks[]` como hitos implícitos. Cada `task.title` se vuelve un milestone con `task_id = task.id`.
-
-Match contra `state.active_tasks[]`:
-- Si `milestone.task_id` matchea `task.id` → status derivado del task (`completed` → done, `running` → in_progress, otro → planned).
-- Si no, se respeta `milestone.status` declarado explícito.
-- Si no, aprox-match por `title` contra `task.summary || task.title || task.id` (lowercase, igualdad o inclusión).
-- Si nada matchea → `planned`.
-
-### Render del roadmap.md
-
-Mini-parser markdown XSS-safe en `dashboard/public/ui/panel.js` (función `renderMarkdownToDOM`). Soporta:
-
-- `# H1`, `## H2`, `### H3` → `<h1/h2/h3>` con `textContent`
-- `- bullet` o `* bullet` → `<ul><li>` (bullets consecutivos se agrupan)
-- `**bold**` → `<strong>` intercalado con texto plano
-- Comentarios HTML (`<!-- ... -->`) → ignorados (son marcadores internos de `src/roadmap.js`, no contenido)
-- Líneas en blanco → break visual
-- Cualquier otra línea → `<p>` con `textContent`
-
-**Invariante ADR-02:** ningún render usa `innerHTML` con datos del state. Cubierto por test `dashboard-roadmap-render.test.js` que hace grep contra `\.innerHTML\s*=` en `panel.js`.
-
-### Parser de `memory/sprint-log.md`
-
-`GET /api/sprints/history` parsea sprints cerrados con el siguiente shape esperado:
-
-```markdown
-## Sprint 1 — Fundamentos del pipeline
-
-**Fechas**
-- inicio: 2026-05-01
-- fin: 2026-05-08
-
-**Entregables**
-- contracts/
-- memory/
-
-**Lessons**
-- schemas compartidos evitan reescribir validación
-```
-
-El parser es defensivo:
-- Cada bloque empieza con `## Sprint <N>` (cualquier cosa después del N es objetivo opcional).
-- Sub-bloques aceptados: `Objetivo`/`Objective`, `Fechas`/`Dates`, `Entregables`/`Deliverables`, `Lessons`/`Lecciones`.
-- Sub-headers `**Texto**` o `### Texto` ambos válidos.
-- Bullets con `-` o `*`.
-- Si el archivo no existe → retorna `[]` con 200.
 
 ## Modo público (read-only)
 
-Activado con `DASHBOARD_PUBLIC=1`. Whitelist de métodos `GET`, `HEAD`, `OPTIONS`. Cualquier otro método responde 403 con `{"error":"read-only mode"}` antes de entrar a los handlers.
+Activado con `DASHBOARD_PUBLIC=1`. Whitelist de métodos `GET`, `HEAD`, `OPTIONS`. Cualquier otro método responde 403.
 
 ```bash
 # POSIX
@@ -189,23 +93,10 @@ DASHBOARD_PUBLIC=1 node dashboard/server.js
 $env:DASHBOARD_PUBLIC = '1'; node dashboard/server.js
 ```
 
-## Pack customization
+## Rollback al pixel-art Phaser
 
-Por defecto el dashboard usa el pack `kenney-roguelike` (CC0, descargado por `npm run dashboard:assets`).
-
-Para usar un pack propio:
-
-1. Crear `assets/vendor/<mi-pack>/` con la estructura del manifest declarado en `contracts/schemas/assets-pack.schema.json`.
-2. Arrancar con la env var: `DASHBOARD_PACK=mi-pack npm run dashboard`.
-
-El resolver intenta primero `/assets/vendor/<pack>/manifest.json` y cae a `/assets/packs/<pack>/manifest.json` si no encuentra binarios. El nombre del pack se sanitiza contra la regex `^[a-z0-9][a-z0-9-]*$` antes de construir el path.
-
-## Migración desde v2 (kanban)
-
-El dashboard v2 quedó en el tag git `dashboard-v2-final`. Para recuperar:
+El frontend Phaser pixel-art quedó en el tag git `v3.1-final`. Para recuperarlo:
 
 ```bash
-git checkout dashboard-v2-final -- dashboard/public/
+git checkout v3.1-final -- dashboard/public/
 ```
-
-Esto reescribe `dashboard/public/` con la versión v2. Para volver a v3 sin pull: `git checkout HEAD -- dashboard/public/`.

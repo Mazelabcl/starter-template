@@ -5,9 +5,7 @@
 //   GET  /api/events      → Server-Sent Events: emite cuando state.json cambia (fs.watch)
 //   POST /api/state       → merge atómico contra state.json (validación básica)
 //   GET  /api/history     → últimos 100 eventos persistidos
-//   GET  /api/pack-name   → nombre del pack activo (env DASHBOARD_PACK || 'kenney-roguelike')
-//   GET  /assets/<rel>    → sirve binarios CC0 desde assets/packs/ y assets/vendor/ con whitelist
-//   GET  /                → archivos estáticos en dashboard/public/
+//   GET  /                → archivos estáticos en dashboard/public/ (HTML plano)
 //
 // Modo público: DASHBOARD_PUBLIC=1 activa whitelist de métodos (GET/HEAD/OPTIONS).
 // Cualquier otro método → 403 read-only. Aplica ANTES de los handlers.
@@ -451,76 +449,12 @@ function serveRepoFile(req, res, encodedRel) {
   res.end(data);
 }
 
-// ---------- /assets/<rel> (binarios del pack system) ----------
-// Sirve archivos desde assets/packs/<pack-name>/ (declarativo, commiteado) y
-// assets/vendor/<pack-name>/ (binarios, gitignored). Whitelist por regex para
-// bloquear path traversal y extensiones inesperadas.
-//
-// Estructura aceptada:
-//   /assets/(packs|vendor)/<pack-name>/manifest.json
-//   /assets/(packs|vendor)/<pack-name>/ATTRIBUTION.md
-//   /assets/(packs|vendor)/<pack-name>/<subdir>/<file>.<png|json|md|webp>
-// El segundo "subdir" puede tener un nivel de profundidad (típico Kenney).
-//
-// Si el archivo no existe (común cuando vendor/ aún no se pobló), respondemos
-// 404 — el frontend muestra el banner "no encontré assets, corre npm run dashboard:assets".
-const ASSETS_DIR = join(REPO_ROOT, 'assets');
-const ASSETS_PATH_RE = /^\/assets\/(packs|vendor)\/([a-z0-9][a-z0-9-]*)\/((?:manifest\.json)|(?:ATTRIBUTION\.md)|(?:[a-z0-9_-]+\/[a-z0-9._-]+\.(?:png|json|md|webp)))$/i;
-
-function serveAssetFile(req, res, urlPath) {
-  const match = ASSETS_PATH_RE.exec(urlPath);
-  if (!match) {
-    return send404(res, 'asset path inválido o fuera de whitelist');
-  }
-  const [, kind, packName, rel] = match;
-  // Anti `..` paranoia (la regex ya bloquea, pero double-check no cuesta).
-  if (rel.includes('..') || packName.includes('..')) {
-    return send404(res, 'asset path inválido (..)');
-  }
-  const target = resolve(ASSETS_DIR, kind, packName, rel);
-  const expectedRoot = resolve(ASSETS_DIR, kind, packName);
-  const sep = process.platform === 'win32' ? '\\' : '/';
-  if (target !== expectedRoot && !target.startsWith(expectedRoot + sep) && !target.startsWith(expectedRoot + '/')) {
-    return send404(res, 'asset path fuera del root');
-  }
-  if (!existsSync(target) || !statSync(target).isFile()) {
-    return send404(res, `asset no encontrado: ${urlPath}`);
-  }
-  const ext = extname(target).toLowerCase();
-  const mime = MIME[ext] || 'application/octet-stream';
-  const data = readFileSync(target);
-  res.writeHead(200, {
-    ...CORS,
-    'Content-Type': mime,
-    'Content-Length': data.length,
-    'Cache-Control': 'no-cache',
-  });
-  if (req.method === 'HEAD') {
-    res.end();
-  } else {
-    res.end(data);
-  }
-}
-
 // ---------- read-only public mode ----------
 // DASHBOARD_PUBLIC=1 → whitelist de métodos GET/HEAD/OPTIONS. Cualquier otro
 // método rechaza con 403 ANTES de entrar a los handlers. Esto cubre futuros
 // endpoints mutantes sin tener que recordar agregar 403 en cada uno.
 const DASHBOARD_PUBLIC = process.env.DASHBOARD_PUBLIC === '1';
 const PUBLIC_METHOD_WHITELIST = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-// ---------- /api/pack-name ----------
-// Devuelve el nombre del pack activo. Default 'kenney-roguelike'.
-const PACK_NAME = (() => {
-  const raw = process.env.DASHBOARD_PACK;
-  if (!raw) return 'kenney-roguelike';
-  // Sanitización mínima — el frontend hace la suya pero defendemos en server también.
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(raw)) {
-    console.warn(`[dashboard] DASHBOARD_PACK="${raw}" no matchea regex; uso default kenney-roguelike`);
-    return 'kenney-roguelike';
-  }
-  return raw;
-})();
 
 // ---------- SSE stream ----------
 
@@ -767,9 +701,6 @@ function handleRequest(req, res) {
   }
 
   try {
-    if (method === 'GET' && path === '/api/pack-name') {
-      return sendJSON(res, 200, { pack: PACK_NAME });
-    }
     if ((method === 'GET' || method === 'HEAD') && path === '/api/sprint') {
       const sprint = readSprintFile();
       const body = JSON.stringify(sprint, null, 2);
@@ -803,9 +734,6 @@ function handleRequest(req, res) {
       if (method === 'HEAD') res.end();
       else res.end(body);
       return;
-    }
-    if ((method === 'GET' || method === 'HEAD') && path.startsWith('/assets/')) {
-      return serveAssetFile(req, res, path);
     }
     if (method === 'POST' && path === '/api/chat') {
       // Sprint v3.1: endpoint del chat público orquestador ↔ agentes.

@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Review App — Sprint Reviewer</title>
+  <title>Review App</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <header>
-    <h1>Sprint Reviewer</h1>
+    <h1 id="app-title">Review App</h1>
     <div id="health">cargando…</div>
   </header>
-  <main>
+
+  <!-- Modo sprint: revisar bloques de un sprint marcando OK/Feedback -->
+  <main id="main-sprint" hidden>
     <aside id="sprints">
       <h2>Sprints</h2>
       <ul id="sprint-list"></ul>
@@ -25,6 +27,23 @@
       </div>
     </section>
   </main>
+
+  <!-- Modo viewer: leer output .md de agentes con TLDR -->
+  <main id="main-viewer" hidden>
+    <aside id="viewer-list-pane">
+      <h2>Output de agentes</h2>
+      <ul id="viewer-list"></ul>
+    </aside>
+    <section id="viewer-content">
+      <div id="viewer-empty">selecciona un archivo de la lista.</div>
+      <article id="viewer-view" hidden>
+        <h2 id="viewer-title"></h2>
+        <div id="viewer-model"></div>
+        <div id="viewer-md"></div>
+      </article>
+    </section>
+  </main>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>

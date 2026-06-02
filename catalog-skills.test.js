@@ -52,6 +52,9 @@ const EXPECTED_SKILLS = [
   // Sprint v3.1 — skills promovidas desde audit-master.
   'dual-auditor-protocol',
   'review-app',
+  // Sprint v4 — lenguaje no-técnico para cliente (tema recurrente #1).
+  'client-language',
+  'non-technical-cold-reader',
 ];
 
 // Skills nuevas del Sprint 5.2 que son stubs y deben seguir el formato canónico

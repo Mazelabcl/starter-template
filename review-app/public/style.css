@@ -27,3 +27,27 @@ main { display: flex; gap: 16px; padding: 16px; min-height: calc(100vh - 60px); 
 .btn.btn-ok.active { background: #166534; border-color: #4ade80; color: #4ade80; }
 .btn.btn-feedback.active { background: #7f1d1d; border-color: #f87171; color: #f87171; }
 .comment-input { flex: 1; padding: 4px 8px; background: #0d1322; color: #e1e7ef; border: 1px solid #2a3450; border-radius: 3px; font-size: 12px; }
+
+/* ---- Viewer mode (A1) ---- */
+#viewer-list-pane { flex: 0 0 300px; background: rgba(20,26,46,0.6); padding: 12px; border-radius: 4px; overflow-y: auto; max-height: calc(100vh - 92px); }
+#viewer-list-pane h2 { font-size: 14px; color: #94a3b8; margin-bottom: 8px; }
+#viewer-list { list-style: none; }
+#viewer-list li { padding: 8px 10px; cursor: pointer; border-radius: 3px; margin-bottom: 4px; border-left: 3px solid transparent; }
+#viewer-list li:hover { background: rgba(60,72,110,0.4); }
+#viewer-list li.active { background: rgba(80,92,130,0.6); border-left-color: #fbbf24; }
+.viewer-item-title { font-size: 14px; font-weight: 600; }
+.viewer-item-tldr { font-size: 12px; color: #94a3b8; margin-top: 2px; line-height: 1.4; }
+.viewer-item-model { display: block; font-size: 11px; color: #64748b; margin-top: 3px; }
+#viewer-content { flex: 1; background: rgba(20,26,46,0.4); padding: 24px; border-radius: 4px; overflow-y: auto; max-height: calc(100vh - 92px); }
+#viewer-empty { color: #64748b; font-style: italic; }
+#viewer-title { color: #fbbf24; margin-bottom: 6px; }
+#viewer-model { font-size: 12px; color: #64748b; margin-bottom: 16px; }
+#viewer-md { line-height: 1.65; font-size: 14px; }
+#viewer-md h1 { font-size: 20px; margin: 18px 0 8px; color: #e1e7ef; }
+#viewer-md h2 { font-size: 16px; margin: 16px 0 6px; color: #cbd5e1; }
+#viewer-md h3 { font-size: 14px; margin: 14px 0 4px; color: #94a3b8; }
+#viewer-md p { margin: 8px 0; }
+#viewer-md ul { margin: 8px 0; padding-left: 22px; }
+#viewer-md li { padding: 1px 0; }
+#viewer-md pre { background: #0d1322; padding: 12px; border-radius: 3px; overflow-x: auto; font-size: 13px; margin: 10px 0; white-space: pre-wrap; word-wrap: break-word; }
+#viewer-md strong { color: #fbbf24; }

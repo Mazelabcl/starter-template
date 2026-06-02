@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { listSprints, listBlocks, readBlock } from './review-app/server.js';
+import { listSprints, listBlocks, readBlock, listViewerFiles, readViewerFile, extractTldr, autodetectMode } from './review-app/server.js';
 
 let passed = 0;
 let failed = 0;
@@ -163,6 +163,68 @@ try {
     const fake = '/this/path/does/not/exist/12345';
     const sprints = listSprints(fake);
     assertEqual(sprints, [], 'dataDir inexistente → []');
+  });
+
+  // ---------------------- A1: modo viewer ----------------------
+
+  function setupViewerDir() {
+    const tmp = mkdtempSync(join(tmpdir(), 'review-app-viewer-'));
+    writeFileSync(join(tmp, 'research-amanda.md'),
+      '# Dossier Amanda\n\nResumen del research sobre la audiencia objetivo.\n\n## Detalle\n\n- punto uno\n', 'utf8');
+    writeFileSync(join(tmp, 'proposal.md'),
+      '---\nmodel: claude-opus-4-8\n---\n# Propuesta comercial\n\nUna propuesta para el cliente final.\n', 'utf8');
+    // Archivo no-.md ignorado.
+    writeFileSync(join(tmp, 'notes.txt'), 'ignored', 'utf8');
+    return tmp;
+  }
+
+  await check('autodetectMode: dir con .md y sin sprint<N>-prs → viewer', () => {
+    const dir = setupViewerDir();
+    tmpDirs.push(dir);
+    assertEqual(autodetectMode(dir), 'viewer', 'modo viewer detectado');
+  });
+
+  await check('autodetectMode: dir con sprint<N>-prs → sprint', () => {
+    const dir = setupDataDir();
+    tmpDirs.push(dir);
+    assertEqual(autodetectMode(dir), 'sprint', 'modo sprint detectado');
+  });
+
+  await check('listViewerFiles lista solo .md, ordenados, con TLDR', () => {
+    const dir = setupViewerDir();
+    tmpDirs.push(dir);
+    const files = listViewerFiles(dir);
+    assertEqual(files.length, 2, 'solo los 2 .md (notes.txt ignorado)');
+    assertEqual(files.map(f => f.name), ['proposal.md', 'research-amanda.md'], 'orden alfabético');
+    const dossier = files.find(f => f.name === 'research-amanda.md');
+    assertEqual(dossier.title, 'Dossier Amanda', 'title = H1');
+    assertTrue(dossier.tldr.includes('Resumen del research'), 'tldr = primer párrafo');
+  });
+
+  await check('listViewerFiles expone model: del front-matter', () => {
+    const dir = setupViewerDir();
+    tmpDirs.push(dir);
+    const files = listViewerFiles(dir);
+    const proposal = files.find(f => f.name === 'proposal.md');
+    assertEqual(proposal.model, 'claude-opus-4-8', 'model del front-matter');
+    assertEqual(proposal.title, 'Propuesta comercial', 'title tras front-matter');
+  });
+
+  await check('readViewerFile lee el .md; bloquea path traversal', () => {
+    const dir = setupViewerDir();
+    tmpDirs.push(dir);
+    const content = readViewerFile('proposal.md', dir);
+    assertTrue(content !== null && content.includes('Propuesta comercial'), 'lee proposal.md');
+    assertEqual(readViewerFile('../secret.md', dir), null, 'path traversal bloqueado');
+    assertEqual(readViewerFile('nope.md', dir), null, 'archivo inexistente → null');
+  });
+
+  await check('extractTldr: H1 + primer párrafo + model', () => {
+    const md = '---\nmodel: gpt-image-2\n---\n# Titulo\n\nPrimer parrafo aqui.\n\n## sub\n';
+    const r = extractTldr(md, 'fallback.md');
+    assertEqual(r.title, 'Titulo', 'title');
+    assertEqual(r.tldr, 'Primer parrafo aqui.', 'tldr');
+    assertEqual(r.model, 'gpt-image-2', 'model');
   });
 } finally {
   for (const d of tmpDirs) {

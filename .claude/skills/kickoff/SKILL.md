@@ -198,11 +198,21 @@ Una vez recogidas las respuestas, aplicas:
 - `recommendMode(type, size)` → `rapido` o `profundo`.
 - `suggestInitialSprint(type, mode)` → `{ objective, deliverables[], mode }`.
 
-### Paso 3.5 — capa de contraste contra el catálogo (Sprint v3.1)
+### Paso 3.5 — capa de contraste razonada contra el catálogo (Sprint v3.1, mejorada v4 / D9)
 
-Después de detectar tipo y armar el stack curado, **iteras el `_catalog/INDEX.md` y cruzas las descripciones/triggers con las palabras clave de las respuestas del usuario**. Si una skill del catálogo NO está en `recommendStack(type)` pero matchea keywords del proyecto, la propones al usuario como sugerencia adicional con su `why` específico al contexto.
+Después de detectar tipo y armar el stack curado por `detector.js`, **lee el archivo `.claude/skills/_catalog/skills-catalog.json` ENTERO** (es barato, ~30 entradas) y **RAZONA** skill por skill, no solo matchees keywords. El `detector.js` te da el stack base curado; el catálogo JSON + tu razonamiento es la capa de contraste mejorada.
 
-**Keywords canónicas para skills del catálogo:**
+Para cada skill del catálogo que NO esté ya en el stack curado, pregúntate:
+
+1. **¿El proyecto hace X que esta skill sirve?** Compara `when_to_use` y `triggers` del JSON contra lo que el usuario describió. No te limites a un match literal de keyword — razona el encaje real.
+2. **¿Por qué sí / por qué no?** Si la propones, da el `why` concreto ("mencionaste que el deliverable es para un cliente final, esta skill evita jerga técnica").
+3. **¿Cuál es su `status`?** Si es `"stub"`, AVISA al usuario que es un esqueleto v0.1 (invocable pero pendiente de profundización) antes de proponerla. Si es `"v1.0"`, está madura.
+
+Solo propones lo que tiene encaje real. No vuelques el catálogo entero — eso es ruido.
+
+**Caso especial — audiencia no técnica (tema recurrente #1):** si el proyecto es `business`, `content` o `marketing` Y tiene un cliente/audiencia FINAL que va a leer los deliverables (no solo devs), **propón `client-language`** (reescribe sin jerga técnica) y, si los deliverables son críticos de cara al cliente, también `non-technical-cold-reader` (gate que veta jerga antes de mostrar al cliente). Mantén la jerga técnica solo en superficies del orquestador (un `/aldo/`, READMEs internos).
+
+**Keywords canónicas (base curada del detector — el JSON las complementa con razonamiento):**
 
 | Skill catálogo | Keywords disparadoras (presentes en respuestas del usuario) |
 |---|---|
@@ -219,7 +229,9 @@ Después de detectar tipo y armar el stack curado, **iteras el `_catalog/INDEX.m
 | `xlsx` | Excel, planilla, .xlsx, Google Sheets |
 | `remotion` | video programático, lyric video, remotion, render server-side |
 | `web-artifacts-builder` | demo HTML, prototipo one-off, calculadora interactiva |
-| `review-app` | review-app, code review en HTTP, dashboard de PRs, marcar OK/Feedback |
+| `review-app` | review-app, code review en HTTP, dashboard de PRs, marcar OK/Feedback, ver output de agentes |
+| `client-language` | cliente final, audiencia no técnica, sin jerga, para el cliente, presentación, propuesta, business, marketing, content |
+| `non-technical-cold-reader` | que lo entienda el cliente, veta jerga, deliverable de cliente, legibilidad no técnica |
 
 **Sub-tipo `business-with-software` (Sprint v3.1):**
 

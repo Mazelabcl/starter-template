@@ -17,6 +17,9 @@ const REPO = resolve(__dirname);
 const README = join(REPO, 'README.md');
 const CLAUDEMD = join(REPO, 'CLAUDE.md');
 const QUICKSTART = join(REPO, 'docs', 'QUICKSTART.md');
+// v4 (C2): el listado completo de capacidades se movió a docs/capacidades.md
+// (on-demand) para adelgazar CLAUDE.md. La verificación de capacidades apunta acá.
+const CAPACIDADES = join(REPO, 'docs', 'capacidades.md');
 
 let passed = 0;
 let failed = 0;
@@ -140,8 +143,9 @@ check('CLAUDE.md tiene sección Roadmap y backlog', () => {
   assertContainsAll(txt, ['/idea', 'roadmap/'], 'CLAUDE');
 });
 
-check('CLAUDE.md menciona capacidades nuevas v3', () => {
-  const txt = read(CLAUDEMD);
+check('docs/capacidades.md menciona capacidades nuevas v3 (movidas de CLAUDE.md en v4/C2)', () => {
+  if (!existsSync(CAPACIDADES)) throw new Error('docs/capacidades.md no existe (C2)');
+  const txt = read(CAPACIDADES);
   assertContainsAll(txt, [
     'kickoff',
     'pipeline-v2',
@@ -158,7 +162,14 @@ check('CLAUDE.md menciona capacidades nuevas v3', () => {
     'openrouter_client',
     'memory.js',
     'roadmap.js',
-  ], 'CLAUDE');
+  ], 'capacidades');
+});
+
+check('CLAUDE.md apunta a docs/capacidades.md (C2)', () => {
+  const txt = read(CLAUDEMD);
+  if (!/docs\/capacidades\.md/.test(txt)) {
+    throw new Error('CLAUDE.md no apunta a docs/capacidades.md');
+  }
 });
 
 check('CLAUDE.md mantiene reglas duras y anti-patrones', () => {

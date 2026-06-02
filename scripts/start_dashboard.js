@@ -1,6 +1,6 @@
 // scripts/start_dashboard.js
 // Arranca el dashboard en background + abre el browser.
-// Usado por `npm start` después de install + dashboard:assets.
+// Usado por `npm start`. v4: ya no baja assets — el dashboard es HTML plano.
 
 import { spawn } from 'node:child_process';
 import { setTimeout as wait } from 'node:timers/promises';
