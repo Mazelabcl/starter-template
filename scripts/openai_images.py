@@ -9,7 +9,7 @@ Uso:
     # Importar desde otro script Python:
     from scripts.openai_images import generate_image, edit_image, generate_batch_async
 """
-import os, sys, base64, asyncio, json, argparse
+import os, sys, base64, asyncio, json, argparse, re
 from pathlib import Path
 
 try:
@@ -64,6 +64,45 @@ def _save_b64(b64_data: str, output_path: str):
         f.write(base64.b64decode(b64_data))
 
 
+# Mapeo extensión → mimetype. Causa raíz del bug de refs: la SDK de OpenAI, al
+# recibir un file handle crudo (open(p,"rb")), infiere el mimetype del nombre y
+# rechaza SILENCIOSAMENTE formatos como .webp/.jpg → la ref nunca llega al modelo
+# y éste "describe" en vez de usar la imagen real. Pasar file tuples
+# (basename, fileobj, mimetype) explícitos lo arregla.
+_MIME_BY_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+
+
+def _mime_for(path):
+    ext = os.path.splitext(path)[1].lower()
+    return _MIME_BY_EXT.get(ext, "image/png")
+
+
+def _assert_refs_mentioned(prompt, input_image_paths):
+    """Guard mention-check (REGLA L3). Si hay refs cargadas pero el prompt no
+    menciona 'Image 1', el modelo las ignora — convertimos esa disciplina en un
+    guardrail real en vez de solo prosa en la skill."""
+    if input_image_paths and not re.search(r"Image\s*1", prompt, re.IGNORECASE):
+        raise ValueError(
+            "Refs cargadas pero el prompt no menciona 'Image 1'. "
+            "Regla: cada Image N debe nombrarse en el prompt o el modelo la ignora."
+        )
+
+
+def _open_file_tuples(input_image_paths):
+    """Abre cada ref como file tuple (basename, fileobj, mimetype). El caller es
+    responsable de cerrar los file handles (devueltos en la posición [1])."""
+    return [
+        (os.path.basename(p), open(p, "rb"), _mime_for(p))
+        for p in input_image_paths
+    ]
+
+
 def generate_image(prompt, output_path="output.png", size="1024x1024", quality="medium"):
     """Genera imagen desde texto (sin references)."""
     client = _client()
@@ -83,26 +122,28 @@ def edit_image(prompt, input_image_paths, output_path="edited.png", size="1024x1
     client = _client()
     if isinstance(input_image_paths, str):
         input_image_paths = [input_image_paths]
-    files = [open(p, "rb") for p in input_image_paths]
+    _assert_refs_mentioned(prompt, input_image_paths)
+    file_tuples = _open_file_tuples(input_image_paths)
     try:
+        image_arg = file_tuples if len(file_tuples) > 1 else file_tuples[0]
         try:
             result = client.images.edit(
                 model=MODEL,
-                image=files if len(files) > 1 else files[0],
+                image=image_arg,
                 prompt=prompt, size=size, quality=quality
             )
         except Exception as e:
             if "model_not_found" in str(e):
-                for f in files: f.seek(0)
+                for _, f, _m in file_tuples: f.seek(0)
                 result = client.images.edit(
                     model=FALLBACK_MODEL,
-                    image=files if len(files) > 1 else files[0],
+                    image=image_arg,
                     prompt=prompt, size=size, quality=quality
                 )
             else:
                 raise
     finally:
-        for f in files: f.close()
+        for _, f, _m in file_tuples: f.close()
     _save_b64(result.data[0].b64_json, output_path)
     return output_path
 
@@ -111,15 +152,16 @@ async def _edit_async(client_async, prompt, input_image_paths, output_path, size
     if isinstance(input_image_paths, str):
         input_image_paths = [input_image_paths]
     if input_image_paths:
-        files = [open(p, "rb") for p in input_image_paths]
+        _assert_refs_mentioned(prompt, input_image_paths)
+        file_tuples = _open_file_tuples(input_image_paths)
         try:
             result = await client_async.images.edit(
                 model=MODEL,
-                image=files if len(files) > 1 else files[0],
+                image=file_tuples if len(file_tuples) > 1 else file_tuples[0],
                 prompt=prompt, size=size, quality=quality
             )
         finally:
-            for f in files: f.close()
+            for _, f, _m in file_tuples: f.close()
     else:
         result = await client_async.images.generate(model=MODEL, prompt=prompt, size=size, quality=quality)
     _save_b64(result.data[0].b64_json, output_path)

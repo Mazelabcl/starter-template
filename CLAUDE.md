@@ -105,14 +105,17 @@ Decisión rápida — "qué hago cuando el usuario pide X":
 
 Paralelo cuando sea independiente. Secuencial cuando uno alimenta al otro. Si dudas → secuencial es más seguro.
 
+**Research proactivo (D11) — reactivo → proactivo.** Antes de que un agente afirme datos de mundo real (naming, tendencias, cifras de mercado, competidores, precios, o cualquier cosa post-corte-de-conocimiento), el orquestador **PROPONE research** (`node src/research.js pro "..."` o `deep`) en vez de dejar que el agente invente. Señales que disparan la propuesta: "tendencias 2026", "qué se sabe de", "estado del arte", naming/branding, precios, decisiones con incertidumbre factual. No esperes a que el usuario lo pida.
+
 ## Modelo operativo (pipeline v2)
 
-1. **Capa 0 — `content/principles.md` literal al tope de cada brief.** No resumido. Si no existe → `/kickoff` primero.
+1. **Capa 0 — `content/principles.md` literal al tope de cada brief.** No resumido. Si no existe → `/kickoff` primero. El context bundle suma también un extracto del perfil (`memory/project-profile.json`: tipo/modo/descripción/owner) + `docs/company.md` si tiene contenido real.
 2. **Capa 0.5 — `content/INDEX.md` decide qué cargar.** No el repo entero. Más memoria del proyecto si aplica (decisions, lessons relevantes).
-3. **Capa 1 — Architect** crea el deliverable. Declara su contract. **Emite output validado** (`emitOutput`).
-4. **Capa 2 — Critic interno multi-óptica** (3-4 voces, sin cold-reader). **Consume input validado** (`consumeInput`) antes de revisar.
-5. **Capa 3 — Cold-reader gate** (skill `cold-reader-gate`) — independiente, voto binario, veto absoluto. Solo recibe `principles.md` + deliverable.
-6. **Capa 4 — Humano decide** sobre lo que pasó cold-reader. Decisiones que emergen → `addDecision()` a memoria.
+3. **Capa 0.7 — "Te presento al equipo" (D10, experimental).** Para tareas compuestas (2+ agentes), ANTES de delegar el orquestador presenta el equipo al usuario: por cada agente, rol + experiencia, objetivo (1-3), pasos clave y resumen del contexto inyectado. Espera OK o ajuste. Para un solo agente trivial, se salta. Por terminal por ahora; HTML futuro. Puede removerse si no aporta.
+4. **Capa 1 — Architect** crea el deliverable. **Brief Contract obligatorio (D10):** ningún agente se lanza sin (1) rol profundo —no "experto en X" sino "experto en X que hizo Y para Z"—, (2) objetivo verificable 1-3, (3) contexto inyectado (principles literal + perfil + decisiones por ID + company.md), (4) no-goals, (5) formato de salida, (6) recordatorio D6. Declara su contract. **Emite output validado** (`emitOutput`).
+5. **Capa 2 — Critic interno multi-óptica** (3-4 voces, sin cold-reader). **Consume input validado** (`consumeInput`) antes de revisar.
+6. **Capa 3 — Cold-reader gate** (skill `cold-reader-gate`) — independiente, voto binario, veto absoluto. Solo recibe `principles.md` + deliverable.
+7. **Capa 4 — Humano decide** sobre lo que pasó cold-reader. Decisiones que emergen → `addDecision()` a memoria.
 
 Cada hand-off entre capas pasa por validador de contracts. Si falla, error claro al instante con el path exacto y el campo que rompió. No se escribe nada corrupto a disco.
 
@@ -161,9 +164,9 @@ Tabla completa de tests + qué valida cada uno en `docs/capacidades.md` (secció
 En la raíz hay un archivo `feedback.md`. Es el canal para reportar findings sobre el starter mismo (skills faltantes, scripts rotos, anti-patrones, contracts que no encajan en uso real) — **NO** para bugs/features del proyecto consumer.
 
 **Flujo:**
-1. Cuando aldot ve algo del starter que falla o falta, te dice: _"anota esto en `feedback.md`"_.
-2. Agregas entry al final del archivo: fecha, contexto, finding, acción sugerida (opcional). Texto libre, no hay formato rígido.
-3. Cuando aldot retoma sesión sobre el starter, le da la ruta del `feedback.md` al orquestador del starter, que lee, sintetiza al inbox global y aplica fixes.
+1. Cuando aldot ve algo del starter que falla o falta, te dice: _"anota esto en `feedback.md`"_. El usuario solo dice eso — la estructura del archivo es **self-documented**, no le preguntes formato.
+2. Agregas tu finding bajo la sección `## NUEVO (sin procesar)` de `feedback.md`: fecha, contexto, finding, acción sugerida (opcional). Texto libre, sin formato rígido.
+3. Cuando aldot retoma sesión sobre el starter, le da la ruta del `feedback.md` al orquestador del starter, que lee `## NUEVO`, sintetiza al inbox global, aplica fixes y mueve lo procesado a `## Archivo` con fecha.
 
 **NO arregles el starter desde este proyecto.** Tu rol es reportar. El orquestador del starter es el que corrige.
 

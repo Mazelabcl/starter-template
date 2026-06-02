@@ -36,11 +36,51 @@ python scripts/openai_images.py generate "<prompt>" "<output_path>" --quality me
 
 ### Caso B — Imagen con references (identity lock)
 
-**REGLA L3 (no negociable):** cada `Image N` que pongas en el array DEBE estar mencionada en el texto del prompt. Si no, el modelo la ignora.
+**REGLA L3 (no negociable):** cada `Image N` que pongas en el array DEBE estar mencionada en el texto del prompt. Si no, el modelo la ignora. Esto ahora es un **guardrail real**: `edit_image` lanza `ValueError` si cargas refs y el prompt no contiene "Image 1" (regex `Image\s*1`, case-insensitive). No es solo prosa.
 
 ```bash
 python scripts/openai_images.py edit "<prompt con menciones explícitas a Image 1, 2, ...>" '["ref1.png","ref2.png"]' "<output_path>"
 ```
+
+## REGLA DE ORO — `images.edit` trata las references POSICIONALMENTE
+
+> Adaptada del proceso validado de Mazelab (~70 renders operacionales). Es la causa raíz de casi todos los fallos de fidelidad cuando se usan refs.
+
+El modelo **NO lee nombres de archivo**. Las references llegan como un array y se referencian por su POSICIÓN: **Image 1, Image 2, Image 3, ...** según el ORDEN en que se pasan en `input_image_paths`. Si pasas `["foto_real.png", "canon_logo.png"]`, entonces "Image 1" = la foto real y "Image 2" = el canon del logo. Cambiar el orden cambia qué es cada Image N.
+
+### Plantilla obligatoria del prompt con refs
+
+```
+<Tipo de imagen> of <sujeto>. Use the reference images:
+
+- Image 1: shows <qué muestra>. Match EXACTLY <qué tomar de ahí: identidad / forma / proporciones>.
+- Image 2: shows <qué muestra>. Use for <qué tomar: paleta / atmósfera / props>.
+- Image 3: shows <qué muestra>. Use for <qué tomar>.
+
+<Descripción espacial: izq/centro/der + dimensiones aproximadas en cm/m para que el modelo proporcione>.
+
+<Estilo / fondo / luz canónica>.
+```
+
+### Anti-pattern crítico — NUNCA describir un objeto que ya existe como archivo
+
+**NUNCA describas en texto un componente, personaje u objeto cuando existe el archivo de referencia.** Si describes "un tótem gris de 1.5m con pantalla táctil" en vez de pasar la foto real como `Image 1` y decir "Image 1: shows the totem, match EXACTLY", el modelo **aproxima** e inventa — se pierde el objeto real. La referencia visual siempre gana sobre la descripción textual.
+
+### Qué NO hacer (lecciones del canon Mazelab)
+
+- ❌ Describir componentes en texto cuando existe el archivo de referencia (pierdes el objeto real).
+- ❌ Decir "match the canonical reference" sin indicar QUÉ Image N es el canon.
+- ❌ Pasar 5+ imágenes con elementos competitivos — cuando hay sobrecarga el modelo aproxima en vez de copiar. Limita a 3-5 refs centrales.
+- ❌ Over-spec de detalles sutiles (un "stepped L-profile" exagerado puede salir como escalera).
+- ❌ Cargar una ref en el array sin nombrarla literal en el prompt (el guardrail ahora lo bloquea, pero la disciplina va primero).
+
+### Qué SÍ hacer
+
+- ✅ Pasar fotos reales / char sheets como `Image 1` cuando existen.
+- ✅ Pasar canons de componentes como `Image 2, 3, ...` en orden estable.
+- ✅ Nombrar cada `Image N` literal en el prompt con "shows X / match EXACTLY / use for Y".
+- ✅ Indicar dimensiones aproximadas (cm/m) para que el modelo proporcione bien.
+- ✅ Mantener 3-5 elementos centrales por prompt.
 
 ### Caso C — Batch paralelo (N imágenes independientes)
 
@@ -111,7 +151,7 @@ Do not include: [anatomía mal, accesorios no canónicos, render contrario, anim
 ## Reglas duras
 
 1. **L2 — Validation multimodal obligatoria.** Sin Read del PNG no hay PASS.
-2. **L3 — Refs en texto del prompt.** Cada `Image N` mencionada explícitamente.
+2. **L3 — Refs en texto del prompt.** Cada `Image N` mencionada explícitamente. Las refs son POSICIONALES (orden del array = Image 1, 2, 3...). `edit_image` lanza `ValueError` si hay refs y el prompt no nombra "Image 1".
 3. **L4 — IDENTITY LOCK explícito** cuando hay personajes consistentes ("match exactly", "ONE eye", etc.).
 4. **L8 — Paralelo cuando jobs son independientes.** No corras secuencial si no hay dependencia.
 5. **Output a subcarpetas, no a paths dispersos.** Usa `content/output/<scene_or_asset>/` para portabilidad.
@@ -130,4 +170,4 @@ Las references NO suben costo significativo. Quality + aspect ratio dominan.
 
 ## Versión
 
-v0 — 2026-05-06
+v0.1 — 2026-06-02 — Sprint v4.1. Importa la REGLA DE ORO de Mazelab (refs posicionales + anti-pattern "no describir lo que existe como archivo") y documenta el guardrail mention-check de `edit_image` (D12). v0 — 2026-05-06.

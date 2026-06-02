@@ -52,16 +52,70 @@ Cada capa declara: qué input espera, qué contrato valida al consumirlo, qué o
 4. Si `lecciones_count > 0` y la tarea es del mismo dominio que alguna lección registrada → leer `memory/lessons.md` literal.
 5. Leer `process-log/00-decisions.md` (decisiones humanas, son ley).
 6. Mirar la tabla de `INDEX.md` y cargar **solo** los archivos listados como obligatorios + los aplicables. No el repo entero.
+7. **Sumar al bundle el perfil + company.md (D10).** Lee `memory/project-profile.json` y extrae solo `project_type`, `mode`, `description`, `owner` (no el archivo entero). Lee `docs/company.md` **solo si tiene contenido real** (no los placeholders del template `(describe en 2-3 líneas)`). Estos dos van al context bundle para que todo brief tenga el norte del proyecto sin que el agente lo asuma. El mecanismo de inyección ya existe (principles literal + INDEX); esto solo amplía las fuentes.
 
 **Precondición ejecutable:** `assertFileExists('principles', 'content/principles.md')` antes de cualquier brief.
 
-**Output de la capa:** un "context bundle" en memoria (no se escribe a disco) que incluye principles literal, archivos del INDEX, decisiones humanas y snapshot de memoria.
+**Output de la capa:** un "context bundle" en memoria (no se escribe a disco) que incluye principles literal, archivos del INDEX, decisiones humanas, snapshot de memoria, **extracto del perfil (`project_type`/`mode`/`description`/`owner`) y `company.md` si tiene contenido real**.
 
-**Transición a Capa 1:** se pasa el bundle al architect como parte del brief.
+**Transición a Capa 1:** se pasa el bundle al architect como parte del brief (o a Capa 0.7 primero si la tarea es compuesta).
+
+### Capa 0.7 — Diseño y presentación de equipo (D10, EXPERIMENTAL)
+
+> **Feature experimental para validar que los prompts son ricos.** Por terminal por ahora; presentación en HTML es futuro. Puede removerse si no aporta valor. Para tareas de UN solo agente trivial NO es obligatorio (evita verbosidad gratuita).
+
+**Cuándo aplica:** ANTES de lanzar sub-agentes para una **tarea compuesta** (2+ agentes — ej. una landing que necesita diseñador front + copywriter + experto en keywords). Para un solo agente trivial, sáltala.
+
+**Acciones del orquestador:**
+1. **Lista los roles necesarios.** ¿Diseñador front? ¿Copywriter? ¿Experto en keywords? ¿Investigador? Deriva los roles del brief y del context bundle, no de inercia.
+2. **PRESENTA el equipo al usuario** en formato digerible. Por cada agente:
+   - **Rol + experiencia** (1 línea, perfil profundo — ver Brief Contract en Capa 1).
+   - **Objetivo** (1-3 metas numeradas y verificables).
+   - **Pasos clave** que seguirá.
+   - **RESUMEN del contexto inyectado** (descripción de qué recibe: principles, extracto de perfil, decisiones aplicables) — **NO copy-paste literal del contexto**, solo el resumen.
+3. **Espera OK o ajuste del usuario** antes de delegar. Si el usuario corrige un rol, un objetivo o el contexto, ajusta antes de lanzar.
+
+**Por qué existe:** obliga al orquestador a redactar el Brief Contract completo ANTES de delegar, y le da al usuario (vibe coder) una vista clara de "a quién contrata" para cada pieza. Si el equipo presentado se ve pobre ("experto en X" a secas), es señal de que el brief no cumple el Brief Contract — corregir antes de gastar tokens en sub-agentes.
+
+**Formato de presentación sugerido (terminal):**
+
+```
+Te presento al equipo para esta tarea:
+
+1. <slug-agente> — <rol profundo + experiencia, 1 línea>
+   Objetivo: (1) ... (2) ...
+   Pasos: lee X → produce Y → valida Z.
+   Contexto que recibe: principles literal + perfil (tipo/modo) + D3, D6.
+
+2. <slug-agente> — ...
+
+¿Lanzo así o ajustas algo?
+```
+
+**Transición:** con el OK del usuario → Capa 1 por cada agente. Sin OK → ajustar y re-presentar.
 
 ### Capa 1 — Architect / creator
 
 **Input esperado:** el context bundle de Capa 0 + brief específico de la tarea.
+
+#### Brief Contract — checklist OBLIGATORIO antes de lanzar cualquier agente (D10)
+
+Todo brief a un sub-agente es una **precondición**: si no cumple los 6 puntos, NO se lanza el agente. Un brief débil ("eres experto en X, hazme Y") produce output genérico y desperdicia tokens. El Brief Contract fuerza profundidad:
+
+1. **ROL profundo** — no "experto en X" a secas, sino "experto en X que ha hecho Y para empresas/proyectos del tipo Z", con experiencia simulada relevante. Ej.: *"Eres copywriter de conversión con 8 años escribiendo landings SaaS B2B que han levantado seed rounds"*, no *"eres copywriter"*.
+2. **OBJETIVO** — 1-3 metas numeradas y verificables. Verificable = se puede comprobar si se cumplió (no "que quede bien").
+3. **CONTEXTO inyectado** — `principles.md` literal + extracto del perfil (`project_type`/`mode`/`description`) + las decisiones aplicables (citadas por ID: D3, D6...) + `company.md` si aplica. **Inyectado, no asumido** — el agente no adivina el norte del proyecto.
+4. **NO-GOALS / restricciones** — qué NO hacer (no inventar datos, no tocar el archivo X, no salirse del tono, etc.).
+5. **FORMATO de salida** esperado — estructura, schema si aplica, longitud, idioma.
+6. **Recordatorio D6** — literal: *"Entrega tu output como texto en tu respuesta final. NO uses la Write tool — el wrapper la bloquea. El orquestador persistirá el archivo."*
+
+Si la tarea es compuesta (2+ agentes), el Brief Contract de cada agente se redacta en Capa 0.7 y se presenta al usuario antes de delegar.
+
+#### Research proactivo antes de afirmar datos de mundo real (D11)
+
+Antes de que un agente afirme datos de mundo real — naming/branding, tendencias, cifras de mercado, competidores, precios, o cualquier cosa post-corte-de-conocimiento — el orquestador **PROPONE research** (`node src/research.js pro "..."` o `deep` para más profundidad) en vez de dejar que el agente invente. Reactivo → proactivo.
+
+**Señales que disparan la propuesta:** "tendencias 2026", "qué se sabe de", "estado del arte", naming/branding, precios, competidores, o cualquier decisión con incertidumbre factual. Si detectas estas señales en el brief, propón el research ANTES de lanzar al agente y enriquece el context bundle con el resultado.
 
 **Acciones:**
 1. Si el architect aún no declaró contract → llamar `declareContract({ agent, inputs, outputs, preconditions, postconditions })` con la firma del agente. Persiste en `contracts/declared/<agent>.json`.
@@ -270,6 +324,8 @@ Cómo:
 8. **Idioma del proyecto.** Forzado al inicio de cada brief, según `principles.md`.
 9. **Cada hand-off pasa por contract.** No hay "confío en el agente, lo paso directo".
 10. **Memoria curada, no exhaustiva.** Solo escribir cuando algo emergió de verdad.
+11. **Brief Contract obligatorio (D10).** Ningún agente se lanza sin los 6 puntos: rol profundo, objetivo verificable, contexto inyectado, no-goals, formato, recordatorio D6. Brief débil = no se lanza.
+12. **Research proactivo (D11).** Ante un claim factual de mundo real, el orquestador propone `src/research.js` antes de dejar que el agente invente.
 
 ## Regla anti-watchdog para sub-agentes Opus en outputs largos
 
@@ -321,4 +377,4 @@ Total: 2 hand-offs validados con architect↔critic, 1 con architect→cold-read
 
 ## Versión
 
-v3.0 — 2026-05-09 — Sprint 1.3. Agrega hand-off contracts (Sprint 1.1) y memoria del proyecto (Sprint 1.2). Ver `CHANGELOG.md`.
+v3.1 — 2026-06-02 — Sprint v4.1 (hardening del core). Agrega: Brief Contract obligatorio en Capa 1 (D10), Capa 0.7 "te presento al equipo" experimental (D10), research proactivo ante claims factuales (D11), e inyección de perfil + `company.md` al context bundle de Capa 0 (D10). v3.0 — 2026-05-09 — Sprint 1.3: hand-off contracts + memoria del proyecto. Ver `CHANGELOG.md`.
