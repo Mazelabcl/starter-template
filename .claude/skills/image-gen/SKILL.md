@@ -29,15 +29,17 @@ Hay 4 modelos pre-configurados, **todos con la misma firma** (`generate_image` /
 | **gpt-image-2** (default) | `scripts/openai_images.py` | ~$0.21 high / ~$0.04 medium | Máxima calidad con refs | file tuples |
 | **FLUX.2 dev** | `scripts/replicate_images.py --model flux2-dev` | ~$0.012 (≈15x más barato) | Económico, acepta refs | `input_image`, `input_image_2`... |
 | **Ideogram 3** | `scripts/replicate_images.py --model ideogram-v3` | ~$0.03 | Texto en imagen / diseño | `style_reference_images` (hasta 3) |
-| **Nano Banana Pro** | `scripts/gemini_images.py` | ~$0.039 @1K | Refs fuertes (hasta 14) | `inline_data` base64 |
+| **Nano Banana Pro** | `scripts/replicate_images.py --model nano-banana-pro` | ~$0.04 | Refs fuertes (hasta 14), consistencia de identidad | `image_input` (array, hasta 14) |
+
+**Ruta de Nano Banana Pro = Replicate (no Gemini directo).** Se accede vía `scripts/replicate_images.py --model nano-banana-pro` (modelo `google/nano-banana-pro` en Replicate), con la misma firma y reglas que el resto. Requiere `REPLICATE_API_TOKEN`. Existe también `scripts/gemini_images.py` como **ruta alternativa opcional** para quien tenga `GEMINI_API_KEY` y prefiera la API de Gemini directa — pero la ruta canónica del starter es Replicate, porque ese es el token que el setup configura.
 
 **Regla de presentación:** cuando se discuta generar imágenes, el orquestador **PRESENTA las opciones al usuario** antes de elegir:
 
-> "Tenemos gpt-image-2 (mejor calidad, ~$0.21), FLUX.2 dev (15x más barato, ~$0.012, acepta refs), Ideogram 3 (texto en imagen, $0.03), Nano Banana Pro (refs fuertes, $0.039). Recomiendo X para tu caso. ¿Cuál prefieres?"
+> "Tenemos gpt-image-2 (mejor calidad, ~$0.21), FLUX.2 dev (15x más barato, ~$0.012, acepta refs), Ideogram 3 (texto en imagen, $0.03), Nano Banana Pro (refs fuertes hasta 14, ~$0.04). Recomiendo X para tu caso. ¿Cuál prefieres?"
 
 — y **espera la elección**. Default **gpt-image-2** si el usuario no especifica y la calidad importa.
 
-Todos respetan la misma regla de referencias: pasar el archivo real como ref (nunca describirlo en texto) + nombrar cada `Image N` en el prompt (guard `ValueError` si hay refs sin "Image 1"). FLUX y Ideogram requieren `REPLICATE_API_TOKEN`; Nano Banana Pro requiere `GEMINI_API_KEY` (o `GOOGLE_API_KEY`) — si falta, el wrapper falla con mensaje claro de setup.
+Todos respetan la misma regla de referencias: pasar el archivo real como ref (nunca describirlo en texto) + nombrar cada `Image N` en el prompt (guard `ValueError` si hay refs sin "Image 1"). FLUX, Ideogram y Nano Banana Pro corren por Replicate y requieren `REPLICATE_API_TOKEN`; la ruta alternativa `gemini_images.py` requiere `GEMINI_API_KEY` (o `GOOGLE_API_KEY`) — si falta el token correspondiente, el wrapper falla con mensaje claro de setup.
 
 ## Setup previo (verificar)
 

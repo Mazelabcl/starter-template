@@ -8,8 +8,10 @@ patrón de uso:
     edit_image(prompt, input_image_paths, output_path, ..., model="flux2-dev")
 
 Modelos soportados (--model):
-    flux2-dev    → black-forest-labs/flux-2-dev   (~$0.012/img, barato, acepta refs)
-    ideogram-v3  → ideogram-ai/ideogram-v3-turbo  ($0.03, texto en imagen / diseño)
+    flux2-dev       → black-forest-labs/flux-2-dev   (~$0.012/img, barato, acepta refs)
+    ideogram-v3     → ideogram-ai/ideogram-v3-turbo  ($0.03, texto en imagen / diseño)
+    nano-banana-pro → google/nano-banana-pro         (~$0.04/img, Nano Banana Pro vía
+                      Replicate, hasta 14 refs, fuerte en consistencia de identidad)
 
 Params de referencia VERIFICADOS (2026-06-02):
 - FLUX.2 dev: refs vía input_image, input_image_2, input_image_3, ... (URLs o
@@ -22,6 +24,16 @@ Params de referencia VERIFICADOS (2026-06-02):
   JPEG/PNG/WebP, máx 10MB total). Confirmado en el schema de Replicate
   (https://replicate.com/ideogram-ai/ideogram-v3-turbo/api/schema, vía búsqueda).
   No combinar con style_type/style_hex.
+- Nano Banana Pro (google/nano-banana-pro): refs vía image_input (ARRAY de URIs,
+  hasta 14 imágenes). Verificado en el OpenAPI schema de Replicate
+  (https://replicate.com/api/models/google/nano-banana-pro/versions,
+  version 712e06a8e122fb7c8dae55dcf7ad6a8e717afb7b1c41c889fc8c5132fd42f374):
+  input.image_input = {type: array, items: {type: string, format: uri}}.
+  El formato uri acepta URLs públicas o data URIs base64 (convención de file
+  inputs de Replicate), que es lo que usamos para refs locales. Output controlado
+  por output_format (jpg|png) — forzamos png para coincidir con los .png que
+  escribe el wrapper. resolution (1K|2K|4K, default 2K) y aspect_ratio
+  (default match_input_image) quedan en sus defaults salvo override vía extra.
 
 Uso:
     python scripts/replicate_images.py generate "un perro azul" out.png --model flux2-dev
@@ -61,6 +73,7 @@ _load_env()
 _MODELS = {
     "flux2-dev": "black-forest-labs/flux-2-dev",
     "ideogram-v3": "ideogram-ai/ideogram-v3-turbo",
+    "nano-banana-pro": "google/nano-banana-pro",
 }
 DEFAULT_MODEL = "flux2-dev"
 API_BASE = "https://api.replicate.com/v1"
@@ -135,6 +148,13 @@ def _build_input(model_slug, prompt, input_image_paths, size, extra=None):
         # Ideogram v3: refs de estilo vía style_reference_images (lista, hasta 3).
         if input_image_paths:
             inp["style_reference_images"] = [_data_uri(p) for p in input_image_paths]
+    elif model_slug == "nano-banana-pro":
+        # Nano Banana Pro: refs vía image_input (ARRAY de URIs, hasta 14). El orden
+        # del array = Image 1, Image 2, ... que el prompt debe nombrar (guard).
+        if input_image_paths:
+            inp["image_input"] = [_data_uri(p) for p in input_image_paths]
+        # Forzar PNG: el wrapper escribe archivos .png; el default del modelo es jpg.
+        inp.setdefault("output_format", "png")
     return inp
 
 
@@ -244,7 +264,8 @@ def edit_image(prompt, input_image_paths, output_path="edited.png", size="1024x1
 
 # ── CLI ────────────────────────────────────────────────────────────────
 def _cli():
-    p = argparse.ArgumentParser(description="Replicate wrapper (FLUX.2 dev / Ideogram v3)")
+    p = argparse.ArgumentParser(
+        description="Replicate wrapper (FLUX.2 dev / Ideogram v3 / Nano Banana Pro)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     g = sub.add_parser("generate", help="Genera imagen desde texto")
