@@ -132,45 +132,17 @@ Esta es la parte concreta que más fricción genera con vibe coders. Lo simplifi
 |---|---|---|
 | `Corrige 500 en /users cuando perfil no existe` | `fix` | El bueno explica QUÉ y dónde; el malo no dice nada |
 | `Reduce timeout de research a 30s para evitar bloqueos en CI` | `fix timeout` | El bueno dice el porqué; el malo solo el qué |
-| `Agrega skill quality-mindset (4 disciplinas + Git baseline)` | `add quality mindset` | Modo imperativo + scope claro |
-| `Renombra getProfile a fetchProfile para coincidir con la API` | `rename function` | Sin contexto, "rename function" es ruido |
-| `Mueve superpowers-lite a _catalog/ porque vibe coders no abren PRs formales` | `move skill` | Bueno explica el WHY que importa en 6 meses |
 | `Corrige test de memory.js que fallaba en Windows por path separator` | `fix test` | Bueno indica plataforma + causa raíz |
-| `Refactor schema validation a contracts/helpers para reuso` | `refactor` | Bueno especifica el qué y el motivo |
 
 **Patrón:** `<verbo imperativo> <qué> [<por qué si no es obvio>]`. 50-72 caracteres es el sweet spot. Si necesitas más, agrega cuerpo del commit con contexto adicional, pero la primera línea es la que importa.
 
 ---
 
-## Cómo se conecta con karpathy-rules
+## Cómo se conecta con karpathy-rules y pipeline-v2
 
-`karpathy-rules` son 4 reglas tácticas para cuando la tarea es **escribir código**:
-1. Think before coding.
-2. Simplicity first.
-3. Surgical changes.
-4. Goal-driven execution.
+`karpathy-rules` (think before coding, simplicity first, surgical changes, goal-driven execution) concreta la **disciplina 3** para el dominio de código; las disciplinas 1, 2 y 4 siguen aplicando. Cuando la tarea NO es código, Karpathy no aplica.
 
-Estas 4 reglas son la versión específica para código de la **disciplina 3 (ejecución con validación intermedia)** de quality-mindset. No la reemplazan ni se contradicen con ella — la concretan para el dominio de código.
-
-Cuando la tarea es código:
-- Quality-mindset disciplina 1 + 2 (spec + plan) sigue aplicando.
-- Durante la ejecución, las 4 reglas Karpathy son tu guía táctica.
-- Disciplina 4 (cierre + commit) sigue aplicando al final.
-
-Cuando la tarea NO es código (research, ideación, contenido), Karpathy no aplica. Solo quality-mindset.
-
----
-
-## Cómo se conecta con pipeline-v2
-
-`pipeline-v2` es la implementación específica de quality-mindset cuando la tarea es **crear un artefacto creativo no trivial** (guion, agente nuevo, plan, set de imágenes, etc.). Sus 5 capas (Capa 0 contexto → architect → critic → cold-reader → humano) son una expansión de las 4 disciplinas:
-
-- Capa 0 (contexto + memoria) implementa la disciplina 1 (spec mínimo + carga de canon).
-- Capa 1 (architect) implementa la disciplina 2 (plan + ejecución del primer draft).
-- Capas 2-3 (critic + cold-reader) implementan la disciplina 3 (validación intermedia, en este caso multi-óptica).
-- Capa 4 (humano + memoria) implementa la disciplina 4 (cierre validado + lesson/decision).
-
-Quality-mindset es más amplio. Aplica a tareas que NO ameritan pipeline-v2 (un fix de bug, un research corto, un commit de refactor). Pipeline-v2 aplica solo cuando estás creando algo creativo no trivial.
+`pipeline-v2` es la implementación de quality-mindset para crear un artefacto creativo no trivial: sus 5 capas (contexto → architect → critic → cold-reader → humano) expanden las 4 disciplinas. Quality-mindset es más amplio y aplica también a tareas que no ameritan pipeline-v2.
 
 **Regla de decisión rápida:** ¿la tarea amerita un cold-reader gate? → pipeline-v2. ¿No? → quality-mindset solo.
 
@@ -225,61 +197,7 @@ Tiempo esperado: 30 minutos.
 - Commit: `Corrige 500 en /users/:id cuando el usuario no tiene perfil`.
 - Lección: ninguna que merezca recordar en 6 meses (es un fix estándar).
 
-### Escenario B — Tarea creativa
-
-Usuario: "necesito nombre para el producto B2B nuevo de Mazelab".
-
-**Spec mínimo:**
-```
-Problema: el producto B2B aún no tiene nombre y bloquea el deck para inversores.
-Criterio de éxito: 5 candidatos que pasen filtros (pronunciable en ES/EN, .com disponible, no choque con marca existente).
-Tiempo esperado: 1 hora con council.
-```
-
-**Plan visible:**
-```
-- Cargar contexto: principles.md + INDEX.md (Mazelab brand voice).
-- Lanzar council de 3 ópticas (lingüística, branding, dominio técnico) con architect creativo.
-- Critic interno filtra los obvios fails.
-- Cold-reader gate sobre los 5 finalistas.
-- Yo (Aldo) decido entre los que pasaron.
-Tradeoff: descarto generadores random — quiero nombres con intención semántica.
-```
-
-**Ejecución:** invoco `pipeline-v2` (la tarea amerita cold-reader gate). Architect produce 12 candidatos. Critic filtra 5. Cold-reader vota GO sobre 4 de los 5. Reporto al usuario.
-
-**Cierre validado:**
-- Criterio de éxito: cumplido (5 candidatos pasaron filtros — uno cayó en cold-reader).
-- Decisión registrada vía `addDecision`: "Producto B2B se llamará X. Alternativas Y, Z. Razón: cumple los 3 filtros + matches mejor con tono Mazelab".
-- Lección: ninguna esta vez.
-
-### Escenario C — Tarea de research
-
-Usuario: "investiga el mercado de starter templates para AI engineers, estoy considerando publicar el mío".
-
-**Spec mínimo:**
-```
-Problema: no sé si publicar el starter v3 como público tiene mercado.
-Criterio de éxito: 1 página con TAM aproximado, 3-5 competidores principales, gap que mi starter cubre, recomendación GO/NO-GO.
-Tiempo esperado: 45 minutos.
-```
-
-**Plan visible:**
-```
-- Lanzar Perplexity deep research con query enfocada (TAM + competidores + gap).
-- Validar 2-3 datos clave con segunda búsqueda (no confiar en una sola fuente).
-- Sintetizar en página única con recomendación.
-Tradeoff: research deep es lento (5-10 min); alternativa rápida es Perplexity pro pero pierde profundidad.
-```
-
-**Ejecución con validación intermedia:**
-- Corro `node src/research.js deep "..."` → recibo output.
-- Validación: el dato "TAM ~$200M" se contrasta con segunda búsqueda focalizada → confirma rango.
-- Sintetizo página única.
-
-**Cierre validado:**
-- Criterio de éxito: cumplido (página única con los 4 elementos pedidos).
-- Lección capturada vía `addLesson`: "Para validar TAM en research, hacer cross-check con segunda fuente — Perplexity deep solo a veces sobrestima". Esta sí merece recordar en 6 meses porque va a aplicar a futuros research.
+**Más ejemplos** (tarea creativa con council, tarea de research con cross-check de fuentes): ver `EXAMPLES.md` en esta misma carpeta.
 
 ---
 

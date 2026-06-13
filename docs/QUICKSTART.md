@@ -29,7 +29,19 @@ También detecta Python 3.10+ y crea un venv con `openai` instalado. Si Python f
 
 Si saltaste alguna key, después puedes configurarla con los slash `/setup-openrouter` o `/setup-openai`.
 
-## Paso 3 — Smoke test (recomendado)
+## Paso 3 — Arrancar todo con un comando
+
+```bash
+npm start
+```
+
+Levanta el dashboard (HTML simple de estado) en background, abre el browser en <http://localhost:7777/>, y te muestra el próximo paso.
+
+El dashboard muestra una tabla de tareas en vivo (Agente, Estado, Modelo, Tokens, Summary) + pestañas Sprint / Roadmap / Chat, con una barra de métricas en el header. Mientras Claude trabaja, se actualiza solo vía SSE.
+
+Si prefieres levantar solo el dashboard en otro terminal: `npm run dashboard` (override de puerto en Mac/Linux: `DASHBOARD_PORT=9000 npm run dashboard`; en Windows PowerShell: `$env:DASHBOARD_PORT='9000'; npm run dashboard`).
+
+### Antes de trabajar en serio — smoke test (recomendado)
 
 ```bash
 npm run smoke
@@ -45,17 +57,7 @@ Versión sin gasto de red (estructura solamente):
 npm run smoke:quick
 ```
 
-## Paso 4 — Dashboard en otro terminal
-
-```bash
-npm run dashboard
-```
-
-Abre <http://localhost:7777/>. Ves kanban + métricas + timeline + replay del trabajo del sistema multi-agente en vivo. Mientras Claude trabaja, este dashboard se actualiza solo (SSE).
-
-Override de puerto: `DASHBOARD_PORT=9000 npm run dashboard`.
-
-## Paso 5 — Arrancar Claude Code
+## Paso 4 — Arrancar Claude Code
 
 Abre Claude Code en este repo. En el primer prompt, escribe:
 
@@ -65,7 +67,9 @@ Abre Claude Code en este repo. En el primer prompt, escribe:
 
 La entrevista adaptativa detecta qué tipo de proyecto vas a hacer (build / business / content / research / personal), recomienda el stack de skills opcionales que necesitas, y persiste todo en `memory/project-profile.json` + `memory/active-team.json`. Después puedes arrancar.
 
-Para captura rápida de ideas mientras trabajas, sin desviar el flujo:
+## Paso 5 — Captura rápida de ideas (opcional)
+
+Mientras trabajas, sin desviar el flujo:
 
 ```
 /idea quiero probar agregar un dashboard de cohorts de usuarios
@@ -104,7 +108,7 @@ Necesitas Python para gpt-image-2. Instálalo según tu OS (instrucciones en el 
 
 ### `no module named 'openai'`
 
-Falta el venv de Python o las dependencias. Corre `npm run setup` (incluye crear venv + instalar `openai`).
+Falta el venv de Python o las dependencias, o estás invocando el `python` del sistema en vez del intérprete del venv (donde vive `openai`). Corre `npm run setup` (incluye crear venv + instalar `openai`) y al ejecutar el wrapper usa el python del `.venv`: `.venv\Scripts\python.exe` en Windows, `.venv/bin/python` en Mac/Linux.
 
 ### `cuota OpenAI agotada o rate-limited`
 

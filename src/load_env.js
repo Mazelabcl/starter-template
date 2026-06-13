@@ -1,9 +1,11 @@
 // src/load_env.js
 // Helper para cargar `.env` idempotentemente desde scripts standalone.
 //
-// Problema: Node NO carga `.env` automáticamente al invocar `node scripts/x.js`
-// directo. Solo lo hace cuando el script corre por `npm run` (porque dotenv vive
-// en `node_modules` y package.json setea env vars). Esto rompe cuando:
+// Problema: NADIE carga `.env` automáticamente en este repo. Node no lo lee al
+// invocar `node scripts/x.js`, y `npm run` tampoco lo inyecta (no dependemos de
+// dotenv ni de ninguna otra carga automática). Por eso existe este helper: cada
+// script que necesite las keys del `.env` debe importarlo explícitamente. Esto
+// importa cuando:
 //   - Un agente lanza un script vía Bash tool.
 //   - CI/CD ejecuta scripts sin pasar por npm.
 //   - El usuario lo invoca a mano fuera de `npm run`.

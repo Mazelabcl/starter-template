@@ -321,8 +321,9 @@ export function recommendMode(type, size) {
 // alguna matchea y no está ya en el stack, agregarla como "extras" con un `why`
 // específico al contexto. Además, detectar el sub-tipo `business-with-software`.
 //
-// Keywords canónicas: están en sync con la tabla del SKILL.md. Si se agregan
-// skills al catálogo, agregar las keywords aquí Y la tabla del SKILL.md.
+// Keywords condicionales; la fuente de skills es skills-catalog.json (D9). Si se
+// agregan skills al catálogo, agregar aquí solo las que valga la pena detectar por
+// keyword (la mayoría se propone vía el razonamiento del kickoff sobre el JSON).
 
 const CATALOG_KEYWORDS = [
   {
@@ -394,6 +395,16 @@ const CATALOG_KEYWORDS = [
     skill: 'review-app',
     patterns: [/\breview-?app\b/i, /\brevisar PRs\b/i, /\bmarcar (ok|feedback)\b/i, /\bdashboard de prs\b/i],
     why: 'detecté flujo de review de PRs — `review-app` aporta interfaz HTTP para marcar OK/Feedback.',
+  },
+  {
+    skill: 'client-language',
+    patterns: [/\bcliente final\b/i, /\baudiencia no t[eé]cnica\b/i, /\bsin jerga\b/i, /\blenguaje (simple|humano|no t[eé]cnico)\b/i],
+    why: 'detecté deliverable para cliente/audiencia no técnica — `client-language` prohíbe jerga y fuerza lenguaje humano.',
+  },
+  {
+    skill: 'non-technical-cold-reader',
+    patterns: [/\bcliente final\b/i, /\baudiencia no t[eé]cnica\b/i, /\bsin jerga\b/i, /\blenguaje (simple|humano|no t[eé]cnico)\b/i],
+    why: 'detecté deliverable para audiencia no técnica — `non-technical-cold-reader` veta (NO-GO) si queda jerga técnica.',
   },
 ];
 
@@ -509,4 +520,37 @@ export function suggestInitialSprint(type, mode) {
   };
   const sprint = base[type] || base.mixed;
   return { ...sprint, mode };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CLI — para que el kickoff NO tenga que leer este archivo entero al contexto.
+//
+// Uso:
+//   node detector.js detect "<texto del usuario>"
+//   node detector.js stack  "<type>"
+//   node detector.js sprint "<type>" "<mode>"
+//
+// Imprime el JSON resultante a stdout. Determinístico, sin red, sin LLM.
+
+import { pathToFileURL } from 'node:url';
+
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  const command = process.argv[2];
+  const arg = process.argv[3];
+  let result;
+  switch (command) {
+    case 'detect':
+      result = detectSignals(arg);
+      break;
+    case 'stack':
+      result = recommendStack(arg);
+      break;
+    case 'sprint':
+      result = suggestInitialSprint(arg, process.argv[4]);
+      break;
+    default:
+      console.error('Uso: node detector.js <detect|stack|sprint> "<texto>"');
+      process.exit(1);
+  }
+  console.log(JSON.stringify(result, null, 2));
 }

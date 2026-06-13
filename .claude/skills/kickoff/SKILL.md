@@ -97,7 +97,7 @@ La intro debe leerse en menos de 20 segundos — es saludo + valor + qué viene 
 
 ## Paso 1 — detección de señales
 
-Cuando el usuario responde, aplicas la función `detectSignals(input)` definida en `.claude/skills/kickoff/detector.js`. La lógica es determinística (regex sobre el texto en minúsculas), no LLM, para que sea predecible y testeable.
+Cuando el usuario responde, **ejecuta el detector vía Bash**: `node .claude/skills/kickoff/detector.js detect "<texto del usuario>"` (y `stack <type>` / `sprint <type> <mode>` según necesites más adelante). Imprime el JSON resultante a stdout. **NO leas `detector.js` al contexto — es determinístico** (regex sobre el texto en minúsculas, sin LLM), predecible y testeable.
 
 Devuelve `{ type, size, output, confidence, evidence }`:
 
@@ -211,27 +211,6 @@ Para cada skill del catálogo que NO esté ya en el stack curado, pregúntate:
 Solo propones lo que tiene encaje real. No vuelques el catálogo entero — eso es ruido.
 
 **Caso especial — audiencia no técnica (tema recurrente #1):** si el proyecto es `business`, `content` o `marketing` Y tiene un cliente/audiencia FINAL que va a leer los deliverables (no solo devs), **propón `client-language`** (reescribe sin jerga técnica) y, si los deliverables son críticos de cara al cliente, también `non-technical-cold-reader` (gate que veta jerga antes de mostrar al cliente). Mantén la jerga técnica solo en superficies del orquestador (un `/aldo/`, READMEs internos).
-
-**Keywords canónicas (base curada del detector — el JSON las complementa con razonamiento):**
-
-| Skill catálogo | Keywords disparadoras (presentes en respuestas del usuario) |
-|---|---|
-| `superpowers-pr` | PR, pull request, code review, merge, GitHub flow, branch, master/main, repo de producción, audit de código |
-| `dual-auditor-protocol` | audit, dos auditores, doble revisión, dos modelos, código de producción, seguridad, ERP, sistema crítico |
-| `webapp-testing` | test, testing, regresión, QA, e2e, unit, integration, calidad |
-| `playwright` | playwright, navegador headless, E2E browser, visual regression |
-| `frontend-design` | landing, UI, accesibilidad, A11y, componente web, diseño visual |
-| `seo` | SEO, ranking, keywords, meta tags, schema markup, indexar Google |
-| `marketing` | copy, ad, campaña, post, newsletter, email marketing |
-| `brand-guidelines` | marca, branding, identidad visual, paleta, tono de voz |
-| `canvas-design` | SVG generativo, infografía, p5.js, three.js, visualización |
-| `pdf-skill` | generar PDF, parsear PDF, extraer texto PDF, factura PDF |
-| `xlsx` | Excel, planilla, .xlsx, Google Sheets |
-| `remotion` | video programático, lyric video, remotion, render server-side |
-| `web-artifacts-builder` | demo HTML, prototipo one-off, calculadora interactiva |
-| `review-app` | review-app, code review en HTTP, dashboard de PRs, marcar OK/Feedback, ver output de agentes |
-| `client-language` | cliente final, audiencia no técnica, sin jerga, para el cliente, presentación, propuesta, business, marketing, content |
-| `non-technical-cold-reader` | que lo entienda el cliente, veta jerga, deliverable de cliente, legibilidad no técnica |
 
 **Sub-tipo `business-with-software` (Sprint v3.1):**
 
@@ -395,12 +374,12 @@ Tip de productividad: si vas a escribir prompts largos, en Windows usa Win+H
 para dictar (macOS: doble Fn). Detalles en docs/voice-input-guide.md.
 
 Si quieres validar que el sistema arranca limpio, corre:
-node scripts/smoke-test.js   (Sprint 3.3 lo provee; si no existe aún, salta)
+npm run smoke:quick   (corre el smoke test en modo rápido, sin gastar credits reales)
 
 ¿Empezamos con el primer deliverable del sprint?
 ```
 
-Si existe el smoke test (Sprint 3.3), ofrece correrlo automáticamente. Si no, no lo menciones como bloqueo.
+Ofrece correr `npm run smoke:quick` automáticamente para validar que el sistema arranca limpio.
 
 ---
 
@@ -432,112 +411,7 @@ Si existe el smoke test (Sprint 3.3), ofrece correrlo automáticamente. Si no, n
 
 ## Ejemplos end-to-end
 
-### Escenario A — meme rápido para Instagram
-
-```
-[USUARIO clona el repo]
-KICKOFF: Hola, soy el starter template de Mazelab. Antes de empezar dime
-en una frase qué quieres construir o resolver hoy.
-
-USUARIO: necesito un meme para Instagram sobre que los lunes son lentos.
-
-[detectSignals → type=content, size=rapido, output=imagen, confidence=3]
-
-KICKOFF: Va, content rápido. Tres preguntas cortas:
-
-1. ¿Tono? (juguetón, irónico, ácido, melancólico…)
-
-USUARIO: ácido pero no agresivo, tipo Liana Finck.
-
-2. ¿Hay paleta o marca que respetar?
-
-USUARIO: no, libre.
-
-3. ¿Una sola pieza o varias?
-
-USUARIO: una sola, para hoy.
-
-KICKOFF:
-
-Esto es lo que entendí:
-
-Proyecto: Meme ácido para Instagram sobre lunes lentos.
-Tipo: content (palabras clave: "meme", "Instagram") · pieza única.
-Tamaño: rapido · Modo: rapido
-
-Stack recomendado:
-- image-gen — genera la imagen final con identity lock.
-- image-explorer — explora 3-4 variantes antes de cerrar dirección.
-- brand-guidelines — opcional, solo si más adelante quieres formalizar tu look.
-- multimodal-validation — fuerza que yo lea el PNG antes de dártelo.
-(además de las skills core: pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop, agent-template)
-
-Sprint 1 sugerido — Producir el primer artefacto creativo y validarlo con cold-reader:
-- principles.md y INDEX.md generados por kickoff
-- 1 pieza creativa (imagen/copy/post) pasada por pipeline-v2
-- Lessons del primer ciclo registradas en lessons.md
-
-¿Confirmas o ajustas algo?
-
-USUARIO: dale.
-
-[Persistencia → writeProfile, addSkill x10, addSprint]
-[Crea content/principles.md, content/INDEX.md, roadmap/roadmap.md]
-
-KICKOFF: Listo. Guardé... ¿empezamos con el meme?
-```
-
-### Escenario B — digitalizar área de ventas de empresa
-
-```
-USUARIO: voy a digitalizar el área de ventas de mi empresa, somos 4 personas y todo está en planillas.
-
-[detectSignals → type=business, size=grande, output=mixed, confidence=4]
-
-KICKOFF: Va, business grande. Cuatro preguntas:
-
-1. ¿Qué proceso concreto te duele más hoy? (lead capture, seguimiento, cotización, cierre, post-venta)
-
-USUARIO: el seguimiento. Se nos pierden leads en planillas distintas.
-
-2. ¿Tienes alguna herramienta ya en uso o partimos de cero?
-
-USUARIO: usamos Google Sheets. No queremos pagar HubSpot todavía.
-
-3. ¿Qué horizonte? (semanas, meses)
-
-USUARIO: idealmente 1 mes para tener algo usable.
-
-4. ¿Quién va a usarlo además de ti? (perfiles técnicos, no técnicos)
-
-USUARIO: yo y dos vendedores que no son técnicos.
-
-KICKOFF:
-
-Esto es lo que entendí:
-
-Proyecto: Digitalizar seguimiento de leads de ventas (4 personas, sin HubSpot).
-Tipo: business (frase: "digitalizar el área de ventas") · proceso real con usuarios.
-Tamaño: grande · Modo: profundo (varios sprints, decisiones con impacto)
-
-Stack recomendado:
-- council — decisiones de proceso tienen ángulos comerciales y técnicos a la vez.
-- pipeline-v2 — antes de proponer un cambio operativo, lo pasamos por critic + cold-reader.
-- agent-template — modelaremos roles (vendedor, follow-up, reporte) como agentes para tareas repetitivas.
-- seo-strategist — opcional, solo si después atacamos captura orgánica de leads.
-(además de las skills core)
-
-Sprint 1 sugerido — Mapear el proceso a digitalizar y proponer la primera versión:
-- principles.md y INDEX.md generados por kickoff
-- Mapa actual del proceso (estado AS-IS) en docs/
-- Propuesta TO-BE con 3 cambios concretos prioritizados
-
-¿Confirmas o ajustas?
-
-USUARIO: confirma.
-
-[Persistencia + creación de archivos]
-```
+Dos ejemplos completos del flujo (meme rápido para Instagram, digitalizar área de ventas) viven en `EXAMPLES.md` en esta misma carpeta. NO se cargan al invocar la skill — léelos solo si necesitas ver el flujo aplicado a un caso concreto.
 
 ---
 

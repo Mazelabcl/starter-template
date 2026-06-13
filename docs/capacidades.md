@@ -13,7 +13,8 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Imágenes
 
-- **gpt-image-2** (Python): `python scripts/openai_images.py generate|edit|batch …`. La skill `image-gen` lo orquesta con identity lock, refs declaradas en el prompt, y batch async.
+- **gpt-image-2** (Python): `<python-del-venv> scripts/openai_images.py generate|edit|batch …` — usa el intérprete del venv (`.venv\Scripts\python.exe` en Windows, `.venv/bin/python` en Mac/Linux), donde está instalado `openai`; el `python` del sistema no lo tiene. La skill `image-gen` lo orquesta con identity lock, refs declaradas en el prompt, y batch async.
+- **Modelos económicos vía Replicate** (`scripts/replicate_images.py --model <flux2-dev ~$0.012 | ideogram-v3 ~$0.03 | nano-banana-pro ~$0.04>`): misma firma pública (`generate_image` / `edit_image`) y mismas reglas de referencia que gpt-image-2 (D12/D13). Para iteración rápida o cuando la calidad extrema no importa. `scripts/gemini_images.py` es ruta alternativa para Nano Banana Pro.
 - **image-explorer multi-modelo** (`src/image_explorer.js`): compara mismo prompt en gpt-image-2, FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 y arma grilla HTML para elegir ganador. Útil para concept art, branding, exploración de "mano de modelo". Detalle: `src/image_explorer.README.md`.
 - **multimodal-validation** (skill): fuerza Read del PNG después de cualquier `generate_image()` / `edit_image()`. Sin esto no hay PASS.
 
@@ -64,6 +65,8 @@ Cuando algo se rompa, estos tests son el primer chequeo:
 | `npm run test:dashboard` | Server HTTP + SSE + history + helper update_state.js + modo público read-only. |
 | `npm run test:skills-catalog` | `skills-catalog.json` parsea + cubre todas las skills en disco (sin huérfanos ni faltantes). |
 | `npm run test:review-app` | review-app server: modo sprint/bloques + modo viewer. |
+| `npm run test:image-refs` | Mimetype tuples + guard mention-check "Image 1" de `openai_images.py` (D12), vía sub-proceso Python. |
+| `npm run test:image-wrappers` | Guard mention-check de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro) (D13), vía sub-proceso Python. |
 | `npm run test:roadmap-sync` | Sync `current-sprint.json` ↔ `state.json`. |
 | `npm run test:load-env` | Carga idempotente del `.env`. |
 | `node memory/test.js` | Helpers de memoria del proyecto. |

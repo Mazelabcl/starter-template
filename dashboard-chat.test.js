@@ -80,7 +80,9 @@ try {
   resetChatLog();
   serverHandle = await startServer(0);
   const port = serverHandle.port;
-  const base = `http://localhost:${port}`;
+  // 127.0.0.1 explícito: el server bindea a loopback IPv4; "localhost" puede
+  // resolver a ::1 (IPv6) en Windows y no responder.
+  const base = `http://127.0.0.1:${port}`;
 
   // --------------------- TEST 1: sanitizeChatField ---------------------
   await check('sanitizeChatField: control chars stripped + length limit', () => {

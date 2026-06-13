@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node scripts/start_dashboard.js",
     "setup": "node setup.js",
-    "setup-python": "node -e \"import('./setup.js')\" || node setup.js",
+    "setup-python": "node setup.js --python-only",
     "research": "node src/research.js",
     "test:contracts": "node contracts/test.js",
     "test:dashboard": "node dashboard-server.test.js && node dashboard-chat.test.js && node --test dashboard-public-mode.test.js",
@@ -25,8 +25,7 @@
   },
   "dependencies": {
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
-    "dotenv": "^16.4.5"
+    "ajv-formats": "^3.0.1"
   },
   "engines": {
     "node": ">=18"

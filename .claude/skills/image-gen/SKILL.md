@@ -51,8 +51,13 @@ Todos respetan la misma regla de referencias: pasar el archivo real como ref (nu
 
 ### Caso A — Imagen única sin references
 
+`openai` solo está instalado en el `.venv`. Usa el intérprete del venv, no el `python` del sistema: `.venv\Scripts\python.exe` en Windows, `.venv/bin/python` en Mac/Linux.
+
 ```bash
-python scripts/openai_images.py generate "<prompt>" "<output_path>" --quality medium
+# Windows:
+.venv\Scripts\python.exe scripts/openai_images.py generate "<prompt>" "<output_path>" --quality medium
+# Mac/Linux:
+.venv/bin/python scripts/openai_images.py generate "<prompt>" "<output_path>" --quality medium
 ```
 
 ### Caso B — Imagen con references (identity lock)
@@ -60,7 +65,10 @@ python scripts/openai_images.py generate "<prompt>" "<output_path>" --quality me
 **REGLA L3 (no negociable):** cada `Image N` que pongas en el array DEBE estar mencionada en el texto del prompt. Si no, el modelo la ignora. Esto ahora es un **guardrail real**: `edit_image` lanza `ValueError` si cargas refs y el prompt no contiene "Image 1" (regex `Image\s*1`, case-insensitive). No es solo prosa.
 
 ```bash
-python scripts/openai_images.py edit "<prompt con menciones explícitas a Image 1, 2, ...>" '["ref1.png","ref2.png"]' "<output_path>"
+# Windows:
+.venv\Scripts\python.exe scripts/openai_images.py edit "<prompt con menciones explícitas a Image 1, 2, ...>" '["ref1.png","ref2.png"]' "<output_path>"
+# Mac/Linux:
+.venv/bin/python scripts/openai_images.py edit "<prompt con menciones explícitas a Image 1, 2, ...>" '["ref1.png","ref2.png"]' "<output_path>"
 ```
 
 ## REGLA DE ORO — `images.edit` trata las references POSICIONALMENTE

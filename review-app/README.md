@@ -25,10 +25,13 @@ REVIEW_APP_DATA_DIR=/path/to/other-repo/audit node review-app/server.js
 node review-app/server.js --data-dir /path/to/other-repo/audit
 ```
 
-Custom port:
+Custom port (the server has no `--port` flag — set the env var):
 
 ```bash
+# Mac/Linux:
 REVIEW_APP_PORT=9090 node review-app/server.js
+# Windows PowerShell:
+$env:REVIEW_APP_PORT='9090'; node review-app/server.js
 ```
 
 ## Modes — sprint vs viewer

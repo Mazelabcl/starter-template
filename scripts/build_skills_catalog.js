@@ -62,8 +62,8 @@ const META = {
   'web-artifacts-builder': { when_to_use: 'Prototipos, demos, herramientas one-off: HTML+JS+CSS autocontenido en un archivo. Preguntar standalone (inline) vs server (fetch).', output: 'Archivo HTML autocontenido', status: 'stub', cost_hint: 'sin costo' },
   'webapp-testing': { when_to_use: 'Build sin estrategia de testing decidida: pirámide saludable unit/integration/E2E.', output: 'Estrategia + tests', status: 'stub', cost_hint: 'sin costo' },
   'xlsx': { when_to_use: 'Business donde el cliente vive en planillas: lectura/escritura/generación de Excel.', output: 'Archivos .xlsx o datos parseados', status: 'stub', cost_hint: 'sin costo' },
-  'client-language': { when_to_use: 'Cuando un deliverable es para CLIENTE/audiencia final (business, content, marketing), no para devs: prohíbe jerga técnica y fuerza lenguaje humano.', output: 'Texto reescrito sin jerga + glosario aplicado', status: 'v1.0', cost_hint: 'sin costo' },
-  'non-technical-cold-reader': { when_to_use: 'Gate final sobre un deliverable de cliente: veta (NO-GO) si contiene jerga técnica. Voto binario de legibilidad para no-técnicos.', output: 'Veredicto GO/NO-GO + lista de términos prohibidos detectados', status: 'v1.0', cost_hint: 'sin costo (o ~USD 0.02 si usa modelo)' },
+  'client-language': { when_to_use: 'Cuando un deliverable es para CLIENTE/audiencia final (business, content, marketing), no para devs: prohíbe jerga técnica y fuerza lenguaje humano.', output: 'Texto reescrito sin jerga + glosario aplicado', status: 'stub', cost_hint: 'sin costo' },
+  'non-technical-cold-reader': { when_to_use: 'Gate final sobre un deliverable de cliente: veta (NO-GO) si contiene jerga técnica. Voto binario de legibilidad para no-técnicos.', output: 'Veredicto GO/NO-GO + lista de términos prohibidos detectados', status: 'stub', cost_hint: 'sin costo (o ~USD 0.02 si usa modelo)' },
 };
 
 function parseFrontmatter(md) {
@@ -80,13 +80,19 @@ function parseFrontmatter(md) {
 }
 
 // Extrae triggers: si el frontmatter tiene `triggers: [...]`, parsea el array.
-// Si no, deriva de las frases entre comillas en la description (core skills).
+// Si no, deriva de las frases entre comillas en la description (core skills),
+// PERO solo del segmento posterior a la palabra 'Triggers' — así no captura
+// frases entre comillas que son parte de la explicación (ej. la "mano" del
+// modelo en image-explorer). Si no hay palabra 'Triggers', no extrae nada.
 function extractTriggers(fm) {
   if (fm && typeof fm.triggers === 'string' && fm.triggers.trim().startsWith('[')) {
     try { return JSON.parse(fm.triggers); } catch { /* fallthrough */ }
   }
   const desc = (fm && fm.description) || '';
-  const quoted = [...desc.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+  const idx = desc.search(/Triggers/i);
+  if (idx === -1) return [];
+  const triggersSegment = desc.slice(idx);
+  const quoted = [...triggersSegment.matchAll(/"([^"]+)"/g)].map(m => m[1]);
   return quoted.length ? quoted : [];
 }
 

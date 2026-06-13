@@ -10,6 +10,6 @@ El usuario quiere configurar su API key de OpenAI para usar gpt-image-2. Hazlo a
    - `https://platform.openai.com/limits` → debe listar `gpt-image-2`
 3. Cuando responda con la key, valida que empiece con "sk-proj-" (si no, advierte pero acepta)
 4. Lee el archivo `.env` (si no existe, créalo). Actualiza o agrega la línea `OPENAI_API_KEY=<key>`. NO toques otras líneas.
-5. Confirma con: "Guardado. Si Python ya está instalado, prueba con: `python scripts/openai_images.py generate \"un perro azul\" test.png --quality low`. Si Python no está, corre primero `npm run setup`."
+5. Confirma con: "Guardado. Si Python ya está instalado, prueba con el intérprete del venv (ahí está `openai`, no en el `python` del sistema): en Windows `.venv\Scripts\python.exe scripts/openai_images.py generate \"un perro azul\" test.png --quality low`; en Mac/Linux `.venv/bin/python scripts/openai_images.py generate \"un perro azul\" test.png --quality low`. Si Python no está o el venv no existe, corre primero `npm run setup`."
 
 NUNCA loguees la API key en consola ni en respuestas.

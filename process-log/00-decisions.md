@@ -16,35 +16,28 @@
 
 <!-- Las decisiones se anexan abajo a medida que aparezcan. -->
 
-## D1 — Dashboard v3 reemplazo total por pixel-art office (2026-05-11)
-**Contexto:** Dashboard v2 (kanban) no transmitía valor visual al usuario. Research deep de repos existentes (claude-office, Star-Office-UI, openclaw-virtual-office) reveló fork pesado o state shape rígido en todos.
-**Decisión:** Borrar dashboard v2 completo. Reemplazar por dashboard pixel-art "indie tech studio office" con avatares por agente, estados visuales reactivos, click → drill-down, read-only mode nativo.
-**Aplicación:** Stack 100% JS, sin sidecar Python. Build custom permite control total + valor extra: dashboard exponible público como vitrina del studio que clona el starter.
-**Reversibilidad:** baja.
+## D1 — Dashboard pixel-art office (2026-05-11)
+Superada por D8 (dashboard degradado a HTML plano). Ver historial completo en git tag `v3.1-final`.
 
 ## D2 — Sistema multi-pack de assets pixel-art (2026-05-11)
 **Contexto:** LimeZu Modern Interiors (pack premium ideal) confirmó vía devlog que ni free ni paga permiten redistribución dentro de repo open-source. Cero packs CC0 office modernos completos disponibles en OpenGameArt.
 **Decisión:** Dashboard NO empaca pack cerrado. Define interfaz de carga vía manifest JSON. Default CC0 Kenney roguelike (descargado por `npm run dashboard:assets`, NO commiteado). Consumer premium dropea pack privado en `assets/vendor/<name>/` y activa con `DASHBOARD_PACK`.
 **Aplicación:** El template define la interfaz y deja al consumer aportar el pack premium si tiene budget. Preserva libertad del template + upgrade path premium.
+**Parcialmente vigente:** el dashboard pixel-art se degradó a HTML plano (D8), pero la interfaz de pack premium (`assets-pack.schema.json`) sigue en uso.
 **Reversibilidad:** baja.
 
 ## D3 — Engine pivot a Phaser 3 (2026-05-11)
-**Contexto:** Spec v3.0 inicial usaba PixiJS v8. Research deep de Star-Office-UI reveló que Phaser 3 sin bundler funciona vía CDN ESM y aporta abstracciones nativas (Scene lifecycle, Sprite con anims declarativas, Tweens, ParticleEmitter, Camera.roundPixels) que reducen LOC vs PixiJS bajo nivel.
-**Decisión:** Phaser 3.80.1 vía `https://esm.sh/phaser@3.80.1`, no PixiJS. Render `Phaser.AUTO` (WebGL preferido, Canvas fallback). `pixelArt: true` + `scale.zoom` integer + CSS `image-rendering: pixelated`.
-**Aplicación:** Cualquier futura iteración del engine usa Phaser. PixiJS queda descartado para este caso de uso.
-**Reversibilidad:** baja.
+Superada por D8 (frontend Phaser borrado, dashboard degradado a HTML plano). Ver historial completo en git tag `v3.1-final`.
 
 ## D4 — Assets binarios NO commiteados al repo público (2026-05-11)
 **Contexto:** Packs free-to-use (LimeZu, MetroCity, Arlan_TR) carecen de licencia SPDX formal — uso final OK pero redistribución dentro de repo público abierta a interpretación. Kenney CC0 OK pero crece el repo + depende de URL upstream.
 **Decisión:** Solo `manifest.json` + `ATTRIBUTION.md` por pack default commiteado. Binarios viven en `assets/vendor/<name>/` gitignored. Script `dashboard:assets` descarga + valida SHA256 + descomprime + valida manifest con Ajv.
 **Aplicación:** Política assets-no-bundleados desacopla licencia + tamaño + permite premium-swap. Cualquier nuevo pack default sigue la misma convención.
+**Parcialmente vigente:** el dashboard pixel-art se degradó a HTML plano (D8), pero la interfaz de pack premium (`assets-pack.schema.json`) sigue en uso.
 **Reversibilidad:** baja.
 
 ## D5 — Re-priorización del dashboard a visibilidad (2026-05-11)
-**Contexto:** Aldot vio el dashboard funcionando con avatares estáticos y preguntó qué le aporta. Respuesta honesta: era decorativo. Su lista (título encima del avatar, click → prompt+plan+estado, sprint con hitos y entregables) es lo que un dashboard de control real necesita.
-**Decisión:** Pausar fase 5 (5 animaciones efímeras) → v1.1. Saltar a fase 6 EXPANDIDA + fase 7 con visibilidad real: título flotante, side panel con prompt_brief + plan_steps + current_step + artefactos, vista Sprint cruzando roadmap/current-sprint.json con state.json, vista Roadmap macro + sprints históricos. Schema task extendido con campos OPCIONALES no-breaking: `prompt_brief`, `plan_steps[]`, `current_step`, `phase`, `epic`.
-**Aplicación:** Las animaciones efímeras (`task_completed` tick, `image_generated` popup, etc.) quedan en backlog v1.1. Cualquier nuevo campo del schema task sigue el patrón "opcional, no-breaking, fallback gracioso".
-**Reversibilidad:** media.
+Superada por D8 (dashboard degradado a HTML plano). Ver historial completo en git tag `v3.1-final`.
 
 ## D6 — Subagentes NO escriben a archivos del proyecto directamente (2026-05-13)
 **Contexto:** En audit-master Sprint 1, la skill local `dual-auditor-protocol` asumía que los auditores subagentes podían hacer `Write` a `audit/findings-deep-A.md` y `audit/findings-deep-B.md`. El wrapper del runtime de Claude Code bloqueó el Write con "Subagents should return findings as text". El orquestador tuvo que recibir los findings como texto en la respuesta del subagente y persistirlos a mano. La limitación no estaba documentada en el starter.
@@ -94,3 +87,9 @@
 **Aplicación:** `scripts/gemini_images.py` (Nano Banana Pro, `gemini-3-pro-image`, inline_data base64) + `scripts/replicate_images.py` (FLUX.2 dev + Ideogram v3) nuevos. `.claude/skills/image-gen/SKILL.md` sección "Selección de modelo" (tabla + regla de presentación). `.env.example` agrega `GEMINI_API_KEY` (opcional). Test `image-wrappers.test.js` valida el guard mention-check de cada wrapper nuevo vía sub-proceso Python (sin tocar APIs ni requerir keys; skip si falta intérprete). Script `test:image-wrappers` en package.json.
 **Reversibilidad:** alta (los wrappers nuevos son aditivos; gpt-image-2 sigue siendo el default y no se tocó).
 **Addendum (2026-06-02):** Nano Banana Pro confirmado funcionando vía Replicate (`google/nano-banana-pro`), probado con 2 llamadas reales: generación simple + edición con referencia (respeta la forma). Validado multimodal. La ruta de implementación final es `scripts/replicate_images.py --model nano-banana-pro` (refs vía `image_input` como data URIs, output forzado a png), no la vía Gemini API descrita arriba.
+
+## D14 — Audit v5: 45 fixes verificados (2026-06-13)
+**Contexto:** Tras la consolidación v4 (D8) y los fixes de imágenes (D12/D13), un audit exhaustivo del starter detectó 45 oportunidades concretas en cinco frentes: tokens desperdiciados por sesión, docs desfasadas respecto a D8, fricciones de usuario novato en Windows, deshonestidad del catálogo (skills stub presentadas como maduras) e higiene de git/seguridad.
+**Decisión:** Aplicados 45 fixes verificados — recorte de tokens (quality-mindset/decisions/detector CLI), docs al día post-D8, fricciones novato Windows (python venv, npm start, PowerShell), catálogo honesto (stubs), higiene git (gitignore + dotenv muerto + bind 127.0.0.1), y oportunidades (chip costo USD, /resumen, feedback endpoint, SessionStart hook). Detalle en AUDIT-v5.html.
+**Aplicación:** Tokens (~4-5k/sesión): quality-mindset y kickoff con ejemplos movidos a EXAMPLES.md, 00-decisions condensado (D1/D3/D5 superadas por D8), detector.js con CLI, dedups de council/catálogo/pipeline. Docs al día: dashboard descrito como HTML v4 (no kanban borrado), versiones a v4.2.1, conteos de catálogo a 18, estructura con review-app/feedback.md, wrappers multi-modelo. Novato Windows: python del `.venv` en image-gen, npm start con health-check + apagado real, variantes PowerShell, setup.js (`--python-only`, placeholder, comando replicate, paths en errores). Catálogo honesto: client-language/non-technical-cold-reader a status stub, trigger 'mano' removido, detector sincronizado. Higiene: `.gitignore` (state.json, contracts/declared, runtime outputs, voice-state), dotenv dep muerta removida, servers bind 127.0.0.1, CORS restringido. Oportunidades: chip costo USD en dashboard, `/resumen` + build_resumen.js, review-app feedback endpoint, SessionStart hook.
+**Reversibilidad:** media.

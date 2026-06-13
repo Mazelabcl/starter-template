@@ -1,4 +1,4 @@
-# Starter Template Mazelab — v3
+# Starter Template Mazelab — v4.2.1
 
 Un OS personal para arrancar proyectos con Claude Code: perfil del proyecto + equipo de agentes con contratos verificables + visibilidad en vivo + memoria persistente. No es "abrir Claude Code en un repo vacío".
 
@@ -40,7 +40,7 @@ La v3 resuelve esto estructuralmente:
 
 - **Hand-off contracts** entre agentes (cada agente declara qué lee/escribe, validado contra JSON Schema antes de procesar).
 - **Memoria del proyecto** persistente (decisiones, lessons, equipo activo, sprints — viaja con el repo).
-- **Dashboard rico en vivo** (kanban + métricas + timeline + replay + export).
+- **Dashboard HTML simple en vivo** (tabla de tareas + pestañas Sprint / Roadmap / Chat en vivo vía SSE + barra de métricas).
 - **Smoke test end-to-end** (un comando te dice si el sistema completo funciona).
 - **Councils multi-modelo** (3-5 perspectivas distintas deliberan sobre decisiones complejas, con tiers de costo controlados).
 
@@ -48,7 +48,7 @@ No es marketing. Cada capacidad tiene tests, contratos verificables y costo medi
 
 ## Capacidades core
 
-Cada una se invoca desde Claude Code con sus triggers naturales. Skills viven en `.claude/skills/`.
+Cada una se invoca desde Claude Code con sus triggers naturales. Skills viven en `.claude/skills/`. Esta tabla es un resumen — la referencia on-demand completa (qué skill usar, qué test correr) vive en [`docs/capacidades.md`](docs/capacidades.md).
 
 | Capacidad | Cómo invocar | Para qué |
 |---|---|---|
@@ -65,7 +65,7 @@ Cada una se invoca desde Claude Code con sus triggers naturales. Skills viven en
 | **quality-mindset** | Auto en tareas no triviales | Disciplina mínima viable: spec → plan → ejecución → cierre validado. Sin Git formal. |
 | **confidence-loop** | "/confidence-loop", "mejora hasta 95" | Itera artefacto hasta 95+/100 (5 iteraciones máx). |
 
-Skills opcionales (16 más en `.claude/skills/_catalog/`): `superpowers-pr`, `frontend-design`, `playwright`, `webapp-testing`, `pdf-skill`, `xlsx`, `marketing`, `seo`, `remotion`, `brand-guidelines`, `canvas-design`, `web-artifacts-builder`, `skill-creator`, `superpowers-full`, `dual-auditor-protocol`, `review-app`. Se activan vía `/kickoff` según perfil del proyecto.
+Skills opcionales (18 más en `.claude/skills/_catalog/`): `superpowers-pr`, `frontend-design`, `playwright`, `webapp-testing`, `pdf-skill`, `xlsx`, `marketing`, `seo`, `remotion`, `brand-guidelines`, `canvas-design`, `web-artifacts-builder`, `skill-creator`, `superpowers-full`, `dual-auditor-protocol`, `review-app`, `client-language`, `non-technical-cold-reader`. Se activan vía `/kickoff` según perfil del proyecto.
 
 Catálogo completo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
 
@@ -96,18 +96,20 @@ starter-template/
 ├── CLAUDE.md                 (instrucciones operativas para Claude)
 ├── setup.js                  (setup interactivo — postinstall)
 ├── package.json
-├── .env.example              (OPENROUTER_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN opcional)
+├── .env.example              (OPENROUTER_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN, GEMINI_API_KEY opcional)
+├── feedback.md               (canal para reportar findings sobre el starter mismo)
 ├── .claude/
 │   ├── commands/             (slash commands: /idea, /roadmap, /council, /voz-*, /kickoff, etc.)
-│   ├── skills/               (12 skills core + _catalog/ con 14 opcionales)
+│   ├── skills/               (12 skills core + _catalog/ con 18 opcionales)
 │   └── settings.example.local.json
 ├── contracts/                (hand-off contracts: schemas + validator + helpers)
 ├── memory/                   (project-profile.json, decisions.md, lessons.md, sprint-log.md, etc.)
 ├── councils/                 (4 councils predefinidos + templates + results/)
 ├── content/                  (principles.md, INDEX.md generados por /kickoff; outputs)
 ├── roadmap/                  (roadmap.md, current-sprint.json)
-├── dashboard/                (server.js + UI rica)
-├── docs/                     (QUICKSTART.md, voice-input-guide.md, mcps-recomendados.md)
+├── dashboard/                (server.js + HTML simple de estado)
+├── review-app/               (server.js — app HTTP local para revisar output de agentes)
+├── docs/                     (QUICKSTART.md, voice-input-guide.md, mcps-recomendados.md, capacidades.md)
 ├── scripts/                  (openai_images.py, voice_tts.js, smoke_test.js, update_state.js)
 ├── src/                      (research.js, council.js, image_explorer.js, memory.js, roadmap.js, openrouter_client.js, replicate_client.js)
 └── process-log/              (00-decisions.md, v3-plan.md, findings-for-template.md)
@@ -139,7 +141,7 @@ Los 4 councils predefinidos: `creative-ideation` (Tier 1), `strategy-calls` y `m
 
 ## Cómo agrego skills opcionales
 
-El catálogo en `.claude/skills/_catalog/` tiene 14 skills disponibles. Tres formas de activar una:
+El catálogo en `.claude/skills/_catalog/` tiene 18 skills disponibles. Tres formas de activar una:
 
 1. **Vía `/kickoff`.** El árbol adaptativo recomienda skills según el tipo de proyecto detectado.
 2. **Manual.** Copia la carpeta de `_catalog/<skill>/` a `.claude/skills/<skill>/`. Claude Code la carga al reabrir.
@@ -164,19 +166,11 @@ Cuándo correrlo: antes de empezar un proyecto serio, después de rotar API keys
 
 ## Para retomar el proyecto
 
-Cuando reabres una sesión, Claude debe leer la memoria del proyecto al arranque:
+Cuando reabres una sesión, Claude lee la memoria del proyecto al arranque (`summarize()` de `src/memory.js`) y decide qué hacer según el snapshot: si no hay perfil propone `/kickoff`, si hay perfil pero faltan archivos clave continúa el kickoff, si está activo carga `decisions.md` / `lessons.md` solo cuando hace falta. El flujo completo de arranque vive en [`CLAUDE.md`](CLAUDE.md) (sección "Antes de cualquier cosa").
 
-```js
-import { summarize } from './src/memory.js';
-const snap = summarize();
-// Devuelve: has_profile, project_type, mode, agentes_count, decisiones_count, sprints_completados, paths.
-```
+Y en otro terminal: `npm run dashboard` para ver la tabla de tareas + sprint + roadmap + chat en vivo (vía SSE) con barra de métricas mientras trabajas.
 
-Si `has_profile === false` → propone `/kickoff`. Si hay perfil pero faltan archivos clave → continúa el kickoff donde se quedó. Si está activo → carga `decisions.md` / `lessons.md` solo cuando vaya a tomar decisión nueva o el usuario pregunte por contexto histórico.
-
-Y en otro terminal: `npm run dashboard` para ver kanban + métricas + timeline en vivo mientras trabajas.
-
-Detalle del modelo: [`memory/README.md`](memory/README.md).
+Detalle del modelo de memoria: [`memory/README.md`](memory/README.md).
 
 ## Productividad — input/output por voz
 
@@ -205,9 +199,11 @@ El sistema **siempre confirma costos** antes de invocar Tier 2/3 o batches grand
 
 ## Versión y changelog
 
-**v3** (2026-05) — Hand-off contracts + memoria persistente + dashboard rico + councils multi-modelo + image-explorer + voice-mode + kickoff adaptativo + roadmap + smoke test.
+**v4.2.1** (2026-06) — Consolidación v4: dashboard pixel-art degradado a HTML simple de estado (D8), `skills-catalog.json` como fuente única (D9), Brief Contract obligatorio + "Te presento al equipo" (D10), research proactivo ante claims factuales (D11), fix canónico de refs de imagen (D12) y set multi-modelo de imagen pre-configurado: gpt-image-2 + FLUX + Ideogram + Nano Banana Pro (D13).
+
+Base v3 (2026-05): hand-off contracts + memoria persistente + councils multi-modelo + image-explorer + voice-mode + kickoff adaptativo + roadmap + smoke test.
 
 Plan completo y estado de sprints: [`process-log/v3-plan.md`](process-log/v3-plan.md).
 Decisiones humanas (ley): [`process-log/00-decisions.md`](process-log/00-decisions.md).
 
-Lo que **no** entró en v3 (parqueado para v3.5/v4): Realtime API voz bidireccional, ElevenLabs como segundo TTS, router automático de modelos por tarea, memoria semántica con embeddings, app nativa Electron.
+Lo que **no** entró todavía (parqueado para más adelante): Realtime API voz bidireccional, ElevenLabs como segundo TTS, router automático de modelos por tarea, memoria semántica con embeddings, app nativa Electron.

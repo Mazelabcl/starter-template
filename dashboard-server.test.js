@@ -93,7 +93,10 @@ async function main() {
 
     // Levantamos en puerto temporal (0 = SO asigna).
     serverInfo = await startServer(0);
-    const baseUrl = `http://localhost:${serverInfo.port}`;
+    // Usamos 127.0.0.1 explícito (no "localhost") para evitar el edge case en
+    // Windows donde "localhost" resuelve a ::1 (IPv6) y el server bindeado a
+    // 127.0.0.1 no responde por esa ruta.
+    const baseUrl = `http://127.0.0.1:${serverInfo.port}`;
     // Helper apunta al puerto del server bajo test.
     const helperEnv = { DASHBOARD_PORT: String(serverInfo.port) };
 
@@ -193,7 +196,10 @@ async function main() {
     await check('OPTIONS /api/state responde CORS preflight', async () => {
       const r = await fetch(`${baseUrl}/api/state`, { method: 'OPTIONS' });
       assertEqual(r.status, 204, 'status 204');
-      assertTrue(r.headers.get('access-control-allow-origin') === '*', 'CORS *');
+      assertTrue(
+        r.headers.get('access-control-allow-origin') === 'http://localhost:7777',
+        'CORS restringido a localhost',
+      );
     });
 
     // ---------- HELPER CLI update_state.js ----------

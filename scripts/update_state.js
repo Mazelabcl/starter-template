@@ -6,7 +6,7 @@
 //   task-start    <task-id> <agent> <agent-role> <title> [files...]
 //   task-update   <task-id> <json-patch>            (v2: parche parcial sobre la tarea)
 //   task-artifact <task-id> <path> [kind] [title]   (v2: registra entregable y dispara review-worthy)
-//   task-complete <task-id> [tokens]
+//   task-complete <task-id> [tokens] [--cost-usd <n>]
 //   task-fail     <task-id> <reason>
 //   task-review-seen <task-id>                       (v2: marca como visto por humano)
 //   event         <type> <json-payload>
@@ -104,6 +104,7 @@ function emptyState() {
     events: [],
     metrics: {
       total_tokens_session: 0,
+      total_cost_usd_session: 0,
       tasks_completed: 0,
       tasks_failed: 0,
       councils_invoked: 0,
@@ -355,9 +356,29 @@ function cmdTaskStart(args) {
   return state;
 }
 
+// Separa el flag opcional --cost-usd <n> de los positionals [tokens]. El positional
+// sigue funcionando igual que antes (back-compat). --cost-usd suma a la métrica de
+// costo de APIs externas (OpenRouter/Replicate); NO cubre los tokens de Claude Code.
+function extractTaskCompleteFlags(rawArgs) {
+  const positionals = [];
+  let costUsd = null;
+  for (let i = 0; i < rawArgs.length; i++) {
+    const a = rawArgs[i];
+    if (a === '--cost-usd') {
+      const v = rawArgs[i + 1]; i += 1;
+      const n = parseFloat(v);
+      if (Number.isFinite(n) && n >= 0) costUsd = n;
+    } else {
+      positionals.push(a);
+    }
+  }
+  return { positionals, costUsd };
+}
+
 function cmdTaskComplete(args) {
-  const [taskId, tokensRaw] = args;
-  if (!taskId) fail('uso: task-complete <task-id> [tokens]');
+  const { positionals, costUsd } = extractTaskCompleteFlags(args);
+  const [taskId, tokensRaw] = positionals;
+  if (!taskId) fail('uso: task-complete <task-id> [tokens] [--cost-usd <n>]');
   const tokens = tokensRaw ? parseInt(tokensRaw, 10) : 0;
   if (Number.isNaN(tokens)) fail('tokens debe ser un entero');
   const state = readState();
@@ -368,8 +389,11 @@ function cmdTaskComplete(args) {
   task.tokens_estimated = (task.tokens_estimated || 0) + tokens;
   state.metrics.tasks_completed = (state.metrics.tasks_completed || 0) + 1;
   state.metrics.total_tokens_session = (state.metrics.total_tokens_session || 0) + tokens;
+  if (costUsd !== null) {
+    state.metrics.total_cost_usd_session = (state.metrics.total_cost_usd_session || 0) + costUsd;
+  }
   refreshReviewWorthy(task, state);
-  pushEvent(state, 'task_completed', { id: taskId, tokens });
+  pushEvent(state, 'task_completed', { id: taskId, tokens, cost_usd: costUsd });
   return state;
 }
 
@@ -608,7 +632,7 @@ function printUsage() {
   console.error('  node scripts/update_state.js task-update      <task-id> <json-patch>');
   console.error('  node scripts/update_state.js task-artifact    <task-id> <path> [kind] [title]');
   console.error('  node scripts/update_state.js task-review-seen <task-id>');
-  console.error('  node scripts/update_state.js task-complete    <task-id> [tokens]');
+  console.error('  node scripts/update_state.js task-complete    <task-id> [tokens] [--cost-usd <n>]');
   console.error('  node scripts/update_state.js task-fail        <task-id> <reason>');
   console.error('  node scripts/update_state.js event            <type> <json-payload>');
   console.error('  node scripts/update_state.js skill-add        <skill-name>');

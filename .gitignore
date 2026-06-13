@@ -31,3 +31,25 @@ review-app/audit/reviews/
 
 # 00-decisions.md sí va al template — es ley canónica
 !process-log/00-decisions.md
+
+# Higiene — runtime state que el código recrea solo (no va al repo)
+dashboard/state.json
+memory/voice-mode-state.json
+
+# Contracts declarados en runtime — solo el .gitkeep va al template
+contracts/declared/*.json
+!contracts/declared/.gitkeep
+
+# Councils results — generados en runtime; solo el .gitkeep va al template
+councils/results/*.json
+!councils/results/.gitkeep
+
+# Exploraciones de imágenes (outputs efímeros del proyecto consumer)
+content/explorations/
+
+# Caché local
+.cache/
+
+# Imágenes de prueba sueltas que dejan algunos scripts en la raíz
+/output.png
+/edited.png

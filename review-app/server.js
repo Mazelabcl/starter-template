@@ -36,6 +36,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const PUBLIC_DIR = join(__dirname, 'public');
 const PORT = parseInt(process.env.REVIEW_APP_PORT || '7788', 10);
+// Por defecto la review-app solo escucha en loopback (127.0.0.1) — NO en todas
+// las interfaces. Para exponerla a la LAN (opt-in consciente), setea
+// REVIEW_APP_HOST=0.0.0.0 (o la IP de la interfaz deseada). Sin esa env var, no
+// es alcanzable desde otras máquinas de la red.
+const HOST = process.env.REVIEW_APP_HOST || '127.0.0.1';
 
 const SPRINT_DIR_RE = /^sprint(\d+)-prs$/;
 const BLOQUE_FILE_RE = /^bloque-(\d+)-.+\.md$/;
@@ -329,6 +334,56 @@ function upsertDecision(sprintNumber, bloqueNumber, testIndex, status, comment, 
   return review;
 }
 
+// Recorre <DATA_DIR>/reviews/sprint<N>/bloque-<M>.json y devuelve TODAS las
+// decisiones con status='feedback' aplanadas como
+// [{ sprint, bloque, test_index, comment, reviewed_at }]. Reutilizable fuera del
+// endpoint (export). Degrada con gracia: si no existe reviews/ devuelve []. No
+// rompe ante archivos JSON corruptos — los salta.
+const REVIEW_SPRINT_DIR_RE = /^sprint(\d+)$/;
+const REVIEW_BLOQUE_FILE_RE = /^bloque-(\d+)\.json$/;
+
+export function listPendingFeedback(dataDir = DATA_DIR) {
+  const reviewsDir = join(dataDir, 'reviews');
+  if (!existsSync(reviewsDir)) return [];
+  const out = [];
+  let sprintEntries = [];
+  try { sprintEntries = readdirSync(reviewsDir, { withFileTypes: true }); } catch { return []; }
+  for (const sEntry of sprintEntries) {
+    if (!sEntry.isDirectory()) continue;
+    const sm = REVIEW_SPRINT_DIR_RE.exec(sEntry.name);
+    if (!sm) continue;
+    const sprint = parseInt(sm[1], 10);
+    const sprintDir = join(reviewsDir, sEntry.name);
+    let bloqueEntries = [];
+    try { bloqueEntries = readdirSync(sprintDir, { withFileTypes: true }); } catch { continue; }
+    for (const bEntry of bloqueEntries) {
+      if (!bEntry.isFile()) continue;
+      const bm = REVIEW_BLOQUE_FILE_RE.exec(bEntry.name);
+      if (!bm) continue;
+      const bloque = parseInt(bm[1], 10);
+      let review;
+      try {
+        review = JSON.parse(readFileSync(join(sprintDir, bEntry.name), 'utf8'));
+      } catch {
+        continue; // archivo corrupto: lo saltamos, no rompemos el listado entero.
+      }
+      const decisions = Array.isArray(review && review.decisions) ? review.decisions : [];
+      for (const d of decisions) {
+        if (!d || d.status !== 'feedback') continue;
+        out.push({
+          sprint,
+          bloque,
+          test_index: d.test_index,
+          comment: typeof d.comment === 'string' ? d.comment : '',
+          reviewed_at: review.reviewed_at || null,
+        });
+      }
+    }
+  }
+  out.sort((a, b) => (a.sprint - b.sprint) || (a.bloque - b.bloque) || (a.test_index - b.test_index));
+  return out;
+}
+
 // ---- HTTP --------------------------------------------------------------------
 
 const MIME = {
@@ -339,8 +394,11 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8',
 };
 
+// CORS restringido a orígenes locales. La review-app es una herramienta de
+// desarrollo loopback; no necesita exponerse a orígenes cross-site arbitrarios.
+const ALLOWED_ORIGIN = process.env.REVIEW_APP_ORIGIN || 'http://localhost:7788';
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -405,6 +463,9 @@ async function handleRequest(req, res) {
     }
     if (method === 'GET' && path === '/api/sprints') {
       return sendJSON(res, 200, listSprints());
+    }
+    if (method === 'GET' && path === '/api/feedback/pending') {
+      return sendJSON(res, 200, listPendingFeedback());
     }
     // ---- Viewer mode (A1) ----
     if (method === 'GET' && path === '/api/viewer/files') {
@@ -503,10 +564,10 @@ export function startServer(port = PORT) {
   const server = http.createServer(handleRequest);
   return new Promise((resolveP, rejectP) => {
     server.on('error', rejectP);
-    server.listen(port, () => {
+    server.listen(port, HOST, () => {
       const addr = server.address();
       const real = typeof addr === 'object' && addr ? addr.port : port;
-      console.log(`[review-app] escuchando en http://localhost:${real}`);
+      console.log(`[review-app] escuchando en http://${HOST}:${real}`);
       console.log(`[review-app] data dir: ${DATA_DIR}`);
       console.log(`[review-app] sprints detectados: ${listSprints().length}`);
       resolveP({ server, port: real });

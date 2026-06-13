@@ -69,12 +69,14 @@ Si solo cumple 1, probablemente no necesitas council. Si cumple 3+, casi seguro 
 
 ## Sección 2 — Selección del council apropiado
 
-| Tipo de pregunta | Council | Tier | Costo aprox |
-|---|---|---|---|
-| Naming, ideación creativa, brainstorming, copy, taglines | `creative-ideation` | 1 | USD 0.02–0.10 |
-| Decisiones de arquitectura técnica, código, sistemas, esquema de datos | `architecture-decision` | 3 | USD 0.80–2.50 |
-| Decisiones de negocio, estrategia, pricing, timing, posicionamiento, build vs buy | `strategy-calls` | 2 | USD 0.15–0.60 |
-| Decisiones específicas del proyecto Mazelab (multi-proyecto, comunidad, pareja) | `mazelab-council` | 2 | USD 0.15–0.60 |
+Esta tabla unifica selección de council, tier, costo y política de confirmación (la sección 4 ya no repite los costos — apunta aquí):
+
+| Tipo de pregunta | Council | Tier | Costo aprox | Política de confirmación |
+|---|---|---|---|---|
+| Naming, ideación creativa, brainstorming, copy, taglines | `creative-ideation` | 1 | USD 0.02–0.10 | Procede sin confirmación adicional si ya confirmó al proponer (paso 1). |
+| Decisiones de negocio, estrategia, pricing, timing, posicionamiento, build vs buy | `strategy-calls` | 2 | USD 0.15–0.60 | Confirmación rápida: "Tier 2, costo aprox USD X. ¿Procedo?". |
+| Decisiones específicas del proyecto Mazelab (multi-proyecto, comunidad, pareja) | `mazelab-council` | 2 | USD 0.15–0.60 | Confirmación rápida: "Tier 2, costo aprox USD X. ¿Procedo?". |
+| Decisiones de arquitectura técnica, código, sistemas, esquema de datos | `architecture-decision` | 3 | USD 0.80–2.50 | Confirmación explícita con justificación de por qué Tier 3. |
 
 ### Cómo elegir cuando hay ambigüedad
 
@@ -174,11 +176,7 @@ NO persistas si el usuario solo está leyendo la síntesis y aún no se decide. 
 
 ## Sección 4 — Confirmación de costo
 
-| Tier | Costo aprox | Política de confirmación |
-|---|---|---|
-| 1 | USD 0.02–0.10 | Procede sin confirmación adicional si ya confirmó al proponer en paso 1. |
-| 2 | USD 0.15–0.60 | Confirmación rápida: "Tier 2, costo aprox USD <X>. ¿Procedo?". |
-| 3 | USD 0.80–2.50 | Confirmación explícita con justificación: "Esta es decisión Tier 3 porque <razón>: <difícilmente reversible / arquitectura crítica / etc>. Costo aprox USD <X>. ¿Procedo?". |
+La política de confirmación por tier está en la tabla unificada de la sección 2 (tier 1: procede si ya confirmó; tier 2: confirmación rápida; tier 3: confirmación explícita con justificación de por qué Tier 3).
 
 **Regla dura:** nunca asumas que el usuario quiere gastar. Si el costo estimado es alto y la decisión no es claramente Tier 3, ofrece bajar de tier ("Esto puede correrse como Tier 2 si prefieres ahorrar; Tier 3 te da confidence loop sobre la síntesis").
 
@@ -261,14 +259,7 @@ Si la pregunta no calza con los 4 predefinidos y el usuario quiere uno custom:
 1. Detecta: pregunta factual con respuesta clara (LTS actual). NO hay tradeoffs reales que ameriten council.
 2. NO se activa. Responde directo (con un solo modelo): "Node 22 LTS hasta abril 2027. Si prefieres conservador, Node 20 LTS hasta abril 2026. Para proyectos nuevos, Node 22."
 
-### Ejemplo D — Council custom
-
-**Usuario:** "Quiero un council para revisar el copy de mi landing page con 3 voces: un copywriter directo tipo Ogilvy, una experta en conversión tipo Joanna Wiebe, y un usuario representativo de mi target."
-
-**Skill:**
-1. No hay council predefinido que calce — `creative-ideation` está cerca pero las voces no son específicas de copy.
-2. Confirma: "No tengo council de copy review. ¿Lo creas custom? Te puedo armar `councils/copy-review.json` con esas 3 voces. Tarda ~5 min y queda guardado para futuros copy reviews."
-3. Usuario aprueba. Skill copia template, customiza las 3 personas con `actua_como` específicos, define `rounds.round1` (Tier 1 alcanza para copy review), guarda, valida con `councils-config.test.js`, e invoca.
+(El flujo de council custom — cuando ninguno de los 4 predefinidos calza — está cubierto en la sección 5.)
 
 ---
 

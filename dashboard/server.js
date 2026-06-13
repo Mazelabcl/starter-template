@@ -40,6 +40,11 @@ const HISTORY_LOG = join(HISTORY_DIR, 'events.log');
 const CHAT_LOG_PATH = join(__dirname, 'chat-log.jsonl');
 const CONTRACTS_DIR = join(REPO_ROOT, 'contracts', 'declared');
 const PORT = parseInt(process.env.DASHBOARD_PORT || '7777', 10);
+// Por defecto el dashboard solo escucha en loopback (127.0.0.1) — NO en todas las
+// interfaces. Para exponerlo a la LAN (opt-in consciente), setea
+// DASHBOARD_HOST=0.0.0.0 (o la IP de la interfaz deseada). Sin esa env var, el
+// dashboard no es alcanzable desde otras máquinas de la red.
+const HOST = process.env.DASHBOARD_HOST || '127.0.0.1';
 const HISTORY_LIMIT = 100;
 const CHAT_HISTORY_LIMIT = 200;
 
@@ -299,8 +304,12 @@ function buildSnapshot() {
 
 // ---------- HTTP helpers ----------
 
+// CORS restringido a orígenes locales. El dashboard es una herramienta de
+// desarrollo loopback; no necesita exponerse a orígenes cross-site arbitrarios.
+// Si en el futuro hace falta un origen específico, agrégalo a esta lista.
+const ALLOWED_ORIGIN = process.env.DASHBOARD_ORIGIN || 'http://localhost:7777';
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
@@ -550,7 +559,7 @@ function readSprintFile() {
 // ---------- /api/roadmap ----------
 // Devuelve { markdown: <contenido literal de roadmap/roadmap.md> }. Si no existe,
 // retorna { markdown: "" } con 200. El frontend lo renderiza con un mini-parser
-// XSS-safe (textContent-only) en panel.js — no servimos HTML pre-renderizado.
+// XSS-safe (textContent-only) en public/app.js — no servimos HTML pre-renderizado.
 const ROADMAP_MD_PATH = join(REPO_ROOT, 'roadmap', 'roadmap.md');
 
 function readRoadmapMarkdown() {
@@ -835,10 +844,10 @@ export function startServer(port = PORT) {
   const server = http.createServer(handleRequest);
   return new Promise((resolveP, rejectP) => {
     server.on('error', rejectP);
-    server.listen(port, () => {
+    server.listen(port, HOST, () => {
       const addr = server.address();
       const realPort = typeof addr === 'object' && addr ? addr.port : port;
-      console.log(`[dashboard] escuchando en http://localhost:${realPort}`);
+      console.log(`[dashboard] escuchando en http://${HOST}:${realPort}`);
       console.log(`[dashboard] state: ${STATE_PATH}`);
       console.log(`[dashboard] public: ${PUBLIC_DIR}`);
       resolveP({ server, port: realPort });

@@ -112,8 +112,12 @@ function renderMetrics() {
   if (!bar) return;
   clear(bar);
   const m = (lastSnapshot && lastSnapshot.metrics) || {};
+  // "USD APIs" cubre solo costo de APIs externas (OpenRouter/Replicate), NO los
+  // tokens de Claude Code. Etiqueta explícita para no confundir el alcance.
+  const costUsd = Number.isFinite(m.total_cost_usd_session) ? m.total_cost_usd_session : 0;
   const pairs = [
     ['Tokens', fmtTokens(m.total_tokens_session)],
+    ['USD APIs', `$${costUsd.toFixed(2)}`],
     ['Done', String(m.tasks_completed || 0)],
     ['Failed', String(m.tasks_failed || 0)],
     ['Councils', String(m.councils_invoked || 0)],

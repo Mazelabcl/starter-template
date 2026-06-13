@@ -82,8 +82,9 @@ API_BASE = "https://api.replicate.com/v1"
 def _token():
     tok = os.environ.get("REPLICATE_API_TOKEN")
     if not tok:
+        env_path = Path(__file__).resolve().parent.parent / ".env"
         raise RuntimeError(
-            "Falta REPLICATE_API_TOKEN. Configúralo en .env:\n"
+            f"Falta REPLICATE_API_TOKEN. Edita {env_path} y agrega:\n"
             "  REPLICATE_API_TOKEN=r8_...\n"
             "Sácalo en https://replicate.com/account/api-tokens"
         )

@@ -106,14 +106,20 @@ function upsertEnv(key, value) {
 
 async function maybeAskKey(label, envKey, prefix, url) {
   const existing = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, 'utf8').match(new RegExp(`^${envKey}=(.+)$`, 'm'))?.[1] : null;
-  if (existing && existing !== `${prefix}pega-aqui-tu-key`) {
+  // Tratamos como placeholder cualquier valor que matchee los textos de ejemplo de
+  // .env.example (incl. `optional-pega-aqui-tu-key`), no solo el string exacto.
+  const isPlaceholder = (v) => /pega-aqui-tu-key|^placeholder$|your-?key-?here|^optional-/i.test(v);
+  if (existing && !isPlaceholder(existing)) {
     const ans = (await ask(`${label} ya configurada. ¿Reemplazar? [y/N]: `)).trim().toLowerCase();
     if (ans !== 'y' && ans !== 'yes') return;
   }
   log(`Sácala en: ${url}`);
   log(`Formato esperado: ${prefix}...`);
   const key = (await ask(`Pega tu ${label} (Enter para saltar): `)).trim();
-  if (!key) { log(`Saltada — podrás configurarla después con /setup-${envKey.toLowerCase().replace('_api_key','').replace('_','-')}.`); return; }
+  if (!key) {
+    log(`Saltada — para configurarla después, vuelve a correr npm run setup, o edita .env y agrega ${envKey}=${prefix}...`);
+    return;
+  }
   if (!key.startsWith(prefix)) {
     log(`Aviso: la key no empieza con "${prefix}". Continuando igual.`);
   }
@@ -132,24 +138,30 @@ async function maybeAskKey(label, envKey, prefix, url) {
     if (!existsSync(d)) mkdirSync(d, { recursive: true });
   }
 
-  // 1. OpenRouter (Perplexity research)
-  header('1. OpenRouter API key (research vía Perplexity)');
-  await maybeAskKey('OpenRouter API key', 'OPENROUTER_API_KEY', 'sk-or-v1-', 'https://openrouter.ai/keys');
+  // --python-only: saltamos los prompts de keys (pasos 1-3) y corremos solo el
+  // setup de Python (paso 4). Lo usa `npm run setup-python`.
+  const pythonOnly = process.argv.includes('--python-only');
 
-  // 2. OpenAI (gpt-image-2)
-  header('2. OpenAI API key (gpt-image-2 para imágenes)');
-  log('Antes verifica en https://platform.openai.com/settings/organization/general');
-  log('que tu org diga: Individual Approved + Business Approved.');
-  log('Y en https://platform.openai.com/limits que aparezca gpt-image-2.\n');
-  await maybeAskKey('OpenAI API key', 'OPENAI_API_KEY', 'sk-proj-', 'https://platform.openai.com/api-keys');
+  if (!pythonOnly) {
+    // 1. OpenRouter (Perplexity research)
+    header('1. OpenRouter API key (research vía Perplexity)');
+    await maybeAskKey('OpenRouter API key', 'OPENROUTER_API_KEY', 'sk-or-v1-', 'https://openrouter.ai/keys');
 
-  // 3. Replicate (opcional, para image-explorer multi-modelo)
-  header('3. Replicate API token (OPCIONAL — image-explorer multi-modelo)');
-  log('Da acceso a FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 con UNA SOLA key.');
-  log('Sin esto, image-explorer queda con solo gpt-image-2 disponible.');
-  log('Si vas a hacer concept art, branding o exploraciones de "mano de modelo" → conviene.');
-  log('Si solo vas a usar gpt-image-2 → puedes saltarlo (Enter).\n');
-  await maybeAskKey('Replicate API token', 'REPLICATE_API_TOKEN', 'r8_', 'https://replicate.com/account/api-tokens');
+    // 2. OpenAI (gpt-image-2)
+    header('2. OpenAI API key (gpt-image-2 para imágenes)');
+    log('Antes verifica en https://platform.openai.com/settings/organization/general');
+    log('que tu org diga: Individual Approved + Business Approved.');
+    log('Y en https://platform.openai.com/limits que aparezca gpt-image-2.\n');
+    await maybeAskKey('OpenAI API key', 'OPENAI_API_KEY', 'sk-proj-', 'https://platform.openai.com/api-keys');
+
+    // 3. Replicate (opcional, para image-explorer multi-modelo)
+    header('3. Replicate API token (OPCIONAL — image-explorer multi-modelo)');
+    log('Da acceso a FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 con UNA SOLA key.');
+    log('Sin esto, image-explorer queda con solo gpt-image-2 disponible.');
+    log('Si vas a hacer concept art, branding o exploraciones de "mano de modelo" → conviene.');
+    log('Si solo vas a usar gpt-image-2 → puedes saltarlo (Enter).\n');
+    await maybeAskKey('Replicate API token', 'REPLICATE_API_TOKEN', 'r8_', 'https://replicate.com/account/api-tokens');
+  }
 
   // 4. Python
   header('4. Python (para gpt-image-2)');

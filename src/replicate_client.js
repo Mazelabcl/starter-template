@@ -15,8 +15,12 @@
 // estilo de mensajes en español neutro, mismo patrón de validación de key.
 
 import { writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(__dirname, '..');
 
 // =============================================================================
 // Config
@@ -31,7 +35,7 @@ function getApiKey() {
   const key = process.env.REPLICATE_API_TOKEN;
   if (!key) {
     throw new ReplicateError(
-      'Falta REPLICATE_API_TOKEN. Corre `npm run setup` y configura tu token de https://replicate.com/account/api-tokens.',
+      `Falta REPLICATE_API_TOKEN. Edita ${resolve(REPO_ROOT, '.env')} (o corre \`npm run setup\`) y agrega tu token de https://replicate.com/account/api-tokens.`,
       { status: 0, code: 'no_api_key' },
     );
   }

@@ -49,7 +49,7 @@ after(async () => {
 });
 
 test('POST /api/state retorna 403 con DASHBOARD_PUBLIC=1', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, {
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active_skills: ['x'] }),
@@ -60,7 +60,7 @@ test('POST /api/state retorna 403 con DASHBOARD_PUBLIC=1', async () => {
 });
 
 test('PUT /api/state retorna 403', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, {
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, {
     method: 'PUT',
     body: '{}',
   });
@@ -68,7 +68,7 @@ test('PUT /api/state retorna 403', async () => {
 });
 
 test('PATCH /api/state retorna 403', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, {
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, {
     method: 'PATCH',
     body: '{}',
   });
@@ -76,25 +76,25 @@ test('PATCH /api/state retorna 403', async () => {
 });
 
 test('DELETE /api/state retorna 403', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, {
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, {
     method: 'DELETE',
   });
   assert.strictEqual(r.status, 403);
 });
 
 test('GET /api/state retorna 200 (whitelist)', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`);
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`);
   assert.strictEqual(r.status, 200);
   const j = await r.json();
   assert.ok(typeof j.session_id === 'string');
 });
 
 test('HEAD /api/state retorna 200 o 204 (no 403)', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, { method: 'HEAD' });
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, { method: 'HEAD' });
   assert.ok(r.status === 200 || r.status === 204, `status ${r.status}`);
 });
 
 test('OPTIONS /api/state retorna 200 o 204', async () => {
-  const r = await fetch(`http://localhost:${serverPort}/api/state`, { method: 'OPTIONS' });
+  const r = await fetch(`http://127.0.0.1:${serverPort}/api/state`, { method: 'OPTIONS' });
   assert.ok(r.status === 200 || r.status === 204, `status ${r.status}`);
 });

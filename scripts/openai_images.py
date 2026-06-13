@@ -44,17 +44,21 @@ FALLBACK_MODEL = "gpt-image-2-2026-04-21"
 DEFAULT_CONCURRENCY = int(os.environ.get("OPENAI_IMAGE_CONCURRENCY", "8"))
 
 
+def _env_path():
+    return Path(__file__).resolve().parent.parent / ".env"
+
+
 def _client():
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("Falta OPENAI_API_KEY. Corre: npm run setup")
+        raise RuntimeError(f"Falta OPENAI_API_KEY. Edita {_env_path()} (o corre: npm run setup).")
     return OpenAI(api_key=key)
 
 
 def _async_client():
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
-        raise RuntimeError("Falta OPENAI_API_KEY. Corre: npm run setup")
+        raise RuntimeError(f"Falta OPENAI_API_KEY. Edita {_env_path()} (o corre: npm run setup).")
     return AsyncOpenAI(api_key=key)
 
 

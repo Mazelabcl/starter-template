@@ -11,7 +11,7 @@
     "license":     { "type": "string", "enum": ["CC0-1.0", "CC-BY-3.0", "CC-BY-4.0", "CC-BY-SA-3.0", "CC-BY-SA-4.0", "OGA-BY-3.0", "MIT"] },
     "attribution": { "type": "string", "minLength": 1 },
     "source_url":  { "type": "string", "format": "uri" },
-    "source_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA256 esperado del ZIP fuente; fetch_default_pack.js valida post-download" },
+    "source_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "SHA256 esperado del ZIP fuente; el consumer lo valida con su propio tooling (p. ej. Ajv vía contracts/validator.js)" },
     "tile_size":   { "type": "integer", "enum": [16, 32, 48] },
     "scale":       { "type": "integer", "minimum": 1, "maximum": 4 },
     "tilesets": {

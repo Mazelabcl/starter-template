@@ -25,6 +25,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/session_brief.js\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

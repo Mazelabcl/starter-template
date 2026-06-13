@@ -50,7 +50,7 @@ Cada capa declara: qué input espera, qué contrato valida al consumirlo, qué o
 2. Si `has_profile === false` → frenar y proponer `/kickoff` antes de continuar.
 3. Si `decisiones_count > 0` y la tarea pisa terreno donde puede haber decisiones previas → leer `memory/decisions.md` literal.
 4. Si `lecciones_count > 0` y la tarea es del mismo dominio que alguna lección registrada → leer `memory/lessons.md` literal.
-5. Leer `process-log/00-decisions.md` (decisiones humanas, son ley).
+5. Si `process-log/00-decisions.md` no está ya en contexto, leerlo (decisiones humanas, son ley). Cita las decisiones por ID (D3, D6...), no cargues el archivo entero en briefs.
 6. Mirar la tabla de `INDEX.md` y cargar **solo** los archivos listados como obligatorios + los aplicables. No el repo entero.
 7. **Sumar al bundle el perfil + company.md (D10).** Lee `memory/project-profile.json` y extrae solo `project_type`, `mode`, `description`, `owner` (no el archivo entero). Lee `docs/company.md` **solo si tiene contenido real** (no los placeholders del template `(describe en 2-3 líneas)`). Estos dos van al context bundle para que todo brief tenga el norte del proyecto sin que el agente lo asuma. El mecanismo de inyección ya existe (principles literal + INDEX); esto solo amplía las fuentes.
 
@@ -185,38 +185,7 @@ Cada transición entre capas pasa por dos puntos de validación:
 
 Ambos lanzan `ContractViolation` (extiende `Error`) con mensajes legibles que indican agente, schema, path y el campo específico que falló.
 
-### Ejemplo concreto: architect → critic
-
-```js
-import { emitOutput, consumeInput, ContractViolation } from '../contracts/helpers.js';
-
-// Architect produce el output
-const proposal = {
-  agent: 'architect-pax',
-  model: 'claude-opus-4-7',
-  produced_at: new Date().toISOString(),
-  artifact_kind: 'capitulo',
-  title: 'Cap 03 — El Espejo',
-  sections: [
-    { id: 's1', heading: 'Apertura', intent: 'tono y locación' },
-    { id: 's2', heading: 'Conflicto', intent: 'detonante', depends_on: ['s1'] },
-  ],
-};
-
-// Validación al emitir — si falta `title` o `sections`, no escribe nada
-emitOutput('architect-pax', 'architect-output', proposal, 'content/architect/cap03.json');
-
-// El critic re-valida al consumir
-try {
-  const consumed = consumeInput('critic-pax', 'architect-output', 'content/architect/cap03.json');
-  // proceder con el critic usando `consumed`
-} catch (e) {
-  if (e instanceof ContractViolation) {
-    // hand-off rompió: ver "Manejo de fallos contractuales" abajo
-  }
-  throw e;
-}
-```
+Ejemplo copy-pasteable de `emitOutput`/`consumeInput` + manejo de `ContractViolation`: `contracts/README.md` §1.
 
 ### Tabla de hand-offs del pipeline
 

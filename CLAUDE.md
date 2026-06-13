@@ -2,7 +2,7 @@
 
 Este es el starter de Aldot. Cada nuevo proyecto se clona desde acá. Cualquier persona novata debe poder arrancar sin fricción.
 
-Versión: **v3**. Diferencias clave vs v2: hand-off contracts entre agentes, memoria persistente del proyecto (separada de la global del usuario), dashboard en vivo, councils multi-modelo, image-explorer, voice-mode TTS, kickoff adaptativo, roadmap con `/idea`. Detalle: `process-log/v3-plan.md`.
+Versión: **v4.2.1** (2026-06). Diferencias clave vs v2: hand-off contracts entre agentes, memoria persistente del proyecto (separada de la global del usuario), dashboard en vivo, councils multi-modelo, image-explorer, voice-mode TTS, kickoff adaptativo, roadmap con `/idea`. Detalle: `process-log/v3-plan.md`.
 
 ## Antes de cualquier cosa
 
@@ -12,7 +12,7 @@ Cada vez que se abre el proyecto:
    - **Si `has_profile === false`** → propone `/kickoff`. La entrevista adaptativa detecta tipo de proyecto (build / business / content / research / personal), recomienda stack, persiste `project-profile.json` + `active-team.json`.
    - **Si hay profile pero falta `active-team.json` o `roadmap/current-sprint.json`** → continúa el kickoff donde se quedó.
    - **Si el proyecto ya está activo** → solo cargar `decisions.md` y `lessons.md` cuando vayas a tomar decisión nueva o el usuario pregunte por contexto histórico. No los cargues por inercia.
-2. **Si las API keys faltan** (no hay `.env` con `OPENROUTER_API_KEY` o `OPENAI_API_KEY`) → sugiere `npm run setup` o los slash `/setup-openrouter` / `/setup-openai`. `REPLICATE_API_TOKEN` es opcional, solo si vas a usar `image-explorer`.
+2. **Si las API keys faltan** (no hay `.env` con `OPENROUTER_API_KEY` o `OPENAI_API_KEY`) → sugiere `npm run setup` o los slash `/setup-openrouter` / `/setup-openai`. `REPLICATE_API_TOKEN`: requerido para `image-explorer` Y para los modelos económicos de `image-gen` (FLUX, Ideogram, Nano Banana Pro). Opcional solo si usas únicamente gpt-image-2.
 3. **Lee `process-log/00-decisions.md`** — son decisiones humanas (ley). Cualquier output que las contradiga, frena.
 4. **Lee `docs/company.md`** si tiene contenido — es el contexto de la empresa del usuario.
 5. **Sugiere levantar el dashboard** en otro terminal: `npm run dashboard`. Da visibilidad en vivo de tareas activas, eventos, métricas y hand-offs validados.
@@ -109,13 +109,12 @@ Paralelo cuando sea independiente. Secuencial cuando uno alimenta al otro. Si du
 
 ## Modelo operativo (pipeline v2)
 
-1. **Capa 0 — `content/principles.md` literal al tope de cada brief.** No resumido. Si no existe → `/kickoff` primero. El context bundle suma también un extracto del perfil (`memory/project-profile.json`: tipo/modo/descripción/owner) + `docs/company.md` si tiene contenido real.
-2. **Capa 0.5 — `content/INDEX.md` decide qué cargar.** No el repo entero. Más memoria del proyecto si aplica (decisions, lessons relevantes).
-3. **Capa 0.7 — "Te presento al equipo" (D10, experimental).** Para tareas compuestas (2+ agentes), ANTES de delegar el orquestador presenta el equipo al usuario: por cada agente, rol + experiencia, objetivo (1-3), pasos clave y resumen del contexto inyectado. Espera OK o ajuste. Para un solo agente trivial, se salta. Por terminal por ahora; HTML futuro. Puede removerse si no aporta.
-4. **Capa 1 — Architect** crea el deliverable. **Brief Contract obligatorio (D10):** ningún agente se lanza sin (1) rol profundo —no "experto en X" sino "experto en X que hizo Y para Z"—, (2) objetivo verificable 1-3, (3) contexto inyectado (principles literal + perfil + decisiones por ID + company.md), (4) no-goals, (5) formato de salida, (6) recordatorio D6. Declara su contract. **Emite output validado** (`emitOutput`).
-5. **Capa 2 — Critic interno multi-óptica** (3-4 voces, sin cold-reader). **Consume input validado** (`consumeInput`) antes de revisar.
-6. **Capa 3 — Cold-reader gate** (skill `cold-reader-gate`) — independiente, voto binario, veto absoluto. Solo recibe `principles.md` + deliverable.
-7. **Capa 4 — Humano decide** sobre lo que pasó cold-reader. Decisiones que emergen → `addDecision()` a memoria.
+Las reglas operativas completas del pipeline (las 5 capas, hand-off contracts, manejo de fallos) viven en `.claude/skills/pipeline-v2/SKILL.md` — esa es la fuente. Anclas que el orquestador debe tener presentes sin abrir la skill:
+
+- **Capa 0 — `content/principles.md` literal al tope de cada brief**, nunca resumido. Si no existe → `/kickoff` primero. `content/INDEX.md` decide qué cargar (no el repo entero). El context bundle suma extracto del perfil (`memory/project-profile.json`) + `docs/company.md` si tiene contenido real (D10).
+- **Brief Contract obligatorio (D10):** ningún agente se lanza sin los 6 puntos (rol profundo, objetivo verificable, contexto inyectado, no-goals, formato, recordatorio D6). Brief débil = no se lanza.
+- **Cold-reader gate independiente:** solo recibe `principles.md` + deliverable, sin historial de critic.
+- **Imágenes:** validación multimodal obligatoria + refs declaradas mencionadas en el texto del prompt (D10/D12).
 
 Cada hand-off entre capas pasa por validador de contracts. Si falla, error claro al instante con el path exacto y el campo que rompió. No se escribe nada corrupto a disco.
 
@@ -193,6 +192,6 @@ En la raíz hay un archivo `feedback.md`. Es el canal para reportar findings sob
 
 ## Versión
 
-**v3.1** (2026-05). Plan vivo en `process-log/v3-plan.md`. Decisiones cerradas en `process-log/00-decisions.md` (ley).
+**v4.2.1** (2026-06). Plan vivo en `process-log/v3-plan.md`. Decisiones cerradas en `process-log/00-decisions.md` (ley).
 
 Cambios v3.1 sobre v3 (Sprint v3.1): helper `src/load_env.js` para carga idempotente del `.env`; chat público orquestador↔agentes en el dashboard; skill `dual-auditor-protocol` en el catálogo; review-app oficial migrada al starter; sync `roadmap/current-sprint.json` ↔ `dashboard/state.json` automático vía `roadmap.js`; kickoff con capa de contraste post-respuestas + sub-tipo `business-with-software`; campo `sprint_number` en task schema; timeout configurable en `openrouter_client.chat()`; D6 (subagentes sin Write) y D7 (sync current-sprint canónico) cableadas.

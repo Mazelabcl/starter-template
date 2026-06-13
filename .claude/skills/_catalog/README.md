@@ -17,30 +17,11 @@ El starter no carga toda skill que existe. Solo las **core** (siempre activas, d
 
 El resto vive acá. El `kickoff` lee el perfil del proyecto (tipo, tamaño, modo) y propone qué skills opcionales activar. El usuario aprueba antes de mover nada.
 
-Razón: cargar 19 skills "por si acaso" termina en ruido y skills muertas que el usuario nunca invocó. Mejor catalogo curado + activación deliberada.
+Razón: cargar toda skill "por si acaso" termina en ruido y skills muertas que el usuario nunca invocó. Mejor catalogo curado + activación deliberada.
 
 ## Skills disponibles en `_catalog/`
 
-Tabla completa con triggers y casos de uso: ver `INDEX.md`. Resumen aquí:
-
-| Skill | Para qué sirve | Cuándo activarla |
-|---|---|---|
-| `superpowers-pr` | 5 reglas duras para Git/PR/code review formal | Solo proyectos con flujo Git/PR formal. Si trabajas solo, usa `quality-mindset` (core). |
-| `superpowers-full` | Set completo (~80 skills) — spec-driven, TDD estricto, refactor seguro | Proyectos build de complejidad alta donde `quality-mindset` no alcanza. |
-| `skill-creator` | Genera nuevas skills custom con frontmatter + 4 secciones requeridas | Cuando aparece disciplina recurrente sin cobertura existente. |
-| `frontend-design` | Skill oficial Anthropic para UI accesible y semántica | Build con superficie web (landing, dashboard, panel admin). |
-| `playwright` | Tests E2E con selectores resilientes | Build con webapp y flujos críticos. |
-| `webapp-testing` | Estrategia de pirámide (unit/integration/E2E) | Build sin stack de testing decidido. |
-| `pdf-skill` | Generación, parsing y manipulación de PDFs | Build/business que produce o recibe PDFs. |
-| `xlsx` | Lectura/escritura/generación de Excel | Business donde el cliente vive en planillas. |
-| `canvas-design` | Visualización programática (D3, p5, SVG) | Content/build con visualización custom no rasterizada. |
-| `brand-guidelines` | Mantiene `content/brand.md` con identidad + voz | Content recurrente, business con marca, build con UI. |
-| `marketing` | Copy publicitario con frameworks (AIDA, PAS, BAB) | Business/content con lado comercial. |
-| `seo` | SEO técnico + on-page proyecto-local | Build/business/content con sitio web público. |
-| `remotion` | Video programático React-based | Content/marketing con videos data-driven. |
-| `web-artifacts-builder` | HTML autocontenido (demos, prototipos one-off) | Demos, prototipos, herramientas one-off. |
-
-Sprint 5.2 pobló este catálogo a partir del análisis de skills curadas que vio Aldo. Casi todas son **stubs funcionales v0.1** (invocables pero pendientes de profundización). La excepción es `superpowers-pr`, que llegó a v2.0 en Sprint 3.2.
+El catálogo completo y vigente (skills, triggers, `when_to_use`, status, costo) vive en `INDEX.md`. La fuente machine-readable es `skills-catalog.json` (regenerable con `node scripts/build_skills_catalog.js`). No dupliques la lista aquí — `INDEX.md` es la vista humana y el JSON es la fuente única (D9).
 
 MCPs (Context7, Codebase-memory, Obsidian-MCP, Firecrawl, GitHub MCP) NO viven en este catálogo porque no son skills tradicionales — son MCP servers. Detalles en `docs/mcps-recomendados.md`.
 
