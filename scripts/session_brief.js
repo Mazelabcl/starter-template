@@ -4,6 +4,8 @@
 // orquestador — solo da una señal barata y determinística.
 //
 // Lee:
+//   - cockpit/feedback/*.json → si hay feedback con processed=false, imprime UNA
+//     línea para que el orquestador lo lea y aplique (node src/cockpit.js pending).
 //   - summarize() de src/memory.js → has_profile (¿corrió /kickoff?).
 //   - .env del repo → ¿están las keys core (OPENROUTER_API_KEY, OPENAI_API_KEY)?
 //
@@ -14,7 +16,7 @@
 // Uso (vía hook): node scripts/session_brief.js
 // Idioma: español neutro.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -58,7 +60,34 @@ function keyIsReal(val) {
   return true;
 }
 
+// Cuenta revisiones del cockpit con feedback sin procesar (processed === false).
+// Solo fs: no depende de node_modules. Exportada para tests.
+export function countPendingCockpit(root = REPO_ROOT) {
+  const dir = join(root, 'cockpit', 'feedback');
+  if (!existsSync(dir)) return 0;
+  let n = 0;
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const fb = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+      if (fb && fb.processed === false) n += 1;
+    } catch { /* archivo corrupto: se ignora */ }
+  }
+  return n;
+}
+
+export function cockpitLine(n) {
+  if (!n) return '';
+  return `Hay feedback pendiente en el cockpit: ${n} ${n === 1 ? 'revisión' : 'revisiones'}. Léelo con \`node src/cockpit.js pending\` y aplícalo antes de seguir.`;
+}
+
 async function run() {
+  // Feedback del cockpit: va primero y no depende de node_modules ni memory/.
+  try {
+    const line = cockpitLine(countPendingCockpit());
+    if (line) console.log(line);
+  } catch { /* nunca rompe el arranque */ }
+
   // Clon fresco: sin node_modules no podemos importar memory.js (usa ajv). Salir
   // silencioso — el arranque no debe depender de un npm install previo.
   if (!existsSync(join(REPO_ROOT, 'node_modules'))) return;
@@ -96,4 +125,6 @@ async function run() {
   }
 }
 
-run().catch(() => { /* nunca propaga: el arranque no debe fallar por esto */ });
+// Solo corre al invocarse directo (el test importa las funciones sin ejecutar).
+const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isMain) run().catch(() => { /* nunca propaga: el arranque no debe fallar por esto */ });

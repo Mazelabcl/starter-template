@@ -44,7 +44,8 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
-| **review-app** | `npm run review-app` | App local para revisar entregables marcando OK / Feedback. |
+| **cockpit** | `/revisar` + `npm run cockpit` | Revisión con roadmap, votos por ítem y conversación por voz; el feedback lo lee Claude al continuar. Ver [`cockpit/README.md`](cockpit/README.md). |
+| **review-app** | `npm run review-app` | Visor local de los `.md` que generan los agentes. |
 | **resumen** | `/resumen` | `RESUMEN.html` autocontenido con el estado del proyecto. |
 
 Skills opcionales (20) en `.claude/skills/_catalog/` — se activan con `/kickoff` o copiando la carpeta a `.claude/skills/`. Incluye `confidence-loop`, `cold-reader-gate`, `dual-auditor-protocol`, `superpowers-pr`, `frontend-design`, `seo`, `marketing` y más. Catálogo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
@@ -59,6 +60,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 | `/idea <texto>` | Captura una idea al backlog sin desviar lo que estás haciendo. |
 | `/roadmap` | Revisa sprint actual + backlog. |
 | `/council` | Lista councils, invoca uno o crea uno custom. |
+| `/revisar` | Publica una revisión del trabajo actual en el cockpit. |
 | `/resumen` | Genera `RESUMEN.html`. |
 | `/setup-openrouter`, `/setup-openai` | Configura una API key puntual. |
 
@@ -72,7 +74,8 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 ├── roadmap/           roadmap.md + current-sprint.json
 ├── councils/          councils predefinidos + resultados
 ├── content/           principles.md / INDEX.md (los genera /kickoff) + outputs
-├── review-app/        app local de revisión
+├── cockpit/           revisión con voz + feedback (reviews/ y feedback/)
+├── review-app/        visor local de .md
 ├── docs/              QUICKSTART, capacidades, MCPs recomendados, guía de dictado
 ├── scripts/           imágenes (Python), smoke test, run_tests, resumen
 └── src/               research, council, memory, roadmap, image_explorer, clientes de API
