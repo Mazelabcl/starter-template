@@ -2,6 +2,8 @@
 
 Documento vivo. Sprint actual + backlog + ideas capturadas. Cuando un sprint cierra, sus entregables y lessons se mueven a `memory/sprint-log.md`.
 
+> No edites a mano el contenido entre los marcadores `<!-- ... -->`: lo reescribe `src/roadmap.js`. El texto fuera de los marcadores sí es tuyo.
+
 ## Sprint actual
 
 **Sprint 1 — (sin objetivo declarado)**

@@ -6,56 +6,11 @@ import {
   renameSync,
   unlinkSync,
 } from 'node:fs';
-import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import { addSprint } from './memory.js';
-
-// ---- Sync hacia el dashboard ----
-// D7 (Sprint v3.1): `roadmap/current-sprint.json` es la fuente de verdad del
-// sprint vivo. Cada vez que cambia (startSprint, closeSprint), notificamos al
-// dashboard vía POST /api/state actualizando `current_sprint`. Best-effort: si
-// el dashboard no está corriendo, silencioso (igual que `notifyServer` en
-// `scripts/update_state.js`). Sin esto, la pestaña Roadmap del dashboard nunca
-// veía el sprint actual recién creado (feedback 2026-05-11).
-
-function getDashboardPort() {
-  return parseInt(process.env.DASHBOARD_PORT || '7777', 10);
-}
-
-async function notifyDashboardCurrentSprint(sprintObj) {
-  // sprintObj: { number, objective, ... } — shape de blankSprint() o readSprint().
-  // El dashboard solo necesita number + objective; aceptamos todo el objeto por
-  // si en el futuro queremos más (target_close, started_at, etc).
-  if (!sprintObj || typeof sprintObj !== 'object') return;
-  const payload = {
-    current_sprint: {
-      number: typeof sprintObj.number === 'number' ? sprintObj.number : 0,
-      objective: sprintObj.objective || '',
-      ...(sprintObj.started_at ? { started_at: sprintObj.started_at } : {}),
-      ...(sprintObj.target_close ? { target_close: sprintObj.target_close } : {}),
-    },
-  };
-  const port = getDashboardPort();
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 500);
-    const res = await fetch(`http://localhost:${port}/api/state`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    // No-op si !res.ok: el JSON local ya está escrito, esto es solo sync de UI.
-    void res;
-  } catch {
-    // Dashboard no levantado: silencioso. El watcher del state lo recogerá
-    // cuando se reescriba state.json por otra vía.
-  }
-}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -80,6 +35,105 @@ const MARKERS = {
   baja: { start: '<!-- prio-baja-start -->', end: '<!-- prio-baja-end -->' },
   ideas: { start: '<!-- ideas-crudas-start -->', end: '<!-- ideas-crudas-end -->' },
 };
+
+// Plantilla canónica de roadmap.md. Se usa cuando el archivo no existe y como
+// fuente de las secciones que falten (ver ensureMarkers). Mantener alineada con
+// roadmap/roadmap.md del starter.
+const ROADMAP_TEMPLATE = `# Roadmap del proyecto
+
+Documento vivo. Sprint actual + backlog + ideas capturadas. Cuando un sprint cierra, sus entregables y lessons se mueven a \`memory/sprint-log.md\`.
+
+> No edites a mano el contenido entre los marcadores \`<!-- ... -->\`: lo reescribe \`src/roadmap.js\`. El texto fuera de los marcadores sí es tuyo.
+
+## Sprint actual
+
+**Sprint 1 — (sin objetivo declarado)**
+- Inicio: (pendiente)
+- Meta: (pendiente)
+- Estado: en progreso
+
+### Tareas del sprint
+
+<!-- tasks-start -->
+<!-- tasks-end -->
+
+## Próximo sprint (preview)
+
+<!-- preview-start -->
+- (sin previsión declarada)
+<!-- preview-end -->
+
+## Backlog priorizado
+
+Ideas capturadas durante el trabajo, ordenadas por relevancia. Se evalúan al cierre de cada sprint para decidir si entran al siguiente.
+
+### Alta prioridad
+
+<!-- prio-alta-start -->
+<!-- prio-alta-end -->
+
+### Media prioridad
+
+<!-- prio-media-start -->
+<!-- prio-media-end -->
+
+### Baja prioridad / wishlist
+
+<!-- prio-baja-start -->
+<!-- prio-baja-end -->
+
+## Ideas crudas (sin priorizar)
+
+Capturadas con \`/idea\`. Pendiente revisar y mover a sección priorizada.
+
+<!-- ideas-crudas-start -->
+<!-- ideas-crudas-end -->
+`;
+
+// Título visible de la sección que se agrega cuando falta un marcador.
+const MARKER_HEADINGS = {
+  tasks: '### Tareas del sprint',
+  preview: '## Próximo sprint (preview)',
+  alta: '### Alta prioridad',
+  media: '### Media prioridad',
+  baja: '### Baja prioridad / wishlist',
+  ideas: '## Ideas crudas (sin priorizar)',
+};
+
+function hasMarker(md, marker) {
+  const startIdx = md.indexOf(marker.start);
+  const endIdx = md.indexOf(marker.end);
+  return startIdx !== -1 && endIdx !== -1 && endIdx > startIdx;
+}
+
+// Auto-reparación: si roadmap.md fue escrito a mano (p. ej. por /kickoff) sin
+// los marcadores HTML, agregamos al final las secciones que falten en vez de
+// lanzar "marcadores no encontrados". También agrega los anchors del header
+// ("## Sprint actual" / "### Tareas del sprint") si faltan. El texto humano
+// existente no se toca.
+export function ensureMarkers(md) {
+  let next = md;
+  const missing = Object.keys(MARKERS).filter(k => !hasMarker(next, MARKERS[k]));
+  const hasSprintAnchor = next.includes('## Sprint actual') && next.includes('### Tareas del sprint');
+  if (!missing.length && hasSprintAnchor) return { md: next, added: [] };
+
+  const blocks = [];
+  if (!next.includes('## Sprint actual')) {
+    blocks.push('## Sprint actual\n\n**Sprint 1 — (sin objetivo declarado)**\n');
+  }
+  for (const k of missing) {
+    blocks.push(`${MARKER_HEADINGS[k]}\n\n${MARKERS[k].start}\n${MARKERS[k].end}\n`);
+  }
+  if (!missing.includes('tasks') && !next.includes('### Tareas del sprint')) {
+    // El marcador de tareas existe pero sin su título: lo anteponemos al marcador.
+    next = next.replace(MARKERS.tasks.start, `### Tareas del sprint\n\n${MARKERS.tasks.start}`);
+  }
+  if (blocks.length) {
+    const header = '<!-- secciones agregadas por src/roadmap.js: faltaban marcadores -->';
+    next = `${next.replace(/\s*$/, '')}\n\n${header}\n\n${blocks.join('\n')}`;
+  }
+  return { md: next, added: missing };
+}
 
 export class RoadmapError extends Error {
   constructor(message, details) {
@@ -169,10 +223,20 @@ function writeSprint(sprint, roadmapDir) {
 
 function readMarkdown(roadmapDir) {
   const path = pathFor(roadmapDir, 'roadmapMd');
+  // Si no existe, lo creamos desde la plantilla canónica (con todos los marcadores).
   if (!existsSync(path)) {
-    throw new RoadmapError(`roadmap.md no existe en ${path}. Inicializa el roadmap antes de operar.`);
+    atomicWrite(path, ROADMAP_TEMPLATE);
+    return ROADMAP_TEMPLATE;
   }
-  return readFileSync(path, 'utf8');
+  const raw = readFileSync(path, 'utf8');
+  const { md, added } = ensureMarkers(raw);
+  if (md !== raw) {
+    atomicWrite(path, md);
+    if (added.length) {
+      console.warn(`[roadmap] roadmap.md no tenía marcadores (${added.join(', ')}); se agregaron al final del archivo.`);
+    }
+  }
+  return md;
 }
 
 function writeMarkdown(text, roadmapDir) {
@@ -375,22 +439,11 @@ export function startSprint({ number, objective, target_close } = {}, roadmapDir
   next.target_close = target_close || '';
   writeSprint(next, roadmapDir);
 
-  let md;
-  try {
-    md = readMarkdown(roadmapDir);
-    md = rerenderAll(md, next);
-    writeMarkdown(md, roadmapDir);
-  } catch (e) {
-    // roadmap.md ausente (proyecto recién iniciado): no es fatal — el sprint
-    // ya quedó en current-sprint.json y el kickoff crea roadmap.md después.
-    if (!(e instanceof RoadmapError) || !/roadmap\.md no existe/.test(e.message)) {
-      throw e;
-    }
-  }
-
-  // D7: sync best-effort hacia el dashboard. Fire-and-forget, no bloquea.
-  // No esperamos al await; el caller no necesita saber si llegó.
-  notifyDashboardCurrentSprint(next);
+  // readMarkdown crea roadmap.md desde la plantilla si no existe y repara
+  // marcadores faltantes, así que aquí no hay caso "archivo ausente".
+  let md = readMarkdown(roadmapDir);
+  md = rerenderAll(md, next);
+  writeMarkdown(md, roadmapDir);
 
   return { sprint: next };
 }
@@ -439,10 +492,6 @@ export function closeSprint({ lessons = [], deliverables = [] } = {}, roadmapDir
   let md = readMarkdown(roadmapDir);
   md = rerenderAll(md, fresh);
   writeMarkdown(md, roadmapDir);
-
-  // D7: sync best-effort hacia el dashboard. Reseteamos current_sprint a "fresh"
-  // (objetivo vacío) hasta que el usuario abra el siguiente con startSprint.
-  notifyDashboardCurrentSprint(fresh);
 
   return {
     closed_sprint: sprint.number,
@@ -516,4 +565,4 @@ export function summarize(roadmapDir) {
   };
 }
 
-export const _internal = { MARKERS, PRIORITIES, TASK_STATUSES, blankSprint, notifyDashboardCurrentSprint };
+export const _internal = { MARKERS, PRIORITIES, TASK_STATUSES, blankSprint, ROADMAP_TEMPLATE };

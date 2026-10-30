@@ -4,7 +4,7 @@
 // Replicate funciona como router único para FLUX, Imagen 3, Ideogram, Recraft,
 // SD 3.5 y otros modelos open-source. Una sola key (REPLICATE_API_TOKEN) da
 // acceso a todos. Este cliente:
-//   - Lanza una predicción (POST /predictions con `{model: "owner/name", input}`)
+//   - Lanza una predicción (POST /models/{owner}/{name}/predictions, o /predictions con `version`)
 //   - Polling cada 2s hasta succeeded/failed/canceled (timeout configurable)
 //   - Retorna { output_urls, metrics, raw }
 //   - Descarga el PNG/JPG localmente (`download(url, dest_path)`)
@@ -96,16 +96,19 @@ export async function runModel({
   const apiKey = getApiKey();
   const headers = buildHeaders(apiKey);
 
-  // Body: si hay version, va `{version, input}` (model determinístico).
-  // Si no, `{model: "owner/name", input}` (Replicate elige última version oficial).
-  const body = version
-    ? { version, input }
-    : { model: model_id, input };
+  // Si hay version: POST /predictions con `{version, input}` (determinístico).
+  // Si no: POST /models/{owner}/{name}/predictions con `{input}` (última versión
+  // oficial). El endpoint genérico /predictions ya NO acepta `{model, input}`:
+  // responde 422 "version is required" (verificado 2026-10-30 con flux-schnell).
+  const body = version ? { version, input } : { input };
+  const endpoint = version
+    ? ENDPOINT_PREDICTIONS
+    : `https://api.replicate.com/v1/models/${model_id}/predictions`;
 
-  // -------- POST /predictions
+  // -------- POST de la predicción
   let createRes;
   try {
-    createRes = await fetch(ENDPOINT_PREDICTIONS, {
+    createRes = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

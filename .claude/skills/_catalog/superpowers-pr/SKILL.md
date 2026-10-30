@@ -1,6 +1,6 @@
 ---
 name: superpowers-pr
-description: 5 reglas duras para Git, Pull Requests y code review formal. Aplica SOLO a proyectos con flujo Git/PR formal — equipos colaborando, GitHub flow real, open source con conventional commits, o CI/CD que depende de PRs. Si trabajas solo y nunca abres PRs, usa `quality-mindset` (core) en su lugar.
+description: 5 reglas duras para Git, Pull Requests y code review formal. Aplica SOLO a proyectos con flujo Git/PR formal — equipos colaborando, GitHub flow real, open source con conventional commits, o CI/CD que depende de PRs. Si trabajas solo y nunca abres PRs, no la necesitas.
 triggers: ["/superpowers-pr", "antes de PR", "code review formal", "merge a main", "abrir pull request", "review de PR"]
 ---
 
@@ -23,7 +23,7 @@ Activa `superpowers-pr` SOLO si tu proyecto cumple uno o más de estos criterios
 
 Si eres una persona sola, haces commits directos a `main`, no abres PRs, y nadie revisa tu código formalmente, **NO uses esta skill**. La fricción de las 5 reglas no aporta a tu flujo.
 
-En su lugar usa `quality-mindset` (core, siempre activa): cubre disciplina aplicable sin Git formal — commits regulares, branches por feature cuando la tarea es no trivial, hábitos de calidad sin overhead de review.
+En su lugar basta disciplina básica sin Git formal: commits regulares, branches por feature cuando la tarea es no trivial, hábitos de calidad sin overhead de review.
 
 ---
 

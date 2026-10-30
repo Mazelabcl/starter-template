@@ -15,10 +15,12 @@
  * Limpia archivos temporales al final, en cualquier rama.
  */
 
-import { mkdtempSync, rmSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, copyFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
 
 import {
   writeProfile,
@@ -169,8 +171,8 @@ try {
     if (!p.skills_activas.includes('image-gen')) {
       throw new Error('skills_activas no incluye image-gen');
     }
-    if (!p.skills_activas.includes('pipeline-v2')) {
-      throw new Error('skills_activas no incluye pipeline-v2 (core)');
+    if (!p.skills_activas.includes('agent-template')) {
+      throw new Error('skills_activas no incluye agent-template (core)');
     }
   });
 
@@ -239,10 +241,10 @@ try {
     }
   });
 
-  check('B5 — stack incluye quality-mindset (tipo build)', () => {
+  check('B5 — stack incluye agent-template y no skills eliminadas en v6 (tipo build)', () => {
     const names = resultB.stack.map(s => s.name);
-    if (!names.includes('quality-mindset')) {
-      throw new Error(`stack no incluye quality-mindset. stack: ${names.join(', ')}`);
+    if (!names.includes('agent-template') || names.some(n => ['quality-mindset', 'karpathy-rules', 'pipeline-v2'].includes(n))) {
+      throw new Error(`stack build inesperado: ${names.join(', ')}`);
     }
   });
 
@@ -291,9 +293,9 @@ try {
     }
   });
 
-  check('C4 — stack incluye pipeline-v2 y cold-reader-gate', () => {
+  check('C4 — stack incluye cold-reader-gate', () => {
     const names = resultC.stack.map(s => s.name);
-    for (const expected of ['pipeline-v2', 'cold-reader-gate']) {
+    for (const expected of ['cold-reader-gate']) {
       if (!names.includes(expected)) {
         throw new Error(`stack no incluye ${expected}. stack: ${names.join(', ')}`);
       }
@@ -318,8 +320,8 @@ try {
     const p = resultC.profile;
     if (p.project_type !== 'research') throw new Error(`project_type ${p.project_type}`);
     if (p.mode !== 'profundo') throw new Error(`mode ${p.mode}`);
-    if (!p.skills_activas.includes('pipeline-v2')) {
-      throw new Error('skills_activas no incluye pipeline-v2');
+    if (!p.skills_activas.includes('multimodal-validation')) {
+      throw new Error('skills_activas no incluye multimodal-validation (core)');
     }
   });
 
@@ -410,7 +412,7 @@ try {
       }
     }
     // Y debe seguir teniendo lo que necesita.
-    for (const good of ['firecrawl', 'context7', 'pipeline-v2', 'cold-reader-gate']) {
+    for (const good of ['firecrawl', 'context7', 'cold-reader-gate']) {
       if (!names.includes(good)) {
         throw new Error(`research debería incluir ${good}. stack: ${names.join(', ')}`);
       }
@@ -419,8 +421,8 @@ try {
 
   check('S5.2-personal-no-regresion — personal mantiene stack mínimo sin ruido', () => {
     const names = recommendStack('personal').map(s => s.name);
-    if (!names.includes('confidence-loop') || !names.includes('pipeline-v2')) {
-      throw new Error(`personal debería incluir confidence-loop y pipeline-v2. stack: ${names.join(', ')}`);
+    if (!names.includes('confidence-loop')) {
+      throw new Error(`personal debería incluir confidence-loop. stack: ${names.join(', ')}`);
     }
     // Personal no debe haber recibido skills comerciales ni de UI.
     const intrusive = ['marketing', 'seo', 'seo-strategist', 'frontend-design', 'playwright'];
@@ -522,6 +524,23 @@ try {
         throw new Error(`extra ${e.name} con source inválido: ${e.source}`);
       }
     }
+  });
+
+  // v6: tras borrar pipeline-v2 / quality-mindset / karpathy-rules, ninguna
+  // recomendación del kickoff debe apuntar a una skill que no existe en disco.
+  check('V6-A — CORE_SKILLS y stacks solo referencian skills existentes (core o _catalog)', () => {
+    const skillsDir = join(REPO_ROOT, '.claude', 'skills');
+    const exists = name => existsSync(join(skillsDir, name, 'SKILL.md'))
+      || existsSync(join(skillsDir, '_catalog', name, 'SKILL.md'));
+    const MCPS = ['firecrawl', 'context7']; // son MCP servers, no skills
+    const missing = [];
+    for (const name of CORE_SKILLS) if (!exists(name)) missing.push(`core:${name}`);
+    for (const type of ['content', 'build', 'business', 'research', 'personal', 'mixed']) {
+      for (const s of recommendStack(type)) {
+        if (!MCPS.includes(s.name) && !exists(s.name)) missing.push(`${type}:${s.name}`);
+      }
+    }
+    if (missing.length) throw new Error(`skills inexistentes: ${missing.join(', ')}`);
   });
 } finally {
   for (const dir of tmpDirs) {

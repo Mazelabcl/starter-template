@@ -26,8 +26,10 @@ Skills core (siempre activas) NO viven aquí — viven en `.claude/skills/<skill
 | `review-app` | App HTTP local (Node nativo, cero deps) para revisar PRs/bloques de un sprint marcando OK/Feedback. Modo viewer: lee cualquier `.md` de un directorio con TLDR. Cross-sprint, cross-project, hot-reload | "review-app", "revisar PRs en HTTP", "marcar OK/Feedback", "/review-app", "ver output de agentes" | build/business-with-software con audits de código o entregables que necesitan review humano repetido | sin costo |
 | `client-language` | Fuerza lenguaje humano sin jerga técnica cuando el deliverable es para cliente/audiencia final. Lista negra de términos + reemplazos | "lenguaje de cliente", "sin jerga técnica", "para el cliente", "audiencia no técnica", "/client-language" | business/content/marketing con audiencia final no técnica | sin costo |
 | `non-technical-cold-reader` | Gate binario GO/NO-GO que veta un deliverable de cliente si contiene jerga técnica. Complemento de `client-language` (esa reescribe, esta veta) | "veta jerga técnica", "lo entendería un no técnico", "cold reader no técnico", "/non-technical-cold-reader" | business/content/marketing antes de mostrar al cliente final | sin costo |
+| `confidence-loop` | Itera un artefacto (agente, skill, código, plan) hasta un score alto, máx 5 iteraciones. **Se autoevalúa**: úsala como apoyo, no como validación independiente | "revisa con confidence loop", "mejora hasta 95", "/confidence-loop" | cualquier proyecto, cuando un artefacto necesita pulido iterativo | variable según iteraciones |
+| `cold-reader-gate` | Gate GO/NO-GO con veto absoluto: lee SOLO el canon (`principles.md` o el brief) + el deliverable terminado | "evalúa cold", "cold reader", "/cold-reader-gate" | content/business/research antes de mostrar un deliverable al humano | ~USD 0.02-0.10 (1 modelo) |
 
-Total: 18 skills opcionales en `_catalog/`.
+Total: 20 skills opcionales en `_catalog/`.
 
 > **Fuente machine-readable:** `_catalog/skills-catalog.json` es la fuente única para el kickoff (lista core + catalog con `triggers`, `when_to_use`, `output`, `status`, `cost_hint`). Este INDEX.md es la vista humana. El JSON se regenera con `node scripts/build_skills_catalog.js`. Si agregas/quitas una skill, regenera el JSON y corre `npm run test:skills-catalog`.
 
@@ -52,7 +54,7 @@ Cómo agregar un MCP: ver `docs/mcps-recomendados.md` y la doc oficial de cada u
 | Ubicación | `.claude/skills/<skill>/` | `.claude/skills/_catalog/<skill>/` |
 | Activación | Automática, siempre | Manual o vía kickoff |
 | Disciplina | Universal | Específica de un perfil |
-| Ejemplo | `quality-mindset`, `pipeline-v2` | `playwright`, `marketing` |
+| Ejemplo | `image-gen`, `council` | `playwright`, `marketing` |
 
 ## Cómo agregar una skill nueva al catálogo
 
@@ -60,7 +62,7 @@ Cómo agregar un MCP: ver `docs/mcps-recomendados.md` y la doc oficial de cada u
 2. Crea `_catalog/<skill-name>/CHANGELOG.md` con versión inicial.
 3. Agrega fila a la tabla de este INDEX.
 4. Si la skill aplica a un perfil específico, agrégala a `STACK_BY_TYPE` en `kickoff/detector.js` con un `why` claro.
-5. Corre `confidence-loop` sobre la skill nueva para llevarla a 95+/100.
+5. Pruébala en un caso real antes de darla por buena (opcional: `confidence-loop` como apoyo).
 
 ## Estado de las skills (Sprint 5.2)
 

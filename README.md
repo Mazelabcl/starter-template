@@ -1,209 +1,124 @@
-# Starter Template Mazelab — v4.2.1
+# Starter Template Mazelab — v6-dev
 
-Un OS personal para arrancar proyectos con Claude Code: perfil del proyecto + equipo de agentes con contratos verificables + visibilidad en vivo + memoria persistente. No es "abrir Claude Code en un repo vacío".
+Un **kit de contexto + herramientas** para arrancar proyectos con Claude Code: research con fuentes, generación de imágenes multi-modelo, memoria del proyecto, roadmap con `/idea`, review-app para revisar entregables y councils multi-modelo para decisiones difíciles. Usas lo que tu proyecto necesita; nada es obligatorio.
 
-## Quickstart (lo más simple, copia y pega)
+## Quickstart (copia y pega)
 
-```bash
-# 1. Clonar el template + entrar en la carpeta
-git clone -b v3 https://github.com/Mazelabcl/starter-template.git mi-proyecto
-cd mi-proyecto
+1. Clona el template y entra en la carpeta:
+   ```bash
+   git clone https://github.com/Mazelabcl/starter-template.git mi-proyecto
+   cd mi-proyecto
+   ```
+   (descarga el starter en una carpeta nueva llamada `mi-proyecto`)
 
-# 2. Instalar dependencias (te va a pedir API keys: OpenRouter obligatorio, OpenAI opcional, Replicate opcional)
-npm install
+2. Instala dependencias:
+   ```bash
+   npm install
+   ```
+   (instala lo necesario y abre el setup que te pide las API keys: OpenRouter obligatoria, OpenAI y Replicate opcionales)
 
-# 3. Arrancar todo en un solo comando
-npm start
-# Esto levanta el dashboard (HTML simple de estado) en background, abre el browser
-# en http://localhost:7777, y te muestra el próximo paso.
+3. Abre Claude Code en esta carpeta y escribe:
+   ```
+   /kickoff
+   ```
+   (entrevista corta que detecta qué proyecto vas a hacer y deja el roadmap y la memoria listos)
 
-# 4. Abre Claude Code en esta carpeta y dile: /kickoff
-```
-
-### Antes de empezar a trabajar en serio (opcional)
+Opcional, antes de trabajar en serio:
 ```bash
 npm run smoke
-# 8 checks end-to-end. ~90s, ~USD 0.05 en API. Confirma que todo funciona antes de invertir tiempo.
 ```
+(4 checks reales: keys, memoria, research y una imagen; ~USD 0.05. `npm run smoke:quick` no gasta nada)
 
-Cuando v3 se mergee a main, podrás clonar sin el flag `-b v3`.
+Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta prompts largos con Win+H (Windows) o doble Fn (macOS): [`docs/voice-input-guide.md`](docs/voice-input-guide.md).
 
-Después abres Claude Code en este repo y le dices `/kickoff`. La entrevista detecta qué proyecto vas a hacer, recomienda stack, persiste el perfil, y deja todo armado para empezar.
+## Qué trae
 
-Guía completa de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
-
-## Visión
-
-La v2 sufría de "ceguera operacional": los agentes parecían colaborar pero la información no fluía bien entre ellos. Los bugs aparecían dos pasos después de la causa, lejos del fallo real.
-
-La v3 resuelve esto estructuralmente:
-
-- **Hand-off contracts** entre agentes (cada agente declara qué lee/escribe, validado contra JSON Schema antes de procesar).
-- **Memoria del proyecto** persistente (decisiones, lessons, equipo activo, sprints — viaja con el repo).
-- **Dashboard HTML simple en vivo** (tabla de tareas + pestañas Sprint / Roadmap / Chat en vivo vía SSE + barra de métricas).
-- **Smoke test end-to-end** (un comando te dice si el sistema completo funciona).
-- **Councils multi-modelo** (3-5 perspectivas distintas deliberan sobre decisiones complejas, con tiers de costo controlados).
-
-No es marketing. Cada capacidad tiene tests, contratos verificables y costo medido.
-
-## Capacidades core
-
-Cada una se invoca desde Claude Code con sus triggers naturales. Skills viven en `.claude/skills/`. Esta tabla es un resumen — la referencia on-demand completa (qué skill usar, qué test correr) vive en [`docs/capacidades.md`](docs/capacidades.md).
-
-| Capacidad | Cómo invocar | Para qué |
+| Capacidad | Cómo se usa | Para qué |
 |---|---|---|
-| **kickoff** | `/kickoff`, "vamos a arrancar un proyecto nuevo" | Entrevista adaptativa, detecta tipo de proyecto (build / business / content / research / personal), recomienda stack de skills, persiste `project-profile.json` + `active-team.json`. |
-| **pipeline-v2** | "construye X", "vamos a crear Y", "/pipeline-v2" | Orquesta architect → critic → cold-reader → humano. Cada transición valida hand-off contract. |
-| **cold-reader-gate** | Auto al cerrar artefacto creativo, o "/cold-reader-gate" | Voto binario GO/NO-GO con veto absoluto sobre el critic interno. |
-| **multimodal-validation** | Auto después de cualquier imagen generada | Fuerza Read del PNG. Sin esto no hay PASS. |
-| **image-gen** | "genera imagen de X", "/image-gen" | gpt-image-2 con identity lock + reglas de references + paralelismo agresivo. |
-| **image-explorer** | "explora prompt en N modelos" | Compara mismo prompt en gpt-image-2, FLUX, Imagen 3, Ideogram, Recraft, SD 3.5 en paralelo. Grilla HTML para elegir ganador. |
-| **council** | `/council`, "convoca un council para X" | 3-5 modelos distintos deliberan, cross-pollination opcional, síntesis con Opus. 4 councils predefinidos (Tier 1/2/3). |
-| **voice-mode** | `/voz-on`, `/voz-off`, `/voz-leer` | TTS de respuestas largas con OpenAI TTS. |
-| **agent-template** | "crea un agente para X", "/agent-template" | Genera agente nuevo con score base ~92/100. |
-| **karpathy-rules** | Auto al escribir código | 4 reglas core de coding limpio. |
-| **quality-mindset** | Auto en tareas no triviales | Disciplina mínima viable: spec → plan → ejecución → cierre validado. Sin Git formal. |
-| **confidence-loop** | "/confidence-loop", "mejora hasta 95" | Itera artefacto hasta 95+/100 (5 iteraciones máx). |
+| **kickoff** | `/kickoff` | Entrevista adaptativa: tipo de proyecto, stack de skills recomendado, perfil y sprint inicial. |
+| **research** | `node src/research.js pro "pregunta"` | Perplexity vía OpenRouter, con fuentes. Modos `quick`, `pro`, `search`, `reason`, `deep`. |
+| **image-gen** | "genera imagen de X", `/image-gen` | gpt-image-2 (y FLUX, Ideogram, Nano Banana Pro) con identity lock y referencias. |
+| **image-explorer** | "explora este prompt en varios modelos" | Mismo prompt en 3-4 modelos, grilla HTML para elegir. |
+| **multimodal-validation** | automático tras generar imágenes | Obliga a mirar el PNG antes de darlo por bueno. |
+| **council** | `/council` | 3-5 modelos deliberan una decisión con tradeoffs. Tiers con costo confirmado. |
+| **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
+| **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
+| **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
+| **review-app** | `npm run review-app` | App local para revisar entregables marcando OK / Feedback. |
+| **resumen** | `/resumen` | `RESUMEN.html` autocontenido con el estado del proyecto. |
 
-Skills opcionales (18 más en `.claude/skills/_catalog/`): `superpowers-pr`, `frontend-design`, `playwright`, `webapp-testing`, `pdf-skill`, `xlsx`, `marketing`, `seo`, `remotion`, `brand-guidelines`, `canvas-design`, `web-artifacts-builder`, `skill-creator`, `superpowers-full`, `dual-auditor-protocol`, `review-app`, `client-language`, `non-technical-cold-reader`. Se activan vía `/kickoff` según perfil del proyecto.
+Skills opcionales (20) en `.claude/skills/_catalog/` — se activan con `/kickoff` o copiando la carpeta a `.claude/skills/`. Incluye `confidence-loop`, `cold-reader-gate`, `dual-auditor-protocol`, `superpowers-pr`, `frontend-design`, `seo`, `marketing` y más. Catálogo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
 
-Catálogo completo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
-
-### Capacidades nuevas en v3.1
-
-- **Chat público en el dashboard** — pestaña "Chat" en el dashboard HTML simple; agentes y orquestador reportan milestones vía `node scripts/update_state.js say <from> <to> <message>`. Feed cronológico, SSE en vivo, persistencia en `dashboard/chat-log.jsonl`. Reduce fricción del owner: ya no tiene que preguntar "cómo vamos". Detalle: `dashboard/README.md`.
-- **review-app oficial** — app HTTP local cero deps (`node review-app/server.js`) para revisar PRs/bloques de un sprint marcando OK/Feedback. Cross-sprint, cross-project (`--data-dir` flag), hot-reload del parser, regex `\d+` (sin hardcodes). Promovida desde audit-master. Detalle: `review-app/README.md`.
-- **Skill `dual-auditor-protocol`** — audita un deliverable con DOS modelos en paralelo (Anthropic + OpenAI) + synthesizer que cruza findings. Reduce sesgos de un solo modelo. Promovida desde audit-master con schemas formales en `contracts/schemas/`. Detalle: `.claude/skills/_catalog/dual-auditor-protocol/SKILL.md`.
-- **Helper `src/load_env.js`** — carga `.env` idempotente desde scripts standalone. Necesario cuando un agente invoca un script vía Bash tool (Node no carga `.env` automáticamente fuera de `npm run`).
-- **kickoff con capa de contraste** — después del Paso 3 escanea las respuestas del usuario contra keywords canónicas del catálogo y propone skills adicionales con justificación específica al proyecto. Sub-tipo `business-with-software` auto-activa `superpowers-pr` + `dual-auditor-protocol` + `webapp-testing` cuando el proyecto cruza business con código de producción.
+Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs/capacidades.md).
 
 ## Slash commands
 
 | Comando | Efecto |
 |---|---|
-| `/kickoff` | Entrevista adaptativa para iniciar un proyecto. |
-| `/idea <texto>` | Captura idea cruda al backlog del roadmap, sin desviar el flujo actual. |
-| `/roadmap` | Revisa sprint actual + backlog priorizado. |
-| `/council` | Lista councils, invoca uno, o crea custom (`new`). |
-| `/voz-on`, `/voz-off`, `/voz-leer` | Activa/desactiva TTS, lee última respuesta. |
-| `/setup-openrouter`, `/setup-openai` | Configura una API key específica sin correr setup completo. |
+| `/kickoff` | Entrevista para iniciar un proyecto. |
+| `/idea <texto>` | Captura una idea al backlog sin desviar lo que estás haciendo. |
+| `/roadmap` | Revisa sprint actual + backlog. |
+| `/council` | Lista councils, invoca uno o crea uno custom. |
+| `/resumen` | Genera `RESUMEN.html`. |
+| `/setup-openrouter`, `/setup-openai` | Configura una API key puntual. |
 
-## Estructura del repo
+## Estructura
 
 ```
-starter-template/
-├── README.md                 (este archivo)
-├── CLAUDE.md                 (instrucciones operativas para Claude)
-├── setup.js                  (setup interactivo — postinstall)
-├── package.json
-├── .env.example              (OPENROUTER_API_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN, GEMINI_API_KEY opcional)
-├── feedback.md               (canal para reportar findings sobre el starter mismo)
-├── .claude/
-│   ├── commands/             (slash commands: /idea, /roadmap, /council, /voz-*, /kickoff, etc.)
-│   ├── skills/               (12 skills core + _catalog/ con 18 opcionales)
-│   └── settings.example.local.json
-├── contracts/                (hand-off contracts: schemas + validator + helpers)
-├── memory/                   (project-profile.json, decisions.md, lessons.md, sprint-log.md, etc.)
-├── councils/                 (4 councils predefinidos + templates + results/)
-├── content/                  (principles.md, INDEX.md generados por /kickoff; outputs)
-├── roadmap/                  (roadmap.md, current-sprint.json)
-├── dashboard/                (server.js + HTML simple de estado)
-├── review-app/               (server.js — app HTTP local para revisar output de agentes)
-├── docs/                     (QUICKSTART.md, voice-input-guide.md, mcps-recomendados.md, capacidades.md)
-├── scripts/                  (openai_images.py, voice_tts.js, smoke_test.js, update_state.js)
-├── src/                      (research.js, council.js, image_explorer.js, memory.js, roadmap.js, openrouter_client.js, replicate_client.js)
-└── process-log/              (00-decisions.md, v3-plan.md, findings-for-template.md)
+├── CLAUDE.md          instrucciones para Claude (cortas, se cargan en cada sesión)
+├── setup.js           setup interactivo (corre con npm install; se salta solo en Vercel/CI)
+├── .claude/           commands, skills core, _catalog/ con skills opcionales
+├── memory/            memoria del proyecto
+├── roadmap/           roadmap.md + current-sprint.json
+├── councils/          councils predefinidos + resultados
+├── content/           principles.md / INDEX.md (los genera /kickoff) + outputs
+├── review-app/        app local de revisión
+├── docs/              QUICKSTART, capacidades, MCPs recomendados, guía de dictado
+├── scripts/           imágenes (Python), smoke test, run_tests, resumen
+└── src/               research, council, memory, roadmap, image_explorer, clientes de API
 ```
 
-## Stack tecnológico
+## API keys
 
-| Capa | Tech | Cuándo se usa | API key |
-|---|---|---|---|
-| Research / texto / councils | OpenRouter (Anthropic, OpenAI, Google, DeepSeek, Qwen, Meta, Perplexity) | `src/research.js`, `src/council.js`, `src/openrouter_client.js` | `OPENROUTER_API_KEY` (recomendada) |
-| Imágenes con identity lock | OpenAI gpt-image-2 vía Python | `scripts/openai_images.py`, skill `image-gen` | `OPENAI_API_KEY` (opcional) |
-| Imágenes multi-modelo | Replicate (FLUX, Imagen 3, Ideogram, Recraft, SD 3.5) | `src/image_explorer.js`, `src/replicate_client.js` | `REPLICATE_API_TOKEN` (opcional) |
-| TTS (voz output) | OpenAI TTS (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`) | `scripts/voice_tts.js`, skill `voice-mode` | `OPENAI_API_KEY` |
-| Voz input | Win+H nativo (Windows) o doble-Fn (macOS) | Sistema operativo | sin costo |
-
-Las keys viven en `.env` (ignorado por git). Usa `npm run setup` o `/setup-openrouter` / `/setup-openai` para configurarlas.
-
-## Councils — sistema de tiers
-
-Convocas un council cuando hay decisión con tradeoffs reales (más de una respuesta defendible). Tres tiers definen estructura y costo:
-
-| Tier | Estructura | Costo | Cuándo |
-|---|---|---|---|
-| 1 | round1 únicamente, sin cross-pollination | USD 0.02 a 0.10 | Decisiones reversibles, ideación, naming. |
-| 2 | round1 + round2 con cross-pollination + synthesis Opus | USD 0.15 a 0.60 | Decisiones estratégicas con costo medio. |
-| 3 | round1 + round2 + synthesis Opus + `confidence_loop` post-synthesis | USD 0.80 a 2.50 | Decisiones irreversibles, arquitectura, contratos legales. |
-
-Los 4 councils predefinidos: `creative-ideation` (Tier 1), `strategy-calls` y `mazelab-council` (Tier 2), `architecture-decision` (Tier 3). Editables y clonables como custom. Detalle: [`councils/README.md`](councils/README.md).
-
-## Cómo agrego skills opcionales
-
-El catálogo en `.claude/skills/_catalog/` tiene 18 skills disponibles. Tres formas de activar una:
-
-1. **Vía `/kickoff`.** El árbol adaptativo recomienda skills según el tipo de proyecto detectado.
-2. **Manual.** Copia la carpeta de `_catalog/<skill>/` a `.claude/skills/<skill>/`. Claude Code la carga al reabrir.
-3. **Crear skill custom.** Skill `skill-creator` (en catálogo) genera SKILL.md + CHANGELOG.md con el formato del starter.
-
-Detalle por skill: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
-
-## Cómo agrego MCPs
-
-Los MCP servers se configuran en `~/.claude/settings.json` con bloque `mcpServers`. Recomendaciones por perfil de proyecto (Context7, Codebase-memory, Obsidian-MCP, Firecrawl, GitHub MCP) y cómo configurar cada uno: [`docs/mcps-recomendados.md`](docs/mcps-recomendados.md).
-
-## Smoke test antes de empezar proyecto serio
+Viven en `.env` (ignorado por git). Configúralas con `npm run setup`. Para correr un script propio con las keys cargadas:
 
 ```bash
-npm run smoke           # completo (~60-90s, ~USD 0.05 en API credits)
-npm run smoke:quick     # rápido (<15s, sin gasto de red)
+node --env-file=.env mi-script.js
 ```
+(carga las variables del `.env` antes de ejecutar el script)
 
-Verifica 8 cosas end-to-end: variables de entorno, hand-off contracts, memoria del proyecto, dashboard server, Perplexity research, gpt-image-2 generación, multimodal validation flow, pipeline-v2 integration. Detalle de cada check + errores comunes: [`scripts/smoke_test.README.md`](scripts/smoke_test.README.md).
+| Key | Para qué | ¿Obligatoria? |
+|---|---|---|
+| `OPENROUTER_API_KEY` | research, councils | Sí |
+| `OPENAI_API_KEY` | gpt-image-2 | Para imágenes |
+| `REPLICATE_API_TOKEN` | image-explorer, FLUX / Ideogram / Nano Banana Pro | Opcional |
 
-Cuándo correrlo: antes de empezar un proyecto serio, después de rotar API keys, después de actualizar deps, o cuando algo se siente raro. **No** lo corras en cada commit — gasta credits reales.
+## Deploy a Vercel / CI
 
-## Para retomar el proyecto
+`setup.js` corre en `npm install` (postinstall) pero sale de inmediato si detecta `VERCEL`, `CI`, `NETLIFY` o `GITHUB_ACTIONS`, así el build no se cuelga esperando API keys.
 
-Cuando reabres una sesión, Claude lee la memoria del proyecto al arranque (`summarize()` de `src/memory.js`) y decide qué hacer según el snapshot: si no hay perfil propone `/kickoff`, si hay perfil pero faltan archivos clave continúa el kickoff, si está activo carga `decisions.md` / `lessons.md` solo cuando hace falta. El flujo completo de arranque vive en [`CLAUDE.md`](CLAUDE.md) (sección "Antes de cualquier cosa").
+## Tests
 
-Y en otro terminal: `npm run dashboard` para ver la tabla de tareas + sprint + roadmap + chat en vivo (vía SSE) con barra de métricas mientras trabajas.
-
-Detalle del modelo de memoria: [`memory/README.md`](memory/README.md).
-
-## Productividad — input/output por voz
-
-**Input (gratis):** dictar prompts largos con Win+H (Windows 11) o doble-Fn (macOS). Acelera mucho brainstorming. Comandos de puntuación útiles y tips: [`docs/voice-input-guide.md`](docs/voice-input-guide.md).
-
-**Output (con costo):** TTS de respuestas largas con OpenAI TTS vía skill `voice-mode`. Útil para escuchar mientras haces otra cosa, repasar decisiones complejas caminando, o lectura final de briefs. Defaults en `memory/voice-mode-state.json`. Comandos: `/voz-on`, `/voz-off`, `/voz-leer`.
+```bash
+npm test
+```
+(corre todos los tests del starter; algunos hacen llamadas reales de centavos si hay keys en `.env`)
 
 ## Costos típicos
 
-Cifras aproximadas por llamada — verifica el valor exacto en cada provider.
-
 | Capacidad | Costo aproximado |
 |---|---|
-| Research Perplexity (`quick` / `pro`) | USD 0.001 a 0.01 por consulta |
-| Research Perplexity (`deep`) | USD 0.05 a 0.20 por consulta |
-| Imagen gpt-image-2 (medium 1024×1024) | USD 0.04 |
-| Imagen gpt-image-2 (high 1024×1536) | USD 0.25 |
-| Imagen Replicate (FLUX, SD 3.5, Recraft) | USD 0.003 a 0.05 |
-| Council Tier 1 (creative-ideation) | USD 0.02 a 0.10 |
-| Council Tier 2 (strategy-calls, mazelab-council) | USD 0.15 a 0.60 |
-| Council Tier 3 (architecture-decision) | USD 0.80 a 2.50 |
-| TTS `tts-1` por respuesta de 1000 chars | USD 0.015 |
+| Research `quick` / `pro` | USD 0.001 a 0.01 |
+| Research `deep` | USD 0.05 a 0.20 (tarda minutos) |
+| gpt-image-2 medium 1024×1024 | USD 0.04 |
+| Replicate (FLUX, SD 3.5, Recraft) | USD 0.003 a 0.05 |
+| Council Tier 1 / 2 / 3 | USD 0.02-0.10 / 0.15-0.60 / 0.80-2.50 |
 | Smoke test completo | ~USD 0.05 |
 
-El sistema **siempre confirma costos** antes de invocar Tier 2/3 o batches grandes.
+## Versión
 
-## Versión y changelog
+**v6-dev** (2026-10) — Sprint 1 "base liviana": se quitaron el dashboard, el modo voz, el pipeline de 5 capas con contracts y las skills de disciplina auto-disparadas; `CLAUDE.md` bajó a ~1.1k tokens. Historial anterior en git (tags `v5.0` y previos).
 
-**v4.2.1** (2026-06) — Consolidación v4: dashboard pixel-art degradado a HTML simple de estado (D8), `skills-catalog.json` como fuente única (D9), Brief Contract obligatorio + "Te presento al equipo" (D10), research proactivo ante claims factuales (D11), fix canónico de refs de imagen (D12) y set multi-modelo de imagen pre-configurado: gpt-image-2 + FLUX + Ideogram + Nano Banana Pro (D13).
+## Feedback al starter
 
-Base v3 (2026-05): hand-off contracts + memoria persistente + councils multi-modelo + image-explorer + voice-mode + kickoff adaptativo + roadmap + smoke test.
-
-Plan completo y estado de sprints: [`process-log/v3-plan.md`](process-log/v3-plan.md).
-Decisiones humanas (ley): [`process-log/00-decisions.md`](process-log/00-decisions.md).
-
-Lo que **no** entró todavía (parqueado para más adelante): Realtime API voz bidireccional, ElevenLabs como segundo TTS, router automático de modelos por tarea, memoria semántica con embeddings, app nativa Electron.
+¿Algo del starter falla? Anótalo en `feedback.md` bajo `## NUEVO`.

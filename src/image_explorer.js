@@ -11,7 +11,7 @@
 //   - Si un modelo falla, los otros siguen (Promise.allSettled-style con límite).
 //   - Costos calculados ANTES de empezar; advertencia si > $0.50.
 //   - Output: PNG/JPG locales + index.json + grid.html standalone (CSS embebido).
-//   - El dashboard puede leer el index.json directo sin parseo custom.
+//   - Otras herramientas pueden leer el index.json directo sin parseo custom.
 
 import { mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';

@@ -8,7 +8,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Texto y research
 
-- **Research vía Perplexity (OpenRouter)**: `node src/research.js <quick|pro|search|reason|deep> "<pregunta>"`. Default `pro`. Para info actualizada, **siempre** úsalo — no inventes datos.
+- **Research vía Perplexity (OpenRouter)**: `node src/research.js <quick|pro|search|reason|deep> "<pregunta>" [--timeout-ms=N]`. Default `pro`. Devuelve `citations` (URLs) y `sources` (URL + título). `deep`/`reason` usan 300000 ms de timeout por defecto. Para info actualizada, **siempre** úsalo — no inventes datos.
 - **Cliente OpenRouter unificado** (`src/openrouter_client.js`): acceso a Anthropic, OpenAI, Google, DeepSeek, Qwen, Meta, Perplexity con una sola key. Base de councils y de cualquier flujo multi-modelo. Detalle: `src/openrouter_client.README.md`.
 
 ### Imágenes
@@ -25,29 +25,20 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 ### Orquestación y calidad
 
 - **kickoff**: entrevista adaptativa, autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.
-- **pipeline-v2**: orquesta architect → critic → cold-reader → humano. Cada transición valida hand-off contract. Mantiene memoria del proyecto sincronizada.
-- **cold-reader-gate**: lectura cold con voto binario GO/NO-GO y veto absoluto. Independiente — no se le pasa debate previo ni scores de critic.
-- **agent-template**: genera agente nuevo con score base ~92/100. Pásalo por `confidence-loop` para llegar a 95+.
-- **karpathy-rules**: 4 reglas para escribir código limpio. Auto al editar código.
-- **quality-mindset** (core, siempre activa): disciplina mínima viable — spec → plan → ejecución → cierre validado. Sin Git formal.
-- **confidence-loop**: itera artefacto hasta 95+/100 (5 iteraciones máx). Útil sobre agentes, skills, planes, código no trivial.
+- **agent-template**: genera un agente nuevo con las secciones estructurales listas.
+- **confidence-loop** (catálogo, opcional): itera un artefacto hasta un score alto (5 iteraciones máx). Se autoevalúa: úsala como apoyo, no como validación independiente.
+- **cold-reader-gate** (catálogo, opcional): lectura en frío con voto GO/NO-GO; recibe solo el canon (`principles.md` o el brief) + el deliverable.
 - **client-language** (catálogo): cuando el deliverable es para cliente/audiencia final, prohíbe jerga técnica y fuerza lenguaje humano. Propónla si el proyecto tiene audiencia no técnica.
 - **non-technical-cold-reader** (catálogo): gate binario GO/NO-GO que veta un deliverable de cliente si contiene jerga técnica.
 - **superpowers-pr** (catálogo, opcional): 5 reglas duras para Git/PR/code review formal. Vive en `.claude/skills/_catalog/superpowers-pr/`. Activarla solo si el proyecto usa flujo PR formal — kickoff lo decide.
 
-### Memoria, roadmap y voz
+### Memoria y roadmap
 
 - **memory.js** (`src/memory.js`): lectura/escritura de la memoria del proyecto. Helpers: `summarize`, `readProfile`, `writeProfile`, `addDecision`, `addLesson`, `addAgent`, `touchAgent`, `addSprint`, `getActiveTeam`. Detalle: `memory/README.md`.
 
-  > **Nota:** `addDecision({ ..., reversibility })` espera `reversibility` como enum estricto: `alta` | `media` | `baja`. Texto libre falla con `MemoryError`. Mismo cuidado con otros campos enum del schema.
+  > **Nota:** `addDecision({ ..., reversibility })` usa el enum `alta` | `media` | `baja` (alta = fácil de deshacer; default `media`). Texto libre se mapea por palabras clave (irreversible → baja, reversible → alta, resto → media) y queda como nota.
 
-- **roadmap.js** (`src/roadmap.js`): gestión de sprint actual + backlog priorizado. Helpers: `addIdea`, `getCurrentSprint`, `closeSprint`. Slash command `/idea` para captura sin desvío.
-- **voice-mode** (skill + `scripts/voice_tts.js`): TTS de respuestas largas con OpenAI TTS. Comandos `/voz-on`, `/voz-off`, `/voz-leer`. Defaults en `memory/voice-mode-state.json`.
-
-### Observabilidad — dashboard v3 (HTML simple)
-
-- **Dashboard HTML simple de estado** (vanilla JS, cero deps de frontend) con tabla de tareas en vivo (Agente, Estado, Modelo, Tokens, Summary) + pestañas Sprint / Roadmap / Chat. `npm run dashboard` lo levanta en `http://localhost:7777`. Lee `state.json` vía `/api/state` + SSE. Modo público read-only con `DASHBOARD_PUBLIC=1`. Detalle: `dashboard/README.md`. (v4: degradado desde el pixel-art Phaser — decisión D8. La review-app es la superficie HTML preferida para consumir output de agentes.)
-- **Cómo lo alimentan los agentes**: `node scripts/update_state.js task-start <id> <agent> <role> <title> [files...] [--prompt ...] [--plan-step ...]... [--current-step N] [--phase ...] [--epic ...]` + `task-update <id> '<json-patch>'` + `task-complete <id> [tokens]`. El helper escribe atómico a `dashboard/state.json` y notifica al server. Schema completo de la task en `dashboard/README.md`.
+- **roadmap.js** (`src/roadmap.js`): gestión de sprint actual + backlog priorizado. Helpers: `addIdea`, `getCurrentSprint`, `startSprint`, `closeSprint`. Slash command `/idea` para captura sin desvío. No edites a mano el contenido entre marcadores de `roadmap.md`; si faltan marcadores, `roadmap.js` los agrega.
 
 ### review-app — superficie canónica para consumir output
 
@@ -55,22 +46,20 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ## Referencia rápida — tests del repo
 
-Cuando algo se rompa, estos tests son el primer chequeo:
+`npm test` corre todos. Algunos útiles por separado:
 
 | Test | Qué valida |
 |---|---|
-| `npm run smoke` | Sistema completo end-to-end (8 checks, ~90s, gasta API). |
-| `npm run smoke:quick` | Estructura solamente, sin red. |
-| `npm run test:contracts` | Schemas + emit/consume del sistema de hand-offs. |
-| `npm run test:dashboard` | Server HTTP + SSE + history + helper update_state.js + modo público read-only. |
-| `npm run test:skills-catalog` | `skills-catalog.json` parsea + cubre todas las skills en disco (sin huérfanos ni faltantes). |
-| `npm run test:review-app` | review-app server: modo sprint/bloques + modo viewer. |
-| `npm run test:image-refs` | Mimetype tuples + guard mention-check "Image 1" de `openai_images.py` (D12), vía sub-proceso Python. |
-| `npm run test:image-wrappers` | Guard mention-check de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro) (D13), vía sub-proceso Python. |
-| `npm run test:roadmap-sync` | Sync `current-sprint.json` ↔ `state.json`. |
+| `npm test` | Todos los `*.test.js` + `memory/test.js`. |
+| `npm run smoke` | 4 checks reales (keys, memoria, research con fuentes, imagen). Gasta ~USD 0.05. |
+| `npm run smoke:quick` | Keys + memoria, sin red. |
+| `npm run test:skills-catalog` | `skills-catalog.json` en sync con las skills en disco. |
+| `npm run test:review-app` | review-app: modo sprint/bloques + modo viewer. |
+| `npm run test:image-refs` | Mimetype + guard "Image 1" de `openai_images.py`. |
+| `npm run test:image-wrappers` | Guard de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro). |
 | `npm run test:load-env` | Carga idempotente del `.env`. |
-| `node memory/test.js` | Helpers de memoria del proyecto. |
-| `node pipeline-v2-integration.test.js` | Flujo completo pipeline v2. |
-| `node docs-v3.test.js` | Documentación v3 al día. |
+| `node roadmap-integration.test.js` | Roadmap: ideas, tareas, sprints y auto-reparación de marcadores. |
+| `node memory/test.js` | Helpers de memoria (incluye mapeo de `reversibility`). |
+| `node research.test.js` | Extracción de fuentes y timeouts de `research.js` (sin red). |
 
-No corras `npm run smoke` en cada commit — gasta credits reales. Para CI continuo, usa los tests específicos.
+No corras `npm run smoke` en cada commit: gasta credits reales.

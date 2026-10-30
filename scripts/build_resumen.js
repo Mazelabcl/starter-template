@@ -5,7 +5,6 @@
 // Lee (todos opcionales, degrada con gracia si falta alguno):
 //   - roadmap/current-sprint.json   → sprint vivo + tareas + ideas crudas
 //   - memory/decisions.md           → decisiones registradas
-//   - dashboard/history/events.log  → totales de tokens y costo USD de APIs
 //
 // El TLDR narrativo y las "próximas acciones" NO los infiere el script: vienen
 // por argv (el orquestador los redacta en lenguaje no técnico). Si no se pasan,
@@ -30,7 +29,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const CURRENT_SPRINT_PATH = join(REPO_ROOT, 'roadmap', 'current-sprint.json');
 const DECISIONS_PATH = join(REPO_ROOT, 'memory', 'decisions.md');
-const EVENTS_LOG_PATH = join(REPO_ROOT, 'dashboard', 'history', 'events.log');
 const OUTPUT_PATH = join(REPO_ROOT, 'RESUMEN.html');
 
 // Escapa para insertar texto plano como contenido HTML seguro.
@@ -92,27 +90,6 @@ function readDecisions() {
   }
   if (current) out.push(current);
   return out;
-}
-
-// Agrega tokens y costo USD desde events.log (NDJSON). Cada línea es
-// { timestamp, type, payload }. Sumamos payload.tokens y payload.cost_usd de los
-// eventos task_completed. Best-effort: líneas corruptas se saltan.
-function readTotalsFromEvents() {
-  const totals = { tokens: 0, cost_usd: 0, events_count: 0, has_log: false };
-  if (!existsSync(EVENTS_LOG_PATH)) return totals;
-  totals.has_log = true;
-  let raw = '';
-  try { raw = readFileSync(EVENTS_LOG_PATH, 'utf8'); } catch { return totals; }
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let ev;
-    try { ev = JSON.parse(line); } catch { continue; }
-    totals.events_count += 1;
-    const p = ev && ev.payload ? ev.payload : {};
-    if (Number.isFinite(p.tokens)) totals.tokens += p.tokens;
-    if (Number.isFinite(p.cost_usd)) totals.cost_usd += p.cost_usd;
-  }
-  return totals;
 }
 
 // ---- render de secciones (HTML inline, sin fetch) ----
@@ -206,28 +183,9 @@ function renderDecisions(decisions) {
   </div>`;
 }
 
-function renderTotals(totals) {
-  if (!totals.has_log) {
-    return `
-  <div class="card">
-    <h2>📊 Consumo</h2>
-    <p class="muted">Sin historial de eventos (<code>dashboard/history/events.log</code> no existe todavía).</p>
-  </div>`;
-  }
-  return `
-  <div class="card">
-    <h2>📊 Consumo de la sesión</h2>
-    <table>
-      <tr><td>Tokens</td><td>${esc(totals.tokens.toLocaleString('es'))}</td></tr>
-      <tr><td>USD APIs</td><td>$${totals.cost_usd.toFixed(2)} <span class="muted">(solo OpenRouter/Replicate, no los tokens de Claude Code)</span></td></tr>
-      <tr><td>Eventos</td><td>${esc(String(totals.events_count))}</td></tr>
-    </table>
-  </div>`;
-}
+// ---- template completo  ----
 
-// ---- template completo (mismo estilo visual que RESUMEN-v4.html) ----
-
-function buildHtml({ tldr, actions, sprint, decisions, totals }) {
+function buildHtml({ tldr, actions, sprint, decisions }) {
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -284,7 +242,6 @@ ${renderTldr(tldr)}
 ${renderActions(actions)}
 ${renderSprint(sprint)}
 ${renderDecisions(decisions)}
-${renderTotals(totals)}
 
   <div class="footer">
     Generado por <code>scripts/build_resumen.js</code> · datos inline, sin servidor
@@ -302,9 +259,8 @@ function main() {
 
   const sprint = readSprint();
   const decisions = readDecisions();
-  const totals = readTotalsFromEvents();
 
-  const html = buildHtml({ tldr, actions, sprint, decisions, totals });
+  const html = buildHtml({ tldr, actions, sprint, decisions });
   writeFileSync(OUTPUT_PATH, html, 'utf8');
 
   console.log(`[build_resumen] ok: ${OUTPUT_PATH}`);
@@ -318,4 +274,4 @@ if (isMain) {
   main();
 }
 
-export { readSprint, readDecisions, readTotalsFromEvents, buildHtml, OUTPUT_PATH };
+export { readSprint, readDecisions, buildHtml, OUTPUT_PATH };

@@ -19,8 +19,8 @@ Uno de: `research | build | content | business | personal | mixed`.
 
 Uno de: `rapido | profundo`.
 
-- `rapido`: iteración corta, sin pipeline-v2 completo. Para PoCs y scratch.
-- `profundo`: cada deliverable pasa pipeline-v2 (architect → critic → cold-reader).
+- `rapido`: iteración corta. Para PoCs y scratch.
+- `profundo`: cada deliverable pasa por revisión en frío antes de cerrarse.
 
 ## description (requerido)
 
@@ -36,7 +36,7 @@ Email o handle del dueño del proyecto.
 
 ## skills_activas (requerido)
 
-Array de slugs (no objetos). Ej: `["kickoff", "pipeline-v2", "image-gen"]`.
+Array de slugs (no objetos). Ej: `["kickoff", "image-gen"]`.
 
 ## agentes_activos (requerido)
 

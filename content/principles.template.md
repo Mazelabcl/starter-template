@@ -38,10 +38,10 @@ Tipo: **{{TIPO}}** · Modo: **{{MODO}}**
 
 1. Lee este archivo + `content/INDEX.md` + `memory/decisions.md` (si tiene contenido) antes de generar output.
 2. Si tu output contradice un principio, frena y pregunta.
-3. Reporta el modelo que usaste (`claude-opus-4-7`, `gpt-image-2`, etc.).
+3. Reporta el modelo que usaste (`claude-opus-5-5`, `gpt-image-2`, etc.).
 4. Si generas imágenes: haz Read multimodal del PNG después (skill `multimodal-validation`).
 5. Si generas prompts con references: cada `Image N` declarada debe estar mencionada en el texto del prompt.
-6. Antes de cerrar un deliverable importante: pasa por pipeline-v2 (architect → critic → cold-reader → humano).
+6. Antes de cerrar un deliverable importante: léelo en frío (o usa la skill opcional `cold-reader-gate`) y muéstralo al humano.
 
 ## Versión
 

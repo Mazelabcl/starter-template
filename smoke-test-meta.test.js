@@ -2,12 +2,12 @@
 // Meta-test del propio smoke_test.js. Verifica que:
 //   1. El archivo parsea sin errores de sintaxis (--help corre y sale 0).
 //   2. El texto de --help menciona los modos disponibles.
-//   3. Con env fake (no placeholders) + --quick, los checks 1-2-3-4-7-8
+//   3. Con env fake (no placeholders) + --quick, los checks 1-2
 //      pasan sin necesitar red real.
 //   4. Con .env ausente, el check 1 falla con mensaje accionable.
 //   5. Con keys placeholder, el check 1 falla.
 //
-// No corre los checks 5 y 6 (los que sí gastan API credits) — están skipped por
+// No corre los checks 3 y 4 (los que sí gastan API credits) — están skipped por
 // --quick. Si alguien quiere validar esos también, debe correr `npm run smoke`
 // con keys reales.
 
@@ -126,11 +126,11 @@ async function main() {
       assertContains(r.stdout, 'placeholder', 'menciona placeholder');
     });
 
-    // ---------- 5. fake env válido + --quick: checks 1-4 + 7-8 verdes ----------
-    await check('--quick con env fake corre checks 1-4 y 7-8 sin red', () => {
+    // ---------- 5. fake env válido + --quick: checks 1-2 verdes ----------
+    await check('--quick con env fake corre checks 1-2 sin red', () => {
       // Las keys son sintácticamente válidas (no placeholders), pero apuntarían
       // a 401 si llegaran a OpenRouter/OpenAI. --quick salta los checks que
-      // realmente pegan red (5 y 6).
+      // realmente pegan red (3 y 4).
       writeFakeEnv([
         'OPENROUTER_API_KEY=sk-or-v1-fake-but-not-placeholder-' + 'x'.repeat(40),
         'OPENAI_API_KEY=sk-proj-fake-but-not-placeholder-' + 'x'.repeat(40),
@@ -146,10 +146,10 @@ async function main() {
       }
       assertEqual(r.code, 0, 'exit 0 con --quick + keys fake bien formadas');
       assertContains(r.stdout, 'Sistema verde', 'reporta verde');
-      assertContains(r.stdout, '[1/8]', 'corre check 1');
-      assertContains(r.stdout, '[8/8]', 'corre check 8');
+      assertContains(r.stdout, '[1/4]', 'corre check 1');
+      assertContains(r.stdout, '[4/4]', 'lista check 4');
       // Los lentos deben estar marcados como SKIP:
-      assertContains(r.stdout, 'SKIP (--quick)', 'checks 5 y 6 saltados');
+      assertContains(r.stdout, 'SKIP (--quick)', 'checks 3 y 4 saltados');
     });
 
     // ---------- 6. --verbose es reconocido (no error) ----------

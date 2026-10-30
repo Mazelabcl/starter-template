@@ -524,6 +524,13 @@ export async function chat({
     });
   } catch (e) {
     clearTimeout(timer);
+    if (controller.signal.aborted && !(signal && signal.aborted)) {
+      throw new OpenRouterError(
+        `Timeout: el modelo no respondió en ${timeout_ms}ms. Sube el límite con timeout_ms `
+        + '(en research.js: --timeout-ms=600000).',
+        { status: 0, code: 'timeout' },
+      );
+    }
     if (e.name === 'AbortError') {
       throw new OpenRouterError(`Request abortada: ${e.message}`, { status: 0, code: 'aborted' });
     }
@@ -561,6 +568,15 @@ export async function chat({
     data = await res.json();
   } catch (e) {
     clearTimeout(timer);
+    // Si el timeout venció mientras se leía el body, reportarlo como timeout
+    // (antes salía "Respuesta no es JSON válido: timeout 120000ms", confuso).
+    if (controller.signal.aborted && !(signal && signal.aborted)) {
+      throw new OpenRouterError(
+        `Timeout: el modelo no terminó en ${timeout_ms}ms. Sube el límite con timeout_ms `
+        + '(en research.js: --timeout-ms=600000).',
+        { status: 0, code: 'timeout' },
+      );
+    }
     throw new OpenRouterError(
       `Respuesta no es JSON válido: ${e.message}`,
       { status: res.status, code: 'invalid_response' },

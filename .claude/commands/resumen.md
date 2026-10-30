@@ -1,5 +1,5 @@
 ---
-description: Genera RESUMEN.html autocontenido del estado del proyecto (sprint + decisiones + consumo).
+description: Genera RESUMEN.html autocontenido del estado del proyecto (sprint + decisiones).
 ---
 
 # /resumen
@@ -16,7 +16,7 @@ Genera un `RESUMEN.html` autocontenido (datos inline, abre con doble-click, sin 
    node scripts/build_resumen.js "<tldr no técnico>" "<acción 1>" "<acción 2>"
    ```
 
-   El script lee solo: `roadmap/current-sprint.json`, `memory/decisions.md` y `dashboard/history/events.log` (si existen). Degrada con gracia si falta alguno — no rompe.
+   El script lee solo: `roadmap/current-sprint.json` y `memory/decisions.md` (si existen). Degrada con gracia si falta alguno — no rompe.
 
 4. **Avisa al usuario la ruta del HTML generado** (la imprime el script: `RESUMEN.html` en la raíz del repo) y dile que lo abra con doble-click.
 
@@ -24,4 +24,4 @@ Genera un `RESUMEN.html` autocontenido (datos inline, abre con doble-click, sin 
 
 - El TLDR y las próximas acciones los redactas TÚ — el script NO los infiere. Si no los pasas, el HTML queda con un placeholder visible.
 - Español neutro. Cero voseo ni regionalismos.
-- No inventes datos del sprint/decisiones/consumo: esos salen de los archivos. Tú solo aportas la narrativa del TLDR y las acciones.
+- No inventes datos del sprint/decisiones: esos salen de los archivos. Tú solo aportas la narrativa del TLDR y las acciones.

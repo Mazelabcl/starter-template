@@ -148,8 +148,8 @@ CRITERIOS.forEach((c, i) => {
 });
 
 assert(
-  '6.6 — la sección menciona usar `quality-mindset` cuando NO aplica',
-  /quality-mindset/i.test(seccion),
+  '6.6 — la sección dice qué hacer cuando NO aplica (disciplina básica sin Git formal)',
+  /disciplina b[aá]sica/i.test(seccion),
 );
 
 // --- 7. Description aclara scope ---------------------------------------
@@ -215,11 +215,8 @@ for (const file of allFiles) {
 
 // Trazabilidad histórica permitida (referencias documentales al rename, no usos activos):
 //   - process-log/v3-plan.md (líneas que documentan el split y la reformulación)
-//   - .claude/skills/quality-mindset/SKILL.md (ejemplo ilustrativo de mensaje de commit
-//     que precisamente demuestra el estilo "explica el WHY del cambio que importa en 6 meses")
 const ALLOWED_HISTORICAL = [
   ['process-log', 'v3-plan.md'],
-  ['quality-mindset', 'SKILL.md'],
 ];
 
 function isAllowedHistorical(refLine) {

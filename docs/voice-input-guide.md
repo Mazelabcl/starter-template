@@ -80,9 +80,3 @@ Cualquiera de las tres requiere config inicial. Si vas a invertir 20 minutos, Wh
 | Cuando estás cansado de teclado | Cualquier cosa que no toleres releer |
 
 Regla simple: si el texto tolera 1-2 erratas que vas a corregir antes de enviar, dícta. Si necesita ser exacto al primer intento, tipea.
-
-## Próximamente — Voz Nivel 2
-
-El **Sprint 4.6** del starter agrega TTS (text-to-speech): vas a poder **escuchar** las respuestas de Claude además de dictarlas. Combinado con `Win + H`, queda una conversación de voz casi-completa: dictas el prompt, Claude responde por audio mientras tú haces otra cosa.
-
-Cuando salga, este doc se actualiza con el atajo y el flujo. Por ahora, input por voz es el primer 80% del valor.

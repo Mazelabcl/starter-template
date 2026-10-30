@@ -44,11 +44,11 @@ Stack recomendado:
 - image-explorer — explora 3-4 variantes antes de cerrar dirección.
 - brand-guidelines — opcional, solo si más adelante quieres formalizar tu look.
 - multimodal-validation — fuerza que yo lea el PNG antes de dártelo.
-(además de las skills core: pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop, agent-template)
+(además de las skills core: multimodal-validation, agent-template)
 
 Sprint 1 sugerido — Producir el primer artefacto creativo y validarlo con cold-reader:
 - principles.md y INDEX.md generados por kickoff
-- 1 pieza creativa (imagen/copy/post) pasada por pipeline-v2
+- 1 pieza creativa (imagen/copy/post) revisada en frío antes de mostrarla
 - Lessons del primer ciclo registradas en lessons.md
 
 ¿Confirmas o ajustas algo?
@@ -98,7 +98,7 @@ Tamaño: grande · Modo: profundo (varios sprints, decisiones con impacto)
 
 Stack recomendado:
 - council — decisiones de proceso tienen ángulos comerciales y técnicos a la vez.
-- pipeline-v2 — antes de proponer un cambio operativo, lo pasamos por critic + cold-reader.
+- cold-reader-gate — antes de proponer un cambio operativo, lo leemos en frío.
 - agent-template — modelaremos roles (vendedor, follow-up, reporte) como agentes para tareas repetitivas.
 - seo-strategist — opcional, solo si después atacamos captura orgánica de leads.
 (además de las skills core)

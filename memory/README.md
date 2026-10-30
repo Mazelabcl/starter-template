@@ -10,9 +10,9 @@ Hay tres lugares donde puede vivir información persistente. Cada uno tiene su r
 
 | Dónde | Qué va | Ejemplo |
 |---|---|---|
-| **CLAUDE.md** del proyecto | Reglas estables, capacidades, anti-patrones del repo | "Usa pipeline-v2 antes de imágenes", "Las refs deben mencionarse en el prompt" |
+| **CLAUDE.md** del proyecto | Reglas estables, capacidades, anti-patrones del repo | "Las refs deben mencionarse en el prompt" |
 | **memory/** del proyecto (esta carpeta) | Estado mutable, decisiones, lessons, equipo activo | "El 2026-05-09 decidimos cambiar a modo profundo", "El sprint 2 cerró con 3 lessons" |
-| **Memoria global del usuario** (`~/.claude/projects/.../memory/`) | Reglas que aplican a TODOS los proyectos del usuario | "Aldot habla español neutro", "Aldot prefiere claude-opus-4-7 para todo" |
+| **Memoria global del usuario** (`~/.claude/projects/.../memory/`) | Reglas que aplican a TODOS los proyectos del usuario | "Aldot habla español neutro", "Aldot prefiere TLDR primero" |
 
 Si lo que tienes en mano aplica a TODOS los proyectos del usuario, no va acá.
 Si es regla estable de ESTE repo (no cambia entre sesiones), va a `CLAUDE.md`, no acá.
@@ -55,7 +55,7 @@ writeProfile({
   description: 'Sistema de memoria contextual para starter Mazelab.',
   created_at: new Date().toISOString(),
   owner: 'aldo@mazelab.cl',
-  skills_activas: ['kickoff', 'pipeline-v2'],
+  skills_activas: ['kickoff', 'image-gen'],
   agentes_activos: ['architect-alpha'],
   sprint_inicial: 'sprint-1-fundamentos',
 });
@@ -71,13 +71,23 @@ preguntar "por qué hicimos esto así", la respuesta tiene que estar acá*.
 import { addDecision } from '../src/memory.js';
 
 addDecision({
-  title: 'Adoptar pipeline-v2 por defecto',
-  decision: 'Todo deliverable de contenido pasa por pipeline-v2.',
-  reasoning: 'El critic interno solo no atajó 2 errores que cold-reader sí cazó.',
-  alternatives: 'Mantener critic solo; saltar critic e ir directo a cold-reader.',
+  title: 'Revisión en frío antes de entregar',
+  decision: 'Todo deliverable para cliente pasa por una lectura en frío antes de enviarse.',
+  reasoning: 'La revisión interna sola no atajó 2 errores que la lectura en frío sí cazó.',
+  alternatives: 'Revisión interna sola; enviar directo.',
   reversibility: 'alta',
 });
 ```
+
+**`reversibility`** — enum `alta | media | baja` (qué tan fácil es deshacer la decisión):
+
+| Valor | Significa |
+|---|---|
+| `alta` | Fácil de deshacer (reversible). |
+| `media` | Deshacer cuesta trabajo. **Default** si no se pasa. |
+| `baja` | Difícil o imposible de deshacer (irreversible). |
+
+También acepta texto libre: se mapea por palabras clave (`irreversible`/`difícil de revertir` → `baja`, `reversible`/`se puede revertir` → `alta`, resto → `media`) y el texto queda como nota en `decisions.md`. Si pasas algo que no es string (número, objeto), el error muestra el valor recibido.
 
 ### `lessons.md`
 
@@ -108,9 +118,9 @@ import { addAgent, addSkill, touchAgent, getActiveTeam } from '../src/memory.js'
 addAgent({
   name: 'architect-alpha',
   role: 'Crea propuestas estructurales antes de Critic',
-  model: 'claude-opus-4-7',
+  model: 'claude-opus-5-5',
 });
-addSkill({ name: 'pipeline-v2' });
+addSkill({ name: 'image-gen' });
 
 touchAgent('architect-alpha');
 
@@ -129,7 +139,7 @@ import { addSprint } from '../src/memory.js';
 addSprint({
   number: 1,
   objective: 'Fundamentos del pipeline',
-  deliverables: ['contracts/', 'memory/', 'src/memory.js'],
+  deliverables: ['memory/', 'src/memory.js'],
   lessons: ['schemas compartidos evitan reescribir validación'],
   dates: { start: '2026-05-01', end: '2026-05-08' },
 });
@@ -188,15 +198,6 @@ Recomendación de uso desde el orquestador:
 - **No metas secretos** (API keys, tokens). El `.env` ya tiene su lugar.
 - **No edites a mano `active-team.json`** salvo emergencia. Pasa por los helpers,
   que validan contra el schema.
-
-## Integración con `contracts/`
-
-Los schemas en `memory/schemas/` están escritos en el mismo dialecto (draft-07,
-`additionalProperties: false`, `$id` corto, mensajes en español neutro) que los
-de `contracts/schemas/`. En Sprint 1.3 (pipeline-v2) los dos sistemas se cruzan:
-contracts valida los hand-offs entre agentes, memory persiste lo que sale como
-"verdad estable". Si hace falta, el validator de contracts puede importar también
-estos schemas — la convención está alineada.
 
 ## Tests
 

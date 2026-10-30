@@ -1,6 +1,6 @@
 # feedback.md — del starter Mazelab
 
-Buzón para reportar findings sobre el **starter-template Mazelab** (skills faltantes, scripts rotos, anti-patrones en docs, contracts que no encajan en uso real). **NO** es para bugs/features del proyecto consumer.
+Buzón para reportar findings sobre el **starter-template Mazelab** (skills faltantes, scripts rotos, anti-patrones en docs). **NO** es para bugs/features del proyecto consumer.
 
 **Para reportar algo del starter, agrega tu finding bajo `## NUEVO`.** El usuario solo dice "anota en feedback.md" — la estructura de abajo es self-documented, no necesitas preguntar formato. Fecha + contexto + finding + acción sugerida (opcional). Texto libre OK si es claro.
 

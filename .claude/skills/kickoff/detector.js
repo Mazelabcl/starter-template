@@ -218,8 +218,7 @@ export function detectSignals(input) {
 /**
  * Stack de skills recomendado por tipo de proyecto.
  *
- * Las "core" (pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules,
- * confidence-loop, agent-template) NO se listan acá porque siempre están activas;
+ * Las "core" (multimodal-validation, agent-template) NO se listan acá porque siempre están activas;
  * solo aparecen cuando el tipo del proyecto las necesita con prioridad alta.
  *
  * Cada skill viene con `why`: una línea que el kickoff lee al usuario para
@@ -235,10 +234,8 @@ const STACK_BY_TYPE = {
     { name: 'canvas-design', why: 'visualizaciones programáticas (D3, p5, SVG) cuando el output no es imagen rasterizada.' },
   ],
   build: [
-    { name: 'quality-mindset', why: 'criterios duros de calidad antes de cerrar features.' },
     { name: 'agent-template', why: 'crea agentes especializados conforme aparecen módulos del producto.' },
     { name: 'council', why: 'evalúa decisiones técnicas complejas con múltiples voces.' },
-    { name: 'karpathy-rules', why: 'reglas core para que el código sea simple y reusable.' },
     { name: 'superpowers-pr', why: 'estandariza Git y Pull Requests si el proyecto usa control de versiones formal.' },
     { name: 'frontend-design', why: 'componentes UI accesibles y semánticos cuando el proyecto tiene superficie web.' },
     { name: 'webapp-testing', why: 'estrategia de testing equilibrada (unit/integration/E2E) cuando el proyecto tiene UI.' },
@@ -246,7 +243,7 @@ const STACK_BY_TYPE = {
   ],
   business: [
     { name: 'council', why: 'decisiones comerciales tienen múltiples ángulos; el council los explicita.' },
-    { name: 'pipeline-v2', why: 'evita publicar pitch/decks/propuestas que pasan validación interna pero fallan en frío.' },
+    { name: 'cold-reader-gate', why: 'evita publicar pitch/decks/propuestas que pasan validación interna pero fallan en frío.' },
     { name: 'seo', why: 'si la operación incluye contenido orgánico para captar clientes.' },
     { name: 'agent-template', why: 'modelar roles de empresa como agentes (ventas, soporte, ops) acelera tareas repetitivas.' },
     { name: 'marketing', why: 'copy comercial recurrente (ads, emails, landing) con frameworks probados.' },
@@ -254,17 +251,14 @@ const STACK_BY_TYPE = {
     { name: 'xlsx', why: 'cuando el cliente vive en planillas Excel y los reportes/inputs son .xlsx.' },
   ],
   research: [
-    { name: 'pipeline-v2', why: 'research serio necesita architect → critic → cold-reader para evitar conclusiones débiles.' },
     { name: 'cold-reader-gate', why: 'lee el informe en frío y veta si no se entiende sin contexto interno.' },
     { name: 'firecrawl', why: 'scraping de fuentes web cuando la búsqueda directa no basta.' },
     { name: 'context7', why: 'explora codebases o corpus grandes con búsqueda semántica.' },
   ],
   personal: [
     { name: 'confidence-loop', why: 'mejora artefactos personales (planes, journaling) hasta calidad 95+.' },
-    { name: 'pipeline-v2', why: 'útil cuando lo personal cruza a deliverable público.' },
   ],
   mixed: [
-    { name: 'pipeline-v2', why: 'flujo seguro para cualquier deliverable mientras se concreta el tipo de proyecto.' },
     { name: 'confidence-loop', why: 'mejora iterativa hasta calidad alta independiente del tipo.' },
     { name: 'web-artifacts-builder', why: 'permite producir un primer artifact navegable mientras se concreta el tipo de proyecto.' },
   ],
@@ -273,8 +267,7 @@ const STACK_BY_TYPE = {
 /**
  * Devuelve el stack de skills recomendado para un tipo de proyecto.
  *
- * NOTA: el orquestador siempre activa además las "core" (pipeline-v2,
- * cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop,
+ * NOTA: el orquestador siempre activa además las "core" (multimodal-validation,
  * agent-template). Esta función devuelve SOLO las recomendadas según el tipo,
  * sin duplicar las core a menos que sean prioritarias para ese tipo.
  */
@@ -287,18 +280,14 @@ export function recommendStack(type) {
  * El kickoff las registra con addSkill() automáticamente al confirmar.
  */
 export const CORE_SKILLS = [
-  'pipeline-v2',
-  'cold-reader-gate',
   'multimodal-validation',
-  'karpathy-rules',
-  'confidence-loop',
   'agent-template',
 ];
 
 /**
  * Modo recomendado a partir de tipo + tamaño.
- * - rapido: iteraciones cortas, sin pipeline-v2 obligatorio.
- * - profundo: cada deliverable pasa por pipeline-v2 completo.
+ * - rapido: iteraciones cortas.
+ * - profundo: cada deliverable pasa por revisión en frío antes de cerrarse.
  */
 export function recommendMode(type, size) {
   if (size === 'grande') return 'profundo';
@@ -473,7 +462,7 @@ export function suggestInitialSprint(type, mode) {
       objective: 'Producir el primer artefacto creativo y validarlo con cold-reader',
       deliverables: [
         'principles.md y INDEX.md generados por kickoff',
-        '1 pieza creativa (imagen/copy/post) pasada por pipeline-v2',
+        '1 pieza creativa (imagen/copy/post) revisada en frío antes de mostrarla',
         'Lessons del primer ciclo registradas en lessons.md',
       ],
     },

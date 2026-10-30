@@ -16,6 +16,7 @@ import {
   addSprint,
   summarize,
   MemoryError,
+  normalizeReversibility,
 } from '../src/memory.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -89,7 +90,7 @@ try {
       description: 'test project — research',
       created_at: new Date().toISOString(),
       owner: 'aldo@mazelab.cl',
-      skills_activas: ['kickoff', 'pipeline-v2'],
+      skills_activas: ['kickoff', 'image-gen'],
       agentes_activos: ['architect-alpha'],
       sprint_inicial: 'sprint-0-discovery',
       tags: ['test'],
@@ -117,9 +118,9 @@ try {
 
   check('addDecision agrega 2 decisiones al log', () => {
     addDecision({
-      title: 'Adoptar pipeline-v2 por defecto',
-      decision: 'Todo deliverable de contenido pasa por pipeline-v2.',
-      reasoning: 'Critic solo no atajó dos errores que cold-reader sí cazó.',
+      title: 'Revisión en frío antes de entregar',
+      decision: 'Todo deliverable de contenido pasa por una lectura en frío.',
+      reasoning: 'La revisión interna sola no atajó dos errores que la lectura en frío sí cazó.',
       alternatives: 'Mantener critic solo; saltar critic.',
       reversibility: 'alta',
     }, memDir);
@@ -149,11 +150,11 @@ try {
   });
 
   check('addAgent + addSkill + idempotencia + touchAgent', () => {
-    addAgent({ name: 'architect-alpha', role: 'crea propuestas', model: 'claude-opus-4-7' }, memDir);
-    addAgent({ name: 'critic-beta', role: 'evalúa propuestas', model: 'claude-opus-4-7' }, memDir);
-    addAgent({ name: 'architect-alpha', role: 'crea propuestas v2', model: 'claude-opus-4-7' }, memDir);
+    addAgent({ name: 'architect-alpha', role: 'crea propuestas', model: 'claude-opus-5-5' }, memDir);
+    addAgent({ name: 'critic-beta', role: 'evalúa propuestas', model: 'claude-opus-5-5' }, memDir);
+    addAgent({ name: 'architect-alpha', role: 'crea propuestas v2', model: 'claude-opus-5-5' }, memDir);
 
-    addSkill({ name: 'pipeline-v2' }, memDir);
+    addSkill({ name: 'image-gen' }, memDir);
     addSkill({ name: 'kickoff' }, memDir);
 
     touchAgent('architect-alpha', memDir);
@@ -195,7 +196,7 @@ try {
     addSprint({
       number: 1,
       objective: 'Fundamentos del pipeline',
-      deliverables: ['contracts/', 'memory/', 'src/memory.js'],
+      deliverables: ['memory/', 'src/memory.js'],
       lessons: ['schemas compartidos evitan reescribir validación'],
       dates: { start: '2026-05-01', end: '2026-05-08' },
     }, memDir);
@@ -223,6 +224,56 @@ try {
       if (p !== null) throw new Error(`esperaba null, recibí ${typeof p}`);
     } finally {
       rmSync(empty, { recursive: true, force: true });
+    }
+  });
+  // ---- v6 fix d: reversibility con texto libre (feedback falabella-live) ----
+
+  check('normalizeReversibility: enum literal y mayúsculas', () => {
+    for (const [v, want] of [['alta', 'alta'], ['MEDIA', 'media'], [' baja ', 'baja'], [undefined, 'media'], ['', 'media']]) {
+      const got = normalizeReversibility(v).level;
+      if (got !== want) throw new Error(`${JSON.stringify(v)} → ${got}, esperaba ${want}`);
+    }
+  });
+
+  check('normalizeReversibility: texto libre se mapea por palabras clave', () => {
+    const cases = [
+      ['Reversible si el cliente pide profundizar tras la primera lectura', 'alta'],
+      ['Se puede revertir en una tarde', 'alta'],
+      ['Esto es irreversible una vez publicado', 'baja'],
+      ['Difícil de revertir: contrato firmado', 'baja'],
+      ['No es reversible', 'baja'],
+      ['depende del cliente', 'media'],
+    ];
+    for (const [v, want] of cases) {
+      const got = normalizeReversibility(v);
+      if (got.level !== want) throw new Error(`"${v}" → ${got.level}, esperaba ${want}`);
+      if (got.note !== v) throw new Error('el texto libre no quedó como nota');
+    }
+  });
+
+  check('addDecision con texto libre persiste nivel + nota', () => {
+    addDecision({
+      title: 'Primera entrega corta',
+      decision: 'Entregar un resumen de 1 página.',
+      reasoning: 'El cliente prefiere leer rápido.',
+      reversibility: 'Reversible si el cliente pide profundizar',
+    }, memDir);
+    const text = readFileSync(join(memDir, 'decisions.md'), 'utf8');
+    if (!text.includes('**Reversibilidad:** alta (Reversible si el cliente pide profundizar)')) {
+      throw new Error('no se registró "alta (texto)"');
+    }
+  });
+
+  check('addDecision con reversibility no-string: error muestra el valor recibido', () => {
+    let msg = '';
+    try {
+      addDecision({ title: 't', decision: 'd', reasoning: 'r', reversibility: 42 }, memDir);
+    } catch (e) {
+      if (!(e instanceof MemoryError)) throw e;
+      msg = e.message;
+    }
+    if (!msg.includes('42') || !msg.includes('alta, media, baja')) {
+      throw new Error(`mensaje sin valor recibido o sin enum: "${msg}"`);
     }
   });
 } finally {

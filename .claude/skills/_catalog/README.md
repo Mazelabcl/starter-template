@@ -4,16 +4,13 @@ Este directorio contiene skills **disponibles pero no activas por defecto**. Exi
 
 ## Filosofía
 
-El starter no carga toda skill que existe. Solo las **core** (siempre activas, definidas en `kickoff/detector.js → CORE_SKILLS`) acompañan cada proyecto sin discusión:
+El starter no carga toda skill que existe. Solo las **core** (siempre activas, las que viven directo en `.claude/skills/`) acompañan cada proyecto sin discusión:
 
-- `pipeline-v2`
-- `cold-reader-gate`
-- `multimodal-validation`
-- `karpathy-rules`
-- `confidence-loop`
 - `agent-template`
-- `quality-mindset` (core en v3, cubre disciplina sin Git formal)
-- `council` (core en v3 desde Sprint 4.4, requiere estar siempre cargada para auto-detectar señales de decisiones que ameritan deliberación multi-modelo)
+- `multimodal-validation`
+- `image-gen`, `image-explorer`
+- `kickoff`
+- `council`
 
 El resto vive acá. El `kickoff` lee el perfil del proyecto (tipo, tamaño, modo) y propone qué skills opcionales activar. El usuario aprueba antes de mover nada.
 
@@ -62,4 +59,4 @@ Cuando corres `/kickoff`, el detector recomienda las skills opcionales que aplic
 | Ubicación | `.claude/skills/<skill>/` | `.claude/skills/_catalog/<skill>/` |
 | Activación | Automática, siempre | Manual o vía kickoff según perfil |
 | Disciplina aplicable | Universal (cualquier tipo de proyecto) | Específica de un perfil o flujo |
-| Ejemplo | `quality-mindset`, `karpathy-rules` | `superpowers-pr`, `seo` |
+| Ejemplo | `image-gen`, `council` | `superpowers-pr`, `seo`, `confidence-loop` |

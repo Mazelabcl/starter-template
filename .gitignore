@@ -12,6 +12,7 @@ __pycache__/
 content/principles.md
 content/INDEX.md
 content/output/
+content/explorations/
 workshop1/
 
 # Process-log: solo findings-for-template.md va al template; lo demás es del proyecto activo
@@ -20,32 +21,18 @@ process-log/1*.md
 process-log/W*.md
 process-log/_*.md
 
-# Dashboard v3 — assets binarios CC0 (poblados por scripts/fetch_default_pack.js)
-assets/vendor/
-
-# Dashboard v3.1 — chat público (runtime data, generado por POST /api/chat)
-dashboard/chat-log.jsonl
-
-# review-app (Sprint v3.1) — reviews persistidas (datos del proyecto consumer, no del template)
-review-app/audit/reviews/
-
-# 00-decisions.md sí va al template — es ley canónica
+# 00-decisions.md sí va al template (histórico de decisiones; ya no se carga en cada sesión)
 !process-log/00-decisions.md
 
-# Higiene — runtime state que el código recrea solo (no va al repo)
-dashboard/state.json
-memory/voice-mode-state.json
-
-# Contracts declarados en runtime — solo el .gitkeep va al template
-contracts/declared/*.json
-!contracts/declared/.gitkeep
+# review-app — reviews persistidas (datos del proyecto consumer, no del template)
+review-app/audit/reviews/
 
 # Councils results — generados en runtime; solo el .gitkeep va al template
 councils/results/*.json
 !councils/results/.gitkeep
 
-# Exploraciones de imágenes (outputs efímeros del proyecto consumer)
-content/explorations/
+# Generados
+/RESUMEN.html
 
 # Caché local
 .cache/

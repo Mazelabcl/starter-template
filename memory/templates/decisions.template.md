@@ -20,10 +20,10 @@ Formato por entrada (mantén el orden de campos):
 ---
 
 <!--
-## 2026-05-08: Adoptamos pipeline-v2 para todo deliverable de contenido
+## 2026-05-08: Revisión en frío para todo deliverable de contenido
 
-**Decisión:** Cualquier capítulo, artículo o concept-art pasa por pipeline-v2.
+**Decisión:** Cualquier capítulo, artículo o concept-art pasa por una lectura en frío antes de entregarse.
 **Razón:** En el sprint 0 el critic interno solo no atajó dos errores que cold-reader sí cazó.
 **Alternativas consideradas:** Mantener critic solo (más rápido pero baja calidad). Saltar critic e ir directo a cold-reader (pierde scoring numérico).
-**Reversibilidad:** alta — basta apagar la skill pipeline-v2 en project-profile.json.
+**Reversibilidad:** alta (basta dejar de hacer la lectura en frío).
 -->

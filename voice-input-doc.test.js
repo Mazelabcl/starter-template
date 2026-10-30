@@ -55,7 +55,6 @@ const SECTION_REGEX = [
   { name: 'macOS', re: /^##\s+macOS/m },
   { name: 'Linux', re: /^##\s+Linux/m },
   { name: 'Cuándo dictar vs cuándo tipear', re: /^##\s+Cu[aá]ndo dictar/m },
-  { name: 'Próximamente — Voz Nivel 2', re: /^##\s+Pr[oó]ximamente/m },
 ];
 
 for (const { name, re } of SECTION_REGEX) {

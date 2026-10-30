@@ -15,6 +15,7 @@ import {
   startSprint,
   summarize,
   RoadmapError,
+  ensureMarkers,
 } from './src/roadmap.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -261,6 +262,59 @@ try {
     }
     if (!/## Sprint actual/.test(md)) throw new Error('estructura de secciones se perdió');
     if (!/## Backlog priorizado/.test(md)) throw new Error('sección de backlog se perdió');
+  });
+
+  // ---- v6 fix c: roadmap.md escrito a mano sin marcadores (feedback messagewall) ----
+
+  check('roadmap.md SIN marcadores: startSprint + addTask + addIdea funcionan y agregan marcadores', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'roadmap-nomark-'));
+    try {
+      // Formato que generaba /kickoff (sin marcadores ni anchors).
+      writeFileSync(join(dir, 'roadmap.md'), [
+        '# Roadmap del proyecto', '', '### Sprint 1 — Lanzar MVP', '**Modo:** rapido', '',
+        'Deliverables:', '- landing', '', '## Backlog', '', '(vacío)', '',
+      ].join('\n'));
+      const origWarn = console.warn; console.warn = () => {};
+      try {
+        startSprint({ number: 1, objective: 'Lanzar MVP' }, dir);
+        addTask({ title: 'Diseñar landing' }, dir);
+        addIdea({ text: 'probar video de fondo' }, dir);
+        addIdea({ text: 'modo oscuro', priority: 'alta' }, dir);
+      } finally { console.warn = origWarn; }
+      const md = readFileSync(join(dir, 'roadmap.md'), 'utf8');
+      for (const m of ['<!-- tasks-start -->', '<!-- prio-alta-end -->', '<!-- ideas-crudas-start -->', '<!-- preview-start -->']) {
+        if (!md.includes(m)) throw new Error(`falta marcador ${m}`);
+      }
+      if (!md.includes('Deliverables:') || !md.includes('- landing')) throw new Error('se perdió texto humano original');
+      if (!/- \[ \] Diseñar landing/.test(md)) throw new Error('task no se renderizó');
+      if (!md.includes('probar video de fondo')) throw new Error('idea cruda no se renderizó');
+      if (!md.includes('- modo oscuro')) throw new Error('idea alta no se renderizó');
+      // Idempotente: una segunda operación no vuelve a agregar secciones.
+      addTask({ title: 'Segunda tarea' }, dir);
+      const md2 = readFileSync(join(dir, 'roadmap.md'), 'utf8');
+      if (md2.split('<!-- tasks-start -->').length !== 2) throw new Error('marcador de tasks duplicado');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  check('roadmap.md AUSENTE: startSprint lo crea desde la plantilla con todos los marcadores', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'roadmap-missing-'));
+    try {
+      startSprint({ number: 1, objective: 'Sprint desde cero' }, dir);
+      const md = readFileSync(join(dir, 'roadmap.md'), 'utf8');
+      if (!md.includes('**Sprint 1 — Sprint desde cero**')) throw new Error('header del sprint no se rellenó');
+      if (!md.includes('<!-- ideas-crudas-end -->')) throw new Error('faltan marcadores');
+      addIdea({ text: 'idea inicial' }, dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  check('ensureMarkers no toca un roadmap.md que ya está completo', () => {
+    const md = readFileSync(ROADMAP_TEMPLATE, 'utf8');
+    const r = ensureMarkers(md);
+    if (r.md !== md || r.added.length) throw new Error('modificó un roadmap completo');
   });
 } finally {
   if (existsSync(roadmapDir)) rmSync(roadmapDir, { recursive: true, force: true });

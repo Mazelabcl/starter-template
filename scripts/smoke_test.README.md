@@ -1,12 +1,12 @@
-# Smoke test del starter v3
+# Smoke test del starter v6
 
-Un comando que en menos de 90 segundos te dice si el sistema completo funciona end-to-end. Pensado para correrse antes de empezar un proyecto serio, no para CI continuo.
+Un comando que en menos de 90 segundos te dice si las piezas principales funcionan (keys, memoria, research, imágenes). Pensado para correrse antes de empezar un proyecto serio, no para CI continuo.
 
 ## Cómo ejecutar
 
 ```bash
 npm run smoke           # completo (~60-90s, gasta ~USD 0.05 en API credits)
-npm run smoke:quick     # rápido (<15s, sin gastos de red)
+npm run smoke:quick     # rápido (segundos, sin gastos de red)
 node scripts/smoke_test.js --verbose   # detalle de cada check
 node scripts/smoke_test.js --help      # ayuda
 ```
@@ -16,7 +16,7 @@ node scripts/smoke_test.js --help      # ayuda
 | Modo | Tiempo | Costo | Cuándo usarlo |
 |------|--------|-------|---------------|
 | default | 60-90s | ~USD 0.05 | Antes de empezar proyecto serio. Una vez por sesión real. |
-| `--quick` | <15s | USD 0 | Después de cambios al setup, para validar estructura. |
+| `--quick` | segundos | USD 0 | Después de cambios al setup, para validar estructura. |
 | `--verbose` | igual que arriba | igual | Cuando algo falla y necesitas ver detalle. |
 
 ## Qué chequea cada check
@@ -24,32 +24,24 @@ node scripts/smoke_test.js --help      # ayuda
 | # | Nombre | Costo | Lo que valida |
 |---|--------|-------|---------------|
 | 1 | Variables de entorno | 0 | `OPENROUTER_API_KEY` y `OPENAI_API_KEY` presentes y no son placeholders. |
-| 2 | Hand-off contracts | 0 | `emitOutput` y `consumeInput` con `architect-output.schema.json`, más rechazo de outputs inválidos. |
-| 3 | Memoria del proyecto | 0 | `writeProfile`, `addAgent`, `addDecision`, `addLesson`, `summarize` retornan conteos correctos. |
-| 4 | Dashboard server | 0 | `startServer(0)` levanta en puerto libre, `/api/state` responde 200 con JSON válido. |
-| 5 | Perplexity research | ~USD 0.002 | `research('quick', ...)` retorna content + al menos 1 cita con URL parseable. |
-| 6 | gpt-image-2 | ~USD 0.04 | `python scripts/openai_images.py generate` produce un PNG real >10KB con magic bytes válidos. |
-| 7 | Multimodal flow | 0 | `image-gen-output` schema acepta el PNG del check 6 (o un PNG mínimo en `--quick`). |
-| 8 | Pipeline-v2 integration | 0 | `pipeline-v2-integration.test.js` corre como subprocess y termina con exit 0. |
+| 2 | Memoria del proyecto | 0 | `writeProfile`, `addAgent`, `addDecision`, `addLesson`, `summarize` retornan conteos correctos. |
+| 3 | Perplexity research | ~USD 0.002 | `research('quick', ...)` retorna content + al menos 1 fuente con URL parseable. |
+| 4 | gpt-image-2 | ~USD 0.04 | `python scripts/openai_images.py generate` produce un PNG real >10KB con magic bytes válidos. |
 
 ## Output esperado en éxito
 
 ```
---- Smoke Test Mazelab Starter v3 ---
+--- Smoke Test Mazelab Starter v6 ---
 
-Aviso: el check 5 (Perplexity) puede tomar hasta 30 segundos.
-Aviso: el check 6 (gpt-image-2) puede tomar hasta 60 segundos.
+Aviso: el check 3 (Perplexity) puede tomar hasta 30 segundos.
+Aviso: el check 4 (gpt-image-2) puede tomar hasta 60 segundos.
 
-[1/8] Variables de entorno... OK (0.0s)
-[2/8] Hand-off contracts cycle... OK (0.1s)
-[3/8] Memoria del proyecto... OK (0.1s)
-[4/8] Dashboard server up... OK (0.2s)
-[5/8] Perplexity research... OK (3.4s)
-[6/8] gpt-image-2 generación... OK (28.1s)
-[7/8] Multimodal validation flow... OK (0.0s)
-[8/8] Pipeline-v2 integration... OK (1.8s)
+[1/4] Variables de entorno... OK (0.0s)
+[2/4] Memoria del proyecto... OK (0.1s)
+[3/4] Perplexity research... OK (3.4s)
+[4/4] gpt-image-2 generación... OK (28.1s)
 
-Sistema verde. 8 de 8 checks OK.
+Sistema verde. 4 de 4 checks OK.
 ```
 
 ## Mensajes de error comunes y cómo arreglarlos
@@ -80,12 +72,6 @@ La key existe pero OpenRouter responde 401/403.
 Falta el venv de Python o las dependencias.
 **Fix:** corre `npm run setup` (incluye crear venv + instalar `openai`).
 
-### `pipeline-v2-integration.test.js exit=1`
-Algo del repo cambió y rompió la integración. Corre el test directo para ver detalle:
-```bash
-node pipeline-v2-integration.test.js
-```
-
 ### `timeout (Xms) en <check>`
 Algún check tomó demasiado. Causa común: red lenta o API saturada. Reintenta o usa `--quick` para saltarlo.
 
@@ -96,4 +82,4 @@ Algún check tomó demasiado. Causa común: red lenta o API saturada. Reintenta 
 - **Después de actualizar dependencias** (`npm update` o cambios en `requirements.txt`).
 - **Cuando algo se siente raro** y quieres descartar problema sistémico antes de debuggear código de proyecto.
 
-No lo corras en cada commit — para eso están los tests específicos (`npm run test:contracts`, `npm run test:dashboard`, etc.). El smoke test gasta API credits reales.
+No lo corras en cada commit — para eso están los tests específicos (`npm test`). El smoke test gasta API credits reales.

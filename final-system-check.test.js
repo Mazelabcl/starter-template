@@ -1,22 +1,20 @@
 // final-system-check.test.js
-// Suite final de verificación de integridad estructural del starter v3.
+// Suite final de verificación de integridad estructural del starter (v6).
 //
 // Verifica que TODOS los componentes principales existen y son funcionales:
 //   - Cada skill core tiene SKILL.md con frontmatter parseable.
 //   - Cada src/*.js módulo se puede importar sin error.
 //   - Cada councils/*.json (definidos + templates) parsea como JSON.
-//   - dashboard/server.js levanta y responde HTTP.
-//   - memory/, roadmap/, contracts/, content/ existen con sus READMEs/templates.
+//   - memory/, roadmap/, content/ existen con sus READMEs/templates.
+//   - Lo eliminado en v6 (dashboard, voz, contracts, pipeline-v2) no vuelve.
 //   - Slash commands en .claude/commands/ tienen frontmatter mínimo.
 //
 // No corre lógica de negocio — esto es el "smoke estructural" que confirma que
-// el repo está completo después de v3.
+// el repo está completo.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import http from 'node:http';
-import { spawn } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -57,9 +55,8 @@ function hasFrontmatter(path) {
 // ---------- 1. Skills core ----------
 
 const CORE_SKILLS_EXPECTED = [
-  'agent-template', 'cold-reader-gate', 'confidence-loop', 'council',
-  'image-explorer', 'image-gen', 'karpathy-rules', 'kickoff',
-  'multimodal-validation', 'pipeline-v2', 'quality-mindset', 'voice-mode',
+  'agent-template', 'council', 'image-explorer', 'image-gen', 'kickoff',
+  'multimodal-validation',
 ];
 
 await check('skills core — todas presentes con SKILL.md y frontmatter', () => {
@@ -78,7 +75,7 @@ const CATALOG_SKILLS_EXPECTED = [
   'brand-guidelines', 'canvas-design', 'frontend-design', 'marketing',
   'pdf-skill', 'playwright', 'remotion', 'seo', 'skill-creator',
   'superpowers-full', 'superpowers-pr', 'web-artifacts-builder',
-  'webapp-testing', 'xlsx',
+  'webapp-testing', 'xlsx', 'confidence-loop', 'cold-reader-gate',
 ];
 
 await check('skills catálogo — todas presentes con SKILL.md y frontmatter', () => {
@@ -99,8 +96,7 @@ await check('skills catálogo — todas presentes con SKILL.md y frontmatter', (
 
 const COMMANDS_EXPECTED = [
   'council', 'idea', 'kickoff', 'roadmap',
-  'setup-openai', 'setup-openrouter',
-  'voz-leer', 'voz-off', 'voz-on',
+  'setup-openai', 'setup-openrouter', 'resumen',
 ];
 
 await check('slash commands — todos presentes con frontmatter', () => {
@@ -177,15 +173,6 @@ await check('roadmap/ — README.md, roadmap.md, current-sprint.json', () => {
   JSON.parse(readFileSync(join(dir, 'current-sprint.json'), 'utf8'));
 });
 
-await check('contracts/ — README.md, validator.js, helpers.js, schemas/, declared/', () => {
-  const dir = join(ROOT, 'contracts');
-  for (const f of ['README.md', 'validator.js', 'helpers.js', 'test.js']) {
-    assert(existsSync(join(dir, f)), `falta contracts/${f}`);
-  }
-  const schemas = readdirSync(join(dir, 'schemas')).filter(f => f.endsWith('.schema.json'));
-  assert(schemas.length >= 5, `contracts/schemas/ tiene ${schemas.length} schemas, se esperan al menos 5`);
-});
-
 await check('content/ — templates de principles e INDEX existen', () => {
   const dir = join(ROOT, 'content');
   // Los archivos finales se generan con /kickoff. Acá solo deben existir los templates.
@@ -193,40 +180,19 @@ await check('content/ — templates de principles e INDEX existen', () => {
   assert(existsSync(join(dir, 'INDEX.template.md')), 'falta content/INDEX.template.md');
 });
 
-// ---------- 7. dashboard server up ----------
+// ---------- 7. lo eliminado en v6 no vuelve ----------
 
-await check('dashboard/server.js — levanta en puerto temporal y responde GET /api/state', async () => {
-  const port = 50000 + Math.floor(Math.random() * 5000);
-  const child = spawn(process.execPath, [join(ROOT, 'dashboard', 'server.js')], {
-    env: { ...process.env, DASHBOARD_PORT: String(port) },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  // Esperar a que el server reporte que está escuchando.
-  await new Promise((res, rej) => {
-    const timer = setTimeout(() => rej(new Error('timeout esperando boot del dashboard')), 5000);
-    child.stdout.on('data', (chunk) => {
-      if (chunk.toString().includes('escuchando')) {
-        clearTimeout(timer);
-        res();
-      }
-    });
-  });
-
-  // Hacer GET.
-  const status = await new Promise((res, rej) => {
-    http.get(`http://localhost:${port}/api/state`, (r) => {
-      // Drena para liberar el socket.
-      r.resume();
-      res(r.statusCode);
-    }).on('error', rej);
-  });
-
-  child.kill();
-  // Esperar que el process realmente cierre antes de continuar.
-  await new Promise((res) => child.on('exit', res));
-
-  assert(status === 200, `GET /api/state respondió ${status}, se esperaba 200`);
+await check('v6 — dashboard, voz, contracts, pipeline-v2 y skills de disciplina ya no existen', () => {
+  const gone = [
+    'dashboard', 'contracts', 'scripts/dashboard_hook.js', 'scripts/update_state.js',
+    'scripts/voice_tts.js', '.claude/skills/voice-mode', '.claude/skills/pipeline-v2',
+    '.claude/skills/quality-mindset', '.claude/skills/karpathy-rules',
+    '.claude/commands/voz-on.md', '.claude/commands/voz-off.md', '.claude/commands/voz-leer.md',
+  ];
+  const back = gone.filter(p => existsSync(join(ROOT, p)));
+  assert(back.length === 0, `volvieron: ${back.join(', ')}`);
+  const settings = readFileSync(join(ROOT, '.claude', 'settings.json'), 'utf8');
+  assert(!/dashboard_hook/.test(settings), 'settings.json todavía llama dashboard_hook.js');
 });
 
 // ---------- 8. docs core presentes ----------
@@ -242,8 +208,8 @@ await check('docs core — README.md, CLAUDE.md, docs/QUICKSTART.md existen', ()
 
 // ---------- 9. scripts core ----------
 
-await check('scripts/ — smoke_test.js, voice_tts.js, update_state.js, openai_images.py', () => {
-  for (const f of ['smoke_test.js', 'voice_tts.js', 'update_state.js', 'openai_images.py']) {
+await check('scripts/ — smoke_test.js, run_tests.js, session_brief.js, openai_images.py', () => {
+  for (const f of ['smoke_test.js', 'run_tests.js', 'session_brief.js', 'openai_images.py']) {
     assert(existsSync(join(ROOT, 'scripts', f)), `falta scripts/${f}`);
   }
 });

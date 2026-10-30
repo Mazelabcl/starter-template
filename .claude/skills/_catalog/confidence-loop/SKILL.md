@@ -1,6 +1,6 @@
 ---
 name: confidence-loop
-description: Revisa iterativamente un artefacto (agente, skill, código, plan, diseño) y lo mejora hasta alcanzar un confidence score de 95+/100. Invocable en cualquier proyecto sobre cualquier artefacto. Triggers: "revisa con confidence loop", "mejora hasta 95", "/confidence-loop", "loop de confianza", "iterar calidad".
+description: (Opcional, catálogo — se autoevalúa, úsala como apoyo y no como validación independiente) Revisa iterativamente un artefacto (agente, skill, código, plan, diseño) y lo mejora hasta alcanzar un confidence score de 95+/100. Invocable en cualquier proyecto sobre cualquier artefacto. Triggers: "revisa con confidence loop", "mejora hasta 95", "/confidence-loop", "loop de confianza", "iterar calidad".
 ---
 
 # Confidence Loop

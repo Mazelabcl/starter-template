@@ -7,7 +7,19 @@ import { execSync, spawnSync } from 'child_process';
 import { platform } from 'os';
 import { join } from 'path';
 
-// Si no hay TTY interactivo (ej. CI o postinstall en algunos entornos), salir limpio.
+// Entornos de deploy/CI (Vercel, Netlify, GitHub Actions, cualquier CI): salir
+// limpio ANTES de todo. `npm install` dispara este script vía postinstall y el
+// check de TTY solo no alcanza (Vercel a veces expone TTY). Reportado por
+// consumer amanda-paz (deploy a Vercel fallaba con "npm install exited with 1").
+export function isCiEnvironment(env = process.env) {
+  return Boolean(env.VERCEL || env.CI || env.NETLIFY || env.GITHUB_ACTIONS);
+}
+if (isCiEnvironment()) {
+  console.log('[setup.js] Entorno de deploy/CI detectado (VERCEL/CI/NETLIFY/GITHUB_ACTIONS). Saltando setup interactivo.');
+  process.exit(0);
+}
+
+// Si no hay TTY interactivo (ej. postinstall en algunos entornos), salir limpio.
 if (!process.stdin.isTTY) {
   console.log('\n[setup.js] No hay terminal interactivo. Saltando setup.');
   console.log('Cuando puedas, corre manualmente: npm run setup\n');
@@ -182,10 +194,9 @@ async function maybeAskKey(label, envKey, prefix, url) {
   header('Listo');
   log('Próximos pasos:');
   log('  1. (Recomendado) Smoke test end-to-end:');
-  log('       npm run smoke           # 8 checks en ~90s, ~USD 0.05');
-  log('       npm run smoke:quick     # estructura solamente, sin gasto de red');
-  log('  2. Levanta el dashboard en otro terminal: npm run dashboard');
-  log('  3. Abre Claude Code en este repo y escribe /kickoff.');
-  log('  4. Guía completa de 5 minutos: docs/QUICKSTART.md\n');
+  log('       npm run smoke           # 4 checks, ~USD 0.05 (llama APIs reales)');
+  log('       npm run smoke:quick     # sin gasto de red');
+  log('  2. Abre Claude Code en este repo y escribe /kickoff.');
+  log('  3. Guía completa de 5 minutos: docs/QUICKSTART.md\n');
   rl.close();
 })();

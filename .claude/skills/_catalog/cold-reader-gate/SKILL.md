@@ -1,6 +1,6 @@
 ---
 name: cold-reader-gate
-description: Capa 3 del pipeline v2 — gate independiente con voto binario GO/NO-GO y veto absoluto sobre los scores de critic interno. Triggers "evalúa cold", "cold reader", "/cold-reader-gate", al cerrar un artefacto creativo antes de mostrarlo al humano.
+description: (Opcional, catálogo) Gate independiente con voto binario GO/NO-GO y veto absoluto sobre un deliverable terminado. Triggers "evalúa cold", "cold reader", "/cold-reader-gate", al cerrar un artefacto creativo antes de mostrarlo al humano.
 allowed-tools: Read
 ---
 
@@ -10,12 +10,12 @@ Lector frío independiente. Recibe SOLO `principles.md` + el deliverable final. 
 
 ## Por qué existe
 
-Bug raíz que arregla: cuando el cold-reader es 1 voz más en una rúbrica multi-óptica, los scores salen 87/100 mientras un lector cold real está en 75. Producto pasa, lector cold lo rechaza. Ver `agent-orchestration-portable-brief.md` §1, §2.3.
+Bug raíz que arregla: cuando el cold-reader es 1 voz más en una rúbrica multi-óptica, los scores salen 87/100 mientras un lector cold real está en 75. Producto pasa, lector cold lo rechaza.
 
 ## Cuándo invocarla
 
 - Antes de cerrar cualquier artefacto creativo (guion, texto narrativo, prompt visual, plan, propuesta)
-- Después de critic interno (Capa 2 del pipeline v2)
+- Después de una revisión interna (critic, confidence-loop o revisión propia)
 - Cuando un confidence-loop reporte 85+ pero el orquestador huele algo raro
 
 ## Cuándo NO invocarla
@@ -26,7 +26,7 @@ Bug raíz que arregla: cuando el cold-reader es 1 voz más en una rúbrica multi
 ## Inputs requeridos
 
 1. **Path al deliverable final** (texto, prompt, imagen path)
-2. **Path a `content/principles.md`**
+2. **Path a `content/principles.md`** (si no existe, usa el brief original del usuario en 5-10 líneas como canon)
 
 **NO recibas** críticas previas, briefs históricos, debates, scores de critic interno. Si el orquestador te los pasa, ignóralos.
 
@@ -81,7 +81,7 @@ SI NO-GO:
   2. <fix accionable>
   3. <fix accionable>
 
-MODELO USADO: <claude-opus-4-7 | etc.>
+MODELO USADO: <id del modelo que corrió el gate>
 ```
 
 ## Reglas duras
@@ -95,4 +95,4 @@ MODELO USADO: <claude-opus-4-7 | etc.>
 
 ## Versión
 
-v0 — 2026-05-06
+v1 — 2026-10 (v6: movida al catálogo como skill opcional; sin dependencia de pipeline-v2 ni de schemas de contracts)

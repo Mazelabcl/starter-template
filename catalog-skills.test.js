@@ -55,6 +55,9 @@ const EXPECTED_SKILLS = [
   // Sprint v4 — lenguaje no-técnico para cliente (tema recurrente #1).
   'client-language',
   'non-technical-cold-reader',
+  // v6 Sprint 1 — movidas de core a catálogo (opcionales).
+  'confidence-loop',
+  'cold-reader-gate',
 ];
 
 // Skills nuevas del Sprint 5.2 que son stubs y deben seguir el formato canónico
@@ -63,7 +66,7 @@ const EXPECTED_SKILLS = [
 // `dual-auditor-protocol` y `review-app` (v3.1) también traen contenido completo
 // con secciones más libres — las eximimos del strict 4-section check.
 const STUB_SKILLS = EXPECTED_SKILLS.filter(
-  s => s !== 'superpowers-pr' && s !== 'dual-auditor-protocol' && s !== 'review-app'
+  s => !['superpowers-pr', 'dual-auditor-protocol', 'review-app', 'confidence-loop', 'cold-reader-gate'].includes(s)
 );
 
 const REQUIRED_SECTIONS = [

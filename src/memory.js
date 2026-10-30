@@ -151,14 +151,41 @@ function ensureMarkdownFile(filePath, header) {
   writeFileSync(filePath, header, 'utf8');
 }
 
+// Enum de reversibilidad de una decisión:
+//   'alta'  = fácil de deshacer (reversible)
+//   'media' = deshacer cuesta trabajo (default)
+//   'baja'  = difícil o imposible de deshacer (irreversible)
+export const REVERSIBILITY_LEVELS = ['alta', 'media', 'baja'];
+
+// Acepta el enum literal o texto libre. El texto libre se mapea por palabras
+// clave (irreversible → baja, reversible → alta, resto → media) y se conserva
+// como nota. Devuelve { level, note }.
+export function normalizeReversibility(value) {
+  if (value === undefined || value === null || value === '') return { level: 'media', note: '' };
+  if (typeof value !== 'string') {
+    throw new MemoryError(
+      `addDecision: reversibility recibido: ${JSON.stringify(value)} (tipo ${typeof value}). `
+      + `Usa uno de [${REVERSIBILITY_LEVELS.join(', ')}] o un texto libre que lo describa.`,
+    );
+  }
+  const raw = value.trim();
+  const lower = raw.toLowerCase();
+  if (REVERSIBILITY_LEVELS.includes(lower)) return { level: lower, note: '' };
+  const n = lower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let level = 'media';
+  if (/\b(irreversibles?|no (es )?reversible|no se puede (revertir|deshacer)|dificil de (revertir|deshacer)|permanente|definitiv[oa])\b/.test(n)) {
+    level = 'baja';
+  } else if (/\b(reversibles?|facil de (revertir|deshacer)|se puede (revertir|deshacer))\b/.test(n)) {
+    level = 'alta';
+  }
+  return { level, note: raw };
+}
+
 export function addDecision({ title, decision, reasoning, alternatives, reversibility }, memoryDir) {
   if (!title || !decision || !reasoning) {
     throw new MemoryError('addDecision: title, decision y reasoning son requeridos');
   }
-  const allowed = ['alta', 'media', 'baja'];
-  if (reversibility && !allowed.includes(reversibility)) {
-    throw new MemoryError(`addDecision: reversibility debe ser uno de [${allowed.join(', ')}]`);
-  }
+  const { level, note } = normalizeReversibility(reversibility);
   const path = pathFor(memoryDir, 'decisions');
   ensureMarkdownFile(path, '# Decisiones del proyecto\n\n');
   const entry = [
@@ -167,7 +194,7 @@ export function addDecision({ title, decision, reasoning, alternatives, reversib
     `**Decisión:** ${decision}`,
     `**Razón:** ${reasoning}`,
     `**Alternativas consideradas:** ${alternatives || 'no documentadas'}`,
-    `**Reversibilidad:** ${reversibility || 'media'}`,
+    `**Reversibilidad:** ${level}${note ? ` (${note})` : ''}`,
     '',
     '',
   ].join('\n');

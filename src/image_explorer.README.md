@@ -125,7 +125,7 @@ content/explorations/<timestamp>/
 }
 ```
 
-El dashboard puede consumir esto directo sin parseo custom — los campos están estables.
+Cualquier herramienta (p. ej. un HTML de revisión) puede consumir esto directo sin parseo custom — los campos están estables.
 
 ## Tips para prompts cross-modelo
 

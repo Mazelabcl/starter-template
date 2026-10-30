@@ -52,7 +52,7 @@ En cualquier momento del kickoff, si el usuario dice "reinicia", "vuelve atrás"
    
    Si confirma:
    - **OpenRouter API key** (requerida — research, councils, cliente unificado): "Sácala en https://openrouter.ai/keys. Formato `sk-or-v1-...`. Pégala (Enter para saltar):"
-   - **OpenAI API key** (requerida — gpt-image-2, voice-mode TTS): "Sácala en https://platform.openai.com/api-keys. Formato `sk-proj-...`. Pégala:"
+   - **OpenAI API key** (requerida — gpt-image-2): "Sácala en https://platform.openai.com/api-keys. Formato `sk-proj-...`. Pégala:"
    - **Replicate API token** (opcional — image-explorer multi-modelo): "Si vas a hacer concept art o exploración visual, conviene. Pégala (Enter para saltar):"
    
    Cada key que reciba la guarda con el helper `upsertEnv(key, value)` (o equivalente) escribiendo a `.env`.
@@ -79,8 +79,8 @@ Hola, soy el Starter Template de Mazelab.
 Soy un sistema multi-agente que te acompaña en cualquier tipo de proyecto:
 investigaciones, software, contenido creativo, decisiones de negocio,
 automatizaciones personales. Tengo capacidades como councils multi-modelo,
-generación de imágenes, dashboard en vivo, memoria persistente entre
-sesiones, voz (input por Win+H + output por TTS), y un catálogo de skills
+generación de imágenes, memoria persistente entre sesiones, roadmap con
+/idea, review-app para revisar entregables, y un catálogo de skills
 opcionales que activo según tu proyecto.
 
 Mi job es escucharte, armar el equipo correcto, y ejecutar contigo. La
@@ -241,18 +241,18 @@ Además, detecté en tus respuestas señales para activar también:
 ```
 
 Las **skills core** (siempre activas, definidas en `CORE_SKILLS` del detector) son:
-`pipeline-v2`, `cold-reader-gate`, `multimodal-validation`, `karpathy-rules`, `confidence-loop`, `agent-template`. Estas no se discuten — se activan automáticamente. Solo presentas al usuario las RECOMENDADAS adicionales.
+`multimodal-validation`, `agent-template`. Estas no se discuten — se activan automáticamente. Solo presentas al usuario las RECOMENDADAS adicionales.
 
 ### Stack recomendado por tipo (resumen)
 
 | Tipo | Skills recomendadas adicionales |
 |---|---|
 | content | image-gen, image-explorer, brand-guidelines, multimodal-validation, marketing, canvas-design |
-| build | quality-mindset, agent-template, council, karpathy-rules, superpowers-pr, frontend-design, webapp-testing, playwright |
-| business | council, pipeline-v2, seo-strategist, agent-template, marketing, brand-guidelines, xlsx |
-| research | pipeline-v2, cold-reader-gate, firecrawl, context7 |
-| personal | confidence-loop, pipeline-v2 |
-| mixed | pipeline-v2, confidence-loop, web-artifacts-builder |
+| build | agent-template, council, superpowers-pr, frontend-design, webapp-testing, playwright |
+| business | council, cold-reader-gate, seo, agent-template, marketing, brand-guidelines, xlsx |
+| research | cold-reader-gate, firecrawl, context7 |
+| personal | confidence-loop |
+| mixed | confidence-loop, web-artifacts-builder |
 
 Las skills opcionales del catálogo (`_catalog/INDEX.md`) están disponibles pero no todas se recomiendan automáticamente para todo tipo. La lista por tipo es curada — Sprint 5.2 amplió las recomendaciones según el video que vio Aldo. Las skills no listadas (ej. `pdf-skill`, `remotion`, `web-artifacts-builder` para tipos distintos a `mixed`) se activan manualmente cuando el caso lo amerita, no por default.
 
@@ -269,7 +269,7 @@ Stack recomendado:
 - <skill 1> — <why en 1 línea>
 - <skill 2> — <why en 1 línea>
 - <skill 3> — <why en 1 línea>
-(además de las skills core: pipeline-v2, cold-reader-gate, multimodal-validation, karpathy-rules, confidence-loop, agent-template)
+(además de las skills core: multimodal-validation, agent-template)
 
 Sprint 1 sugerido — <objective>:
 - <deliverable 1>
@@ -314,43 +314,21 @@ for (const s of recommendStack(type)) addSkill({ name: s.name, notas: s.why });
 // — ese se reserva para el cierre del sprint (vía closeSprint() en roadmap.js).
 const sprint = suggestInitialSprint(type, mode);
 startSprint({ number: 1, objective: sprint.objective });
-// startSprint() además sincroniza dashboard/state.json.current_sprint con el
-// sprint recién creado (mejor-effort vía POST /api/state, silencioso si el
-// dashboard no está arriba).
+// startSprint() también rellena el header de roadmap/roadmap.md (y lo crea con
+// todos los marcadores si no existe).
 ```
 
 ### Crear archivos del proyecto
 
 1. `content/principles.md` ← copia desde `content/principles.template.md` y reemplaza `{{PROYECTO}}`, `{{TIPO}}`, `{{DESCRIPCION}}`, `{{TONO}}`, `{{NO_NEGOCIABLES}}`, `{{FECHA}}`.
 2. `content/INDEX.md` ← copia desde `content/INDEX.template.md` y ajusta la sección de archivos canónicos según el tipo.
-3. `roadmap/roadmap.md` ← genera con sprint 1 explicitado y backlog vacío. Sprint 2.4 lo enriquecerá.
+3. `roadmap/roadmap.md` ← **NO lo escribas a mano.** El starter ya trae la plantilla con los marcadores HTML que `src/roadmap.js` necesita, y `startSprint()` rellena el header del Sprint 1. Si el archivo no existe, `startSprint()` lo crea completo.
 
 Si `content/` o `roadmap/` no existen, créalos.
 
-### Roadmap inicial (formato literal)
+### Roadmap inicial
 
-```markdown
-# Roadmap del proyecto
-
-## Sprint actual
-
-### Sprint 1 — <objective>
-**Modo:** <rapido|profundo>
-**Estado:** abierto
-
-Deliverables:
-- <deliverable 1>
-- <deliverable 2>
-- <deliverable 3>
-
-## Backlog
-
-(vacío — Sprint 2.4 lo enriquecerá con priorización)
-
-## Sprints cerrados
-
-(ninguno aún — ver memory/sprint-log.md cuando empiecen a cerrarse)
-```
+No hay formato literal que copiar: `roadmap/roadmap.md` lo gestiona `src/roadmap.js`. Si alguien lo reescribió sin marcadores (`<!-- tasks-start -->`, `<!-- prio-alta-start -->`, `<!-- ideas-crudas-start -->`, etc.), `roadmap.js` agrega las secciones faltantes al final en la próxima operación. No edites el contenido entre marcadores a mano.
 
 ### Agentes activos
 
@@ -390,7 +368,7 @@ Ofrece correr `npm run smoke:quick` automáticamente para validar que el sistema
 | `writeProfile(profile)` | Una sola vez, al confirmar el diagnóstico. | El objeto del Paso 4. |
 | `addSkill({ name, notas? })` | Una vez por skill core + una vez por skill recomendada. | `notas` es el `why` cuando aplica. |
 | `addAgent(...)` | NO en el kickoff. Se llama cuando el primer agente se invoca. | — |
-| `startSprint({ number, objective })` (de roadmap.js) | Una sola vez al crear el sprint inicial. Crea `roadmap/current-sprint.json` Y sincroniza `dashboard/state.json.current_sprint`. | Tomado de `suggestInitialSprint`. |
+| `startSprint({ number, objective })` (de roadmap.js) | Una sola vez al crear el sprint inicial. Crea `roadmap/current-sprint.json` y actualiza el header de `roadmap/roadmap.md`. | Tomado de `suggestInitialSprint`. |
 | `addSprint(...)` (de memory.js) | **NO en el kickoff.** Se llama recién al CERRAR el sprint (vía `closeSprint()` en roadmap.js). Esa decisión vive en D7. | — |
 
 `addDecision` y `addLesson` NO se llaman en el kickoff salvo que el usuario tome una decisión explícita durante la entrevista (ej. "decido no usar Git en este proyecto"). En ese caso lo registras como `addDecision`.
@@ -403,7 +381,7 @@ Ofrece correr `npm run smoke:quick` automáticamente para validar que el sistema
 2. **No recomendar stack genérico.** Si el tipo es `content`, no recomiendas `firecrawl`. Si es `research`, no recomiendas `image-gen`. La justificación de cada skill (`why`) debe ser específica al proyecto.
 3. **No asumir tipo sin señal clara.** Si `confidence < 2`, repreguntas. No "intuyes".
 4. **No persistir antes de la confirmación.** El usuario decide final. Hasta entonces, todo vive en memoria de la conversación.
-5. **No bombardear al usuario con jerga.** Aldo es vibe coder. Decir "te activo confidence-loop, pipeline-v2 y agent-template" sin explicar para qué = falla.
+5. **No bombardear al usuario con jerga.** Aldo es vibe coder. Decir "te activo cold-reader-gate y agent-template" sin explicar para qué = falla.
 6. **No saltarte el Paso 0 con un párrafo educativo de 6 puntos.** El saludo es UNA línea, una pregunta. Lo demás se gana con el flujo.
 7. **No correr checks técnicos (npm install, .env) antes de preguntar.** Eso interrumpe la energía. El orquestador los ejecuta DESPUÉS, cuando ya hay perfil.
 

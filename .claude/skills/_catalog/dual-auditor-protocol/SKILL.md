@@ -22,7 +22,7 @@ Activate `dual-auditor-protocol` when:
 ### When NOT to use
 
 - Quick prototypes, throwaway scripts, MVP code that hasn't shipped.
-- Code where a single critic pass + `cold-reader-gate` is enough (the default flow in `pipeline-v2`).
+- Code where a single critic pass + `cold-reader-gate` is enough (the default review flow).
 - Time-critical situations where the second model + synthesis adds 3–5 minutes you don't have.
 - Cost-sensitive contexts: dual audit costs roughly 2.5× a single audit (two parallel calls + one synthesis call).
 
@@ -67,21 +67,12 @@ If unsure, default to single-auditor flow and ask the user before escalating.
 1. **Two auditors see the SAME input.** No leakage between them. They must NOT see each other's output until synthesis.
 2. **Different model families.** Use a Claude variant + an OpenAI variant (or any cross-family pair). Avoids the trivial case where both share the same bias.
 3. **Adversarial framing.** Each auditor is instructed to be SKEPTICAL, look for problems, not validate. "Find what's wrong" not "review this".
-4. **Structured output (JSON schemas).** Both auditors must emit findings that match `contracts/schemas/findings-auditor.schema.json`. The synthesizer consumes them via `consumeInput()`.
+4. **Structured output (JSON).** Both auditors must emit findings with the shape described in "Output shapes" below. The synthesizer checks the required fields before cross-referencing.
 5. **Synthesizer dedups + ranks.** Same issue found by both → high confidence. Found by only one → marked single-source.
 
-## Limitation: subagents CANNOT use Write
+## Where the findings get written
 
-Per Claude Code's runtime, **subagents launched via the Agent tool cannot write to project files** (decision D6). The wrapper blocks `Write` with "Subagents should return findings as text."
-
-This affects how the protocol runs:
-
-- If the auditors run as **subagents** (typical): they return findings as TEXT in their final response. The orchestrator (main Claude) writes `audit/findings-deep-A.md` and `audit/findings-deep-B.md` from those texts.
-- If the auditors run as **scripts via OpenRouter** (`src/openrouter_client.js`): they write directly to files because they're not subagents.
-
-**The brief to each auditor MUST include this instruction literally**:
-
-> "Return your findings as TEXT in your final response, wrapped in a single fenced code block tagged `json`. Do NOT use the Write tool — the wrapper blocks it. The orchestrator will persist the file. If your findings exceed 50k tokens, split into N parts and indicate `part 1/N, continued in next turn` at the end."
+Subagents can write files. Ask each auditor to write its JSON to `audit/findings-deep-A.json` / `audit/findings-deep-B.json` (or return it as text if you prefer to persist it yourself). Auditors that run as scripts via OpenRouter (`src/openrouter_client.js`) write directly too.
 
 ## Recommended models
 
@@ -111,11 +102,11 @@ const response = await chat({
 });
 ```
 
-## Output schemas
+## Output shapes
 
-The skill ships with two JSON schemas under `contracts/schemas/`:
+Two JSON shapes (documented here; no schema files needed):
 
-- **`findings-auditor.schema.json`** — shape of each auditor's output. Required fields:
+- **Auditor findings** — shape of each auditor's output. Required fields:
   - `auditor`: string (e.g., `"claude-opus-4.5"` or `"gpt-5"`).
   - `target`: string (what was audited — file path, module name, spec name).
   - `audited_at`: ISO timestamp.
@@ -123,7 +114,7 @@ The skill ships with two JSON schemas under `contracts/schemas/`:
   - `overall_verdict`: enum `"pass" | "pass_with_fixes" | "fail"`.
   - `summary`: 1–3 paragraph executive summary.
 
-- **`dual-audit-synthesis.schema.json`** — shape of the synthesizer's output. Required fields:
+- **Synthesis** — shape of the synthesizer's output. Required fields:
   - `synthesized_at`: ISO timestamp.
   - `target`: string.
   - `auditor_a_summary`: string (1 line).
@@ -182,7 +173,7 @@ Do NOT validate the code as "looks fine". Assume the code has problems. Find the
 Target: {TARGET_PATH}
 Content below the dotted line.
 
-Return your findings as TEXT in your final response, wrapped in ONE fenced code block tagged `json`. Match the schema `contracts/schemas/findings-auditor.schema.json`. Do NOT use the Write tool — the wrapper blocks it. The orchestrator will persist the file.
+Write your findings as ONE JSON object to {OUTPUT_PATH} (or, if no path is given, return it in a single fenced code block tagged `json`). Required fields: auditor, target, audited_at, findings[{id, severity, category, title, description, evidence?, suggested_fix?}], overall_verdict (pass|pass_with_fixes|fail), summary.
 
 If your findings exceed 50k tokens, split into N parts and indicate `part 1/N, continued in next turn` at the end of each part.
 
@@ -210,7 +201,7 @@ Your job:
 
 Be specific. Do NOT just list findings — explain why consensus vs divergence matters for confidence.
 
-Return as TEXT in a single fenced code block tagged `json`, matching `contracts/schemas/dual-audit-synthesis.schema.json`. NO Write tool.
+Return ONE JSON object (written to {OUTPUT_PATH} or in a single fenced code block tagged `json`) with: synthesized_at, target, auditor_a_summary, auditor_b_summary, consensus_findings, divergent_findings, consolidated_verdict, verdict_reasoning, recommended_next_steps.
 
 ........................................
 
@@ -233,8 +224,7 @@ AUDITOR B (GPT) findings:
 - ❌ Using two variants of the same model family (e.g., Claude Opus + Claude Sonnet). Same training bias.
 - ❌ Using a `timeout_ms` below 300s for reasoning models on large contexts. Returns empty/partial JSON → synthesizer crashes.
 - ❌ Telling the auditors "validate this code is good." They will rubber-stamp. The adversarial framing is what makes it work.
-- ❌ Skipping the JSON schema validation. The synthesizer needs structured input; free-form prose makes cross-referencing impossible.
-- ❌ Asking the subagents to use Write directly. They CAN'T. The orchestrator writes.
+- ❌ Skipping the required-fields check. The synthesizer needs structured input; free-form prose makes cross-referencing impossible.
 - ❌ Running dual-audit on trivial code (< 100 LOC, throwaway). Overkill; just use single critic.
 
 ## Next steps after the synthesis
@@ -247,4 +237,6 @@ If `fail`, escalate to the human. The dual-auditor said the deliverable has fund
 
 ## Versión
 
-v0.1 — 2026-05-13 — Sprint v3.1 promotion from audit-master local skill. Schemas in `contracts/schemas/`, brief templates literal in this file, end-to-end flow documented. To reach v1.0: add a reference reusable script (`scripts/dual_auditor.js`) that orchestrates the 3 calls programmatically with `src/openrouter_client.js` and `timeout_ms: 300_000`.
+v0.2 — 2026-10 — v6: removed the D6 "subagents cannot Write" workaround (obsolete) and the dependency on `contracts/schemas/` (deleted); output shapes documented inline.
+
+v0.1 — 2026-05-13 — Sprint v3.1 promotion from audit-master local skill. Brief templates literal in this file, end-to-end flow documented. To reach v1.0: add a reference reusable script (`scripts/dual_auditor.js`) that orchestrates the 3 calls programmatically with `src/openrouter_client.js` and `timeout_ms: 300_000`.

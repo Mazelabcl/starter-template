@@ -17,13 +17,12 @@ El roadmap es donde vive **el camino del proyecto**: qué estamos haciendo ahora
 | `roadmap/current-sprint.json` | Fuente de verdad estructurada del sprint actual. | `src/roadmap.js` |
 | `memory/sprint-log.md` | Historial de sprints cerrados con lessons. | `src/memory.js` (vía `addSprint`, llamado desde `closeSprint`) |
 | `memory/active-team.json` | Skills/agentes activos. Independiente del roadmap. | `src/memory.js` |
-| `dashboard/state.json` | Snapshot vivo de la sesión. Lee del roadmap para mostrar el sprint actual. | `dashboard/` (Sprint 2.2/2.3) |
 
 `roadmap.md` y `current-sprint.json` se mantienen sincronizados por el módulo: cada vez que cambias el JSON, el módulo re-renderiza las secciones marcadas en el `.md`. Las marcas son comentarios HTML (`<!-- tasks-start -->` / `<!-- tasks-end -->`, etc.) que delimitan zonas autogeneradas — el resto del archivo es prosa que el humano puede editar libremente sin romper nada.
 
 ## Filosofía de la marca
 
-El `.md` está diseñado para ser **legible primero**. No es JSON enmascarado de markdown: es un documento que un humano puede abrir, editar el texto entre marcadores, y aún así interactuar con el módulo. La verdad estructurada está en el JSON; el `.md` es la vista.
+El `.md` está diseñado para ser **legible primero**. No es JSON enmascarado de markdown: es un documento que un humano puede abrir y editar **fuera** de los marcadores `<!-- ... -->`; lo que está entre marcadores lo reescribe `src/roadmap.js`. Si faltan marcadores (p. ej. alguien reescribió el archivo a mano), `roadmap.js` agrega las secciones faltantes al final en la próxima operación, y si `roadmap.md` no existe lo crea desde la plantilla. La verdad estructurada está en el JSON; el `.md` es la vista.
 
 ## Anti-patrones
 
@@ -44,13 +43,13 @@ El `.md` está diseñado para ser **legible primero**. No es JSON enmascarado de
 
 ### Ejemplo 1 — Captura sin desviar
 
-Aldot está debuggeando un problema con el `validator.js` y se le ocurre que el dashboard debería tener dark mode.
+Aldot está debuggeando un problema con un script y se le ocurre que la landing debería tener dark mode.
 
 ```
-/idea agregar dark mode al dashboard
+/idea agregar dark mode a la landing
 ```
 
-Claude responde: `Capturado en backlog: "agregar dark mode al dashboard". Sigues con tu tarea actual.`
+Claude responde: `Capturado en backlog: "agregar dark mode a la landing". Sigues con tu tarea actual.`
 
 Aldot continúa el debug. La idea queda en `roadmap.md`, sección "Ideas crudas".
 
@@ -59,7 +58,7 @@ Aldot continúa el debug. La idea queda en `roadmap.md`, sección "Ideas crudas"
 Al cerrar el sprint actual, Aldot revisa las ideas crudas:
 
 ```
-/roadmap priorize agregar dark mode al dashboard
+/roadmap priorize agregar dark mode a la landing
 ```
 
 Claude pregunta: `¿Qué prioridad le doy: alta, media o baja?`. Aldot dice "media".

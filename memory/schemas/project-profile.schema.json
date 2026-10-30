@@ -15,7 +15,7 @@
     "mode": {
       "type": "string",
       "enum": ["rapido", "profundo"],
-      "description": "Cadencia esperada. rapido = iteraciones cortas. profundo = pipeline-v2 completo cada output."
+      "description": "Cadencia esperada. rapido = iteraciones cortas. profundo = revisión en frío de cada output."
     },
     "description": {
       "type": "string",
@@ -35,7 +35,7 @@
     "skills_activas": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
-      "description": "Slugs de skills habilitadas. Ej: kickoff, pipeline-v2, image-gen."
+      "description": "Slugs de skills habilitadas. Ej: kickoff, image-gen."
     },
     "agentes_activos": {
       "type": "array",

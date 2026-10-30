@@ -14,34 +14,6 @@
     "cost_hint": "sin costo de API"
   },
   {
-    "name": "cold-reader-gate",
-    "location": "core",
-    "triggers": [
-      "evalúa cold",
-      "cold reader",
-      "/cold-reader-gate"
-    ],
-    "when_to_use": "Al cerrar un artefacto creativo antes de mostrarlo al humano: voto binario GO/NO-GO con veto absoluto.",
-    "output": "Veredicto GO/NO-GO + justificación",
-    "status": "v1.0",
-    "cost_hint": "~USD 0.02-0.10 (1 modelo)"
-  },
-  {
-    "name": "confidence-loop",
-    "location": "core",
-    "triggers": [
-      "revisa con confidence loop",
-      "mejora hasta 95",
-      "/confidence-loop",
-      "loop de confianza",
-      "iterar calidad"
-    ],
-    "when_to_use": "Para subir la calidad de un artefacto (agente, skill, código, plan) hasta 95+/100, máx 5 iteraciones.",
-    "output": "Artefacto mejorado + score final",
-    "status": "v1.0",
-    "cost_hint": "variable según iteraciones"
-  },
-  {
     "name": "council",
     "location": "core",
     "triggers": [
@@ -84,15 +56,6 @@
     "cost_hint": "~USD 0.04-0.40 por imagen según calidad"
   },
   {
-    "name": "karpathy-rules",
-    "location": "core",
-    "triggers": [],
-    "when_to_use": "Auto al escribir/editar código: 4 reglas para mantenerlo limpio y surgical.",
-    "output": "Disciplina de código (no genera archivos)",
-    "status": "v1.0",
-    "cost_hint": "sin costo de API"
-  },
-  {
     "name": "kickoff",
     "location": "core",
     "triggers": [
@@ -114,47 +77,6 @@
     "output": "Veredicto visual PASS/FAIL",
     "status": "v1.0",
     "cost_hint": "sin costo extra de API"
-  },
-  {
-    "name": "pipeline-v2",
-    "location": "core",
-    "triggers": [
-      "construye X",
-      "vamos a crear Y",
-      "/pipeline-v2"
-    ],
-    "when_to_use": "Creación no trivial de un deliverable: architect → critic → cold-reader → humano con contracts validados.",
-    "output": "Deliverable validado + memoria sincronizada",
-    "status": "v1.0",
-    "cost_hint": "variable según capas"
-  },
-  {
-    "name": "quality-mindset",
-    "location": "core",
-    "triggers": [
-      "vamos a hacer X",
-      "ayúdame con Y",
-      "/quality-mindset"
-    ],
-    "when_to_use": "Siempre activa para cualquier tarea no trivial: spec → plan → ejecución → cierre validado.",
-    "output": "Disciplina de proceso (no genera archivos)",
-    "status": "v1.0",
-    "cost_hint": "sin costo de API"
-  },
-  {
-    "name": "voice-mode",
-    "location": "core",
-    "triggers": [
-      "/voz-on",
-      "/voz-off",
-      "/voz-leer",
-      "lee esta respuesta",
-      "modo voz"
-    ],
-    "when_to_use": "Cuando una respuesta larga se procesa mejor escuchándola. NO para respuestas con código/JSON/tablas.",
-    "output": "Audio TTS de la respuesta",
-    "status": "v1.0",
-    "cost_hint": "~USD 0.015 por 1k chars (OpenAI TTS)"
   },
   {
     "name": "brand-guidelines",
@@ -206,6 +128,34 @@
     "output": "Texto reescrito sin jerga + glosario aplicado",
     "status": "stub",
     "cost_hint": "sin costo"
+  },
+  {
+    "name": "cold-reader-gate",
+    "location": "catalog",
+    "triggers": [
+      "evalúa cold",
+      "cold reader",
+      "/cold-reader-gate"
+    ],
+    "when_to_use": "Al cerrar un artefacto creativo antes de mostrarlo al humano: voto binario GO/NO-GO con veto absoluto.",
+    "output": "Veredicto GO/NO-GO + justificación",
+    "status": "v1.0",
+    "cost_hint": "~USD 0.02-0.10 (1 modelo)"
+  },
+  {
+    "name": "confidence-loop",
+    "location": "catalog",
+    "triggers": [
+      "revisa con confidence loop",
+      "mejora hasta 95",
+      "/confidence-loop",
+      "loop de confianza",
+      "iterar calidad"
+    ],
+    "when_to_use": "Opcional. Para iterar la calidad de un artefacto (agente, skill, código, plan), máx 5 iteraciones. Se autoevalúa: no reemplaza una revisión independiente.",
+    "output": "Artefacto mejorado + score final",
+    "status": "v1.0",
+    "cost_hint": "variable según iteraciones"
   },
   {
     "name": "dual-auditor-protocol",

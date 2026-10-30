@@ -25,9 +25,8 @@ Formato por entrada:
 ## Sprint 1 — Fundamentos del pipeline
 
 **Fechas:** 2026-05-01 a 2026-05-07
-**Objetivo:** Dejar contracts y memory listos para que pipeline-v2 los use.
+**Objetivo:** Dejar memory y roadmap listos para el primer deliverable.
 **Entregables:**
-- contracts/ con validator + helpers
 - memory/ con schemas, templates y src/memory.js
 
 **Lessons emergentes:**

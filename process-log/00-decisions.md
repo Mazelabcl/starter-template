@@ -1,7 +1,9 @@
-# 00 — Decisiones humanas (ley)
+# 00 — Decisiones humanas (histórico)
 
-> Este archivo es **ley** para todos los agentes. Lo leen primero (después de `principles.md`).
-> Cada decisión tiene un ID (D1, D2, ...). Los agentes citan el ID al aplicar.
+> **v6 (2026-10):** este archivo ya **no** se lee obligatoriamente en cada sesión; es histórico de consulta.
+> Quedan obsoletas por el Sprint 1 de v6: D1-D5 y D8 (dashboard, eliminado), D6 (los subagentes ya pueden usar Write), D7 (sync a dashboard; `current-sprint.json` sigue siendo la fuente del sprint), D10 (Brief Contract / "Te presento al equipo", eliminado junto con pipeline-v2).
+> Siguen vigentes: D9, D11, D12, D13 (D12 resumida en `CLAUDE.md`).
+> Cada decisión tiene un ID (D1, D2, ...).
 
 ## Formato de cada decisión
 
@@ -93,3 +95,9 @@ Superada por D8 (dashboard degradado a HTML plano). Ver historial completo en gi
 **Decisión:** Aplicados 45 fixes verificados — recorte de tokens (quality-mindset/decisions/detector CLI), docs al día post-D8, fricciones novato Windows (python venv, npm start, PowerShell), catálogo honesto (stubs), higiene git (gitignore + dotenv muerto + bind 127.0.0.1), y oportunidades (chip costo USD, /resumen, feedback endpoint, SessionStart hook). Detalle en AUDIT-v5.html.
 **Aplicación:** Tokens (~4-5k/sesión): quality-mindset y kickoff con ejemplos movidos a EXAMPLES.md, 00-decisions condensado (D1/D3/D5 superadas por D8), detector.js con CLI, dedups de council/catálogo/pipeline. Docs al día: dashboard descrito como HTML v4 (no kanban borrado), versiones a v4.2.1, conteos de catálogo a 18, estructura con review-app/feedback.md, wrappers multi-modelo. Novato Windows: python del `.venv` en image-gen, npm start con health-check + apagado real, variantes PowerShell, setup.js (`--python-only`, placeholder, comando replicate, paths en errores). Catálogo honesto: client-language/non-technical-cold-reader a status stub, trigger 'mano' removido, detector sincronizado. Higiene: `.gitignore` (state.json, contracts/declared, runtime outputs, voice-state), dotenv dep muerta removida, servers bind 127.0.0.1, CORS restringido. Oportunidades: chip costo USD en dashboard, `/resumen` + build_resumen.js, review-app feedback endpoint, SessionStart hook.
 **Reversibilidad:** media.
+
+## D15 — v6 Sprint 1 "base liviana" (2026-10-30)
+
+**Decisión:** el starter pasa de "OS de proceso" a "kit de contexto + herramientas". Se eliminan dashboard, modo voz, pipeline-v2 + contracts y las skills de disciplina auto-disparadas (`quality-mindset`, `karpathy-rules`); `confidence-loop` y `cold-reader-gate` pasan al catálogo como opcionales. `CLAUDE.md` se reduce a ≤1.5k tokens y deja de forzar la lectura de este archivo.
+**Razón:** auditoría de uso real en 16 proyectos consumer: ~10k tokens cargados por sesión en ceremonia sin uso (pipeline-v2 con cero usos reales; dashboard y voz sin uso).
+**Reversibilidad:** alta (todo queda en el historial de git, tag `v5.0`).

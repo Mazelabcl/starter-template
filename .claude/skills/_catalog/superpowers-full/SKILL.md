@@ -1,6 +1,6 @@
 ---
 name: superpowers-full
-description: Versión completa del set de superpowers (spec-driven development, code review profundo, debug disciplinado, refactor seguro). Aplica a proyectos software de complejidad media-alta donde la disciplina ligera de `quality-mindset` y las 5 reglas de `superpowers-pr` no alcanzan. Importa el set completo de [obra/superpowers](https://github.com/obra/superpowers) (~80 skills) y deja al usuario activar las sub-skills que necesite.
+description: Versión completa del set de superpowers (spec-driven development, code review profundo, debug disciplinado, refactor seguro). Aplica a proyectos software de complejidad media-alta donde las 5 reglas de `superpowers-pr` no alcanzan. Importa el set completo de [obra/superpowers](https://github.com/obra/superpowers) (~80 skills) y deja al usuario activar las sub-skills que necesite.
 triggers: ["/superpowers-full", "spec driven", "code review profundo", "debug riguroso", "refactor seguro", "tdd estricto"]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
@@ -9,7 +9,6 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 Diferencia clara con las otras dos:
 
-- **`quality-mindset`** (core) — disciplina universal mínima viable. Aplica a cualquier proyecto, con o sin Git formal.
 - **`superpowers-pr`** (catálogo) — 5 reglas duras para Git/PR/code review formal. Solo proyectos con flujo PR real.
 - **`superpowers-full`** (catálogo, esta skill) — set completo: spec-driven, TDD estricto, debug riguroso, refactor seguro, branching disciplinado. Para proyectos software complejos donde aporta tener todo el toolkit.
 
@@ -27,7 +26,7 @@ Activa `superpowers-full` solo si tu proyecto cumple uno o más:
 ### Cuándo NO activarla
 
 - Proyectos creativos (content, marketing, research). Esto es disciplina software, no creativa.
-- Proyectos pequeños donde `quality-mindset` ya cubre lo necesario.
+- Proyectos pequeños donde la disciplina básica (commits regulares, tests de lo crítico) ya alcanza.
 - Vibe coding rápido. La fricción de spec-driven no aporta cuando el objetivo es prototipar.
 - Si solo necesitas reglas de PR, usa `superpowers-pr` (más enfocada).
 
@@ -47,7 +46,7 @@ Activa `superpowers-full` solo si tu proyecto cumple uno o más:
 
 - **Activar todo el set sin curar.** ~80 skills es ruido. Selecciona las 5-10 que apliquen al proyecto.
 - **Aplicar spec-driven a tareas triviales.** Spec antes de cambio de 5 líneas es overhead. Reserva para features no triviales.
-- **Mezclar con `quality-mindset` sin claridad.** Si activas `superpowers-full`, deja `quality-mindset` como capa base; no dupliques reglas.
+- **Mezclar con `superpowers-pr` sin claridad.** Si activas ambas, `superpowers-full` manda; no dupliques reglas.
 - **Esperar que la skill compile/ejecute código.** Esto es disciplina + checklists, no ejecución automática.
 
 ---

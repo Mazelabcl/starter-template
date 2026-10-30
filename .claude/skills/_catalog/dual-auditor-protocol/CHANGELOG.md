@@ -18,3 +18,7 @@ Initial promotion from `audit-master/.claude/skills/dual-auditor-protocol/` (a l
 - Reference reusable script `scripts/dual_auditor.js` que orquesta los 3 calls programáticamente sin subagents.
 - Integration test que ejercita los 3 schemas con auditors mockeados (no consume API real).
 - Documentar el costo aproximado por audit (función del tamaño del target).
+
+## v0.2 — 2026-10
+
+- Removed D6 workaround (subagents can Write now) and the dependency on `contracts/schemas/` (deleted in v6). Output shapes documented inline in SKILL.md.

@@ -17,7 +17,7 @@
 //  - Si una persona falla con retry, el council continúa con N-1 personas y marca
 //    `partial: true` en metadata. Council con menos de 2 personas vivas falla
 //    porque sin 2 voces no hay debate.
-//  - Eventos al dashboard vía scripts/update_state.js (best-effort, no bloquean).
+//  - Eventos de progreso vía callback `onProgress` (opcional, in-process).
 //  - Decisiones con `recommendation` no nulo y `requires_human_decision: false`
 //    se persisten automáticamente en memory.addDecision().
 //
@@ -29,7 +29,6 @@
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawn } from 'node:child_process';
 import process from 'node:process';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
@@ -41,7 +40,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const COUNCILS_DIR = join(REPO_ROOT, 'councils');
 const SCHEMA_PATH = join(COUNCILS_DIR, 'templates', 'council.schema.json');
-const UPDATE_STATE_SCRIPT = join(REPO_ROOT, 'scripts', 'update_state.js');
 
 const TIER_TIMEOUTS_MS = { 1: 5 * 60_000, 2: 10 * 60_000, 3: 20 * 60_000 };
 const COST_CONFIRMATION_THRESHOLD_USD = 5;
@@ -572,7 +570,7 @@ function parseSynthesisJson(content) {
 }
 
 // =============================================================================
-// Eventos al dashboard
+// Eventos de progreso (callback in-process)
 // =============================================================================
 
 function emitEvent(type, payload, onProgress) {
@@ -582,18 +580,6 @@ function emitEvent(type, payload, onProgress) {
       onProgress({ type, payload, timestamp: new Date().toISOString() });
     }
   } catch { /* el callback no debe romper el council */ }
-
-  // Spawn de scripts/update_state.js best-effort. No bloqueamos.
-  if (!existsSync(UPDATE_STATE_SCRIPT)) return;
-  try {
-    const child = spawn(
-      process.execPath,
-      [UPDATE_STATE_SCRIPT, 'event', type, JSON.stringify(payload || {})],
-      { stdio: 'ignore', detached: false },
-    );
-    child.on('error', () => { /* silenciamos: el state.json se escribirá igual */ });
-    if (child.unref) child.unref();
-  } catch { /* sin dashboard, no fatal */ }
 }
 
 // =============================================================================
