@@ -54,10 +54,16 @@ function assertContains(haystack, needle, msg) {
   }
 }
 
+// Las keys reales del entorno (p. ej. `node --env-file=...`) no deben llegar al
+// hijo: este meta-test controla las keys solo vía el .env falso que escribe.
+const KEY_VARS = ['OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'REPLICATE_API_TOKEN'];
+
 function runSmoke(args, env = {}) {
+  const base = { ...process.env };
+  for (const k of KEY_VARS) delete base[k];
   const r = spawnSync(process.execPath, [SMOKE, ...args], {
     cwd: REPO_ROOT,
-    env: { ...process.env, ...env },
+    env: { ...base, ...env },
     encoding: 'utf8',
     timeout: 60000,
   });
