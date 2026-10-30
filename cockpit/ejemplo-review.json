@@ -1,0 +1,27 @@
+{
+  "id": "ejemplo-cockpit",
+  "title": "Ejemplo: así se ve una revisión en el cockpit",
+  "kind": "plan",
+  "connects_to": ["roadmap del proyecto", "feedback que lee el orquestador"],
+  "context_brief": "Revisión de prueba para conocer el cockpit. Aldot está aprendiendo a usarlo. No hay decisiones reales en juego: el objetivo es que pruebe votar, comentar y conversar por voz. Si pregunta algo técnico, explica en simple que el feedback queda en cockpit/feedback y que el orquestador lo lee al continuar.",
+  "items": [
+    {
+      "id": "votar",
+      "title": "Votar cada ítem",
+      "body_md": "Cada ítem tiene **dos botones**: aprobar o rechazar. Si algo no te convence, escribe un comentario corto al lado.\n\n- Aprobar = sigue así\n- Rechazar = hay que cambiarlo",
+      "tags": ["básico"]
+    },
+    {
+      "id": "conversar",
+      "title": "Conversar por voz",
+      "body_md": "El botón **Conversar sobre esta revisión** abre una guía por voz. Te explica cada ítem y te pregunta tu opinión, uno a la vez. Al terminar, guarda la conversación y un resumen con tus decisiones.",
+      "tags": ["voz"]
+    },
+    {
+      "id": "guardar",
+      "title": "Guardar y seguir",
+      "body_md": "Presiona **Guardar feedback**. La próxima vez que hables con Claude, el aviso de inicio le dirá que hay feedback pendiente y lo aplicará antes de seguir.",
+      "tags": ["cierre"]
+    }
+  ]
+}

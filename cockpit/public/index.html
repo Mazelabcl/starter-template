@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cockpit</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">Cockpit</a>
+    <div class="topbar-pills">
+      <span id="live-pill" class="pill pill-muted">conectando…</span>
+      <span id="voice-pill" class="pill pill-muted">voz: …</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="roadmap" aria-label="Roadmap">
+      <div class="col">
+        <h2 class="col-title"><span class="dot dot-done"></span>Hecho</h2>
+        <div id="rm-done" class="col-body"></div>
+      </div>
+      <div class="col col-now">
+        <h2 class="col-title"><span class="dot dot-now"></span>Ahora</h2>
+        <div id="rm-now" class="col-body"></div>
+      </div>
+      <div class="col">
+        <h2 class="col-title"><span class="dot dot-next"></span>Sigue</h2>
+        <div id="rm-next" class="col-body"></div>
+      </div>
+    </section>
+
+    <section id="view-home">
+      <h2 class="section-title">Revisiones</h2>
+      <div id="review-list" class="review-list"></div>
+    </section>
+
+    <section id="view-review" hidden>
+      <a class="back" href="#/">&larr; Todas las revisiones</a>
+      <div id="focus" class="focus"></div>
+      <div id="changed-banner" class="banner" hidden>
+        Esta revisión cambió en disco. <button id="reload-review" class="btn btn-small" type="button">Recargar</button>
+      </div>
+      <div id="summary-box" class="summary-box" hidden></div>
+      <div id="items" class="items"></div>
+    </section>
+  </main>
+
+  <div id="savebar" class="savebar" hidden>
+    <span id="save-status" class="save-status"></span>
+    <div class="savebar-actions">
+      <button id="btn-talk" class="btn btn-ghost" type="button">Conversar sobre esta revisión</button>
+      <button id="btn-save" class="btn btn-primary" type="button">Guardar feedback</button>
+    </div>
+  </div>
+
+  <aside id="talk" class="talk" hidden aria-label="Conversación">
+    <div class="talk-head">
+      <div>
+        <strong>Conversación guiada</strong>
+        <span id="talk-mode" class="pill pill-muted"></span>
+        <span id="talk-timer" class="talk-timer"></span>
+      </div>
+      <button id="talk-close" class="btn btn-small" type="button" aria-label="Cerrar">Cerrar</button>
+    </div>
+    <div id="voice-orb" class="voice-orb" hidden><span></span></div>
+    <div id="talk-log" class="talk-log" aria-live="polite"></div>
+    <form id="talk-form" class="talk-form" hidden>
+      <input id="talk-input" type="text" autocomplete="off" placeholder="Escribe tu respuesta…">
+      <button class="btn btn-primary" type="submit">Enviar</button>
+    </form>
+    <div class="talk-actions">
+      <button id="talk-voice" class="btn btn-primary" type="button">Hablar por voz</button>
+      <button id="talk-text" class="btn btn-ghost" type="button">Usar texto</button>
+      <button id="talk-end" class="btn btn-ghost" type="button" disabled>Terminar y guardar</button>
+    </div>
+    <p id="talk-note" class="talk-note"></p>
+    <audio id="talk-audio" autoplay></audio>
+  </aside>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
