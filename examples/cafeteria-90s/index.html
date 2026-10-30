@@ -1,0 +1,110 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!-- Fixture de /bold-rounds: sitio de cafetería deliberadamente feo, estilo 1998.
+     Negocio ficticio. No lo "arregles" aquí: es el punto de partida de la demo. -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>..:: CAFE LOS AROMOS ::.. Bienvenidos a nuestra pagina web!!!</title>
+<style>
+  body { background: #ffff66; color: #000080; font-family: "Comic Sans MS", "Comic Sans", cursive; margin: 0; }
+  .marco { border: 6px ridge #ff00ff; background: #00ffff; }
+  .titulo { font-size: 44px; color: #ff0000; text-shadow: 3px 3px #00ff00; font-weight: bold; }
+  .cinta { overflow: hidden; white-space: nowrap; background: #000000; color: #00ff00; font-family: "Courier New", monospace; font-size: 18px; padding: 4px 0; }
+  .cinta span { display: inline-block; padding-left: 100%; animation: pasar 14s linear infinite; }
+  @keyframes pasar { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+  .parpadeo { animation: blink 1s steps(2, start) infinite; color: #ff0000; font-weight: bold; }
+  @keyframes blink { to { visibility: hidden; } }
+  td { vertical-align: top; }
+  .menu-lateral a { color: #0000ff; font-size: 15px; }
+  .menu-lateral { background: #ff99cc; border: 3px outset #ff00ff; }
+  .caja { background: #ffffff; border: 2px dashed #ff6600; padding: 8px; }
+  h2 { color: #008000; font-size: 26px; text-decoration: underline; margin: 6px 0; }
+  .precio { color: #ff0000; font-weight: bold; }
+  .contador { font-family: "Courier New", monospace; background: #000; color: #ff0000; padding: 2px 6px; letter-spacing: 3px; }
+  .pie { font-size: 11px; color: #808080; text-align: center; }
+  .pedidos { font-size: 11px; color: #999999; }
+  hr { border: 0; height: 6px; background: repeating-linear-gradient(90deg, #ff0000 0 10px, #0000ff 10px 20px, #00ff00 20px 30px); }
+</style>
+</head>
+<body>
+
+<table width="100%" cellpadding="6" cellspacing="0" class="marco">
+  <tr>
+    <td align="center">
+      <div class="titulo">*** CAFE LOS AROMOS ***</div>
+      <div>~~ El mejor cafe de Providencia desde 1994 ~~</div>
+    </td>
+  </tr>
+</table>
+
+<div class="cinta"><span>BIENVENIDOS!!! &nbsp; NUEVO: Kuchen de murta los dias viernes &nbsp;***&nbsp; Abrimos de lunes a sabado 8:00 a 20:00 &nbsp;***&nbsp; Pagina en construccion, vuelva pronto!!! &nbsp;***&nbsp; Agreganos a tus favoritos!!!</span></div>
+
+<table width="100%" cellpadding="8" cellspacing="4" border="1">
+  <tr>
+    <td width="180" class="menu-lateral">
+      <b><u>MENU DEL SITIO</u></b><br><br>
+      &gt;&gt; <a href="#inicio">Inicio</a><br>
+      &gt;&gt; <a href="#historia">Nuestra Historia</a><br>
+      &gt;&gt; <a href="#carta">La Carta</a><br>
+      &gt;&gt; <a href="#ubicacion">Como Llegar</a><br>
+      &gt;&gt; <a href="#libro">Libro de Visitas</a><br>
+      &gt;&gt; <a href="#links">Links Amigos</a><br><br>
+      <span class="parpadeo">NUEVO!!</span><br>
+      <small>Mejor visto en Netscape Navigator 4.0 a 800x600</small><br><br>
+      Visitas: <span class="contador">0012847</span>
+    </td>
+    <td class="caja" id="inicio">
+      <h2>Bienvenidos a nuestra pagina!!!</h2>
+      <p>Hola amigos internautas!!! Somos <b>Cafe Los Aromos</b>, una cafeteria familiar ubicada en el corazon de <b>Providencia, Santiago de Chile</b>. Desde 1994 tostamos nuestro propio cafe y horneamos todos los dias pan amasado, kuchenes y empanadas.</p>
+      <p>Te esperamos para tu once, tu desayuno o para conversar con amigos. Tenemos <b>wifi gratis</b> y enchufes en todas las mesas!!!</p>
+
+      <hr>
+
+      <h2 id="historia">Nuestra Historia</h2>
+      <p>Don Hernan y la senora Gladys abrieron Los Aromos con una maquina de espresso italiana de segunda mano y tres mesas. Hoy somos 14 mesas, una terraza con parron y el mismo cafe de grano que tostamos en la trastienda cada martes.</p>
+
+      <hr>
+
+      <h2 id="carta">La Carta</h2>
+      <table border="1" cellpadding="4" cellspacing="0" bgcolor="#ccffcc" width="100%">
+        <tr bgcolor="#ff9900"><th>Producto</th><th>Descripcion</th><th>Precio</th></tr>
+        <tr><td>Espresso</td><td>Grano tostado en casa</td><td class="precio">$1.800</td></tr>
+        <tr><td>Cortado</td><td>Espresso con un toque de leche</td><td class="precio">$2.100</td></tr>
+        <tr><td>Capuccino</td><td>Con canela o cacao</td><td class="precio">$2.900</td></tr>
+        <tr><td>Te con leche</td><td>Te negro de Ceylan</td><td class="precio">$1.900</td></tr>
+        <tr><td>Kuchen de murta</td><td>Solo viernes, receta de la abuela</td><td class="precio">$2.800</td></tr>
+        <tr><td>Empanada de pino</td><td>Horneada, carne cortada a cuchillo</td><td class="precio">$3.200</td></tr>
+        <tr><td>Once completa</td><td>Pan amasado, palta, jamon, queso y te o cafe</td><td class="precio">$6.500</td></tr>
+        <tr><td>Sandwich barros luco</td><td>En pan frica o marraqueta</td><td class="precio">$5.900</td></tr>
+      </table>
+
+      <hr>
+
+      <h2 id="ubicacion">Como Llegar</h2>
+      <p>Estamos en <b>Av. Los Aromos 1450, Providencia</b> (a 4 cuadras del Metro Manuel Montt, Linea 1). Telefono: <b>(2) 2234 5678</b>.</p>
+      <p>Horario: lunes a sabado de 8:00 a 20:00. Domingos cerrado.</p>
+
+      <hr>
+
+      <h2 id="libro">Libro de Visitas</h2>
+      <p><i>"El mejor cortado de Santiago, y la senora Gladys es un amor"</i> - Paty, Nunoa</p>
+      <p><i>"La empanada de pino es de otro planeta!!!"</i> - Rodrigo, Las Condes</p>
+      <p><i>"Vengo a trabajar con mi notebook todos los martes"</i> - Fernanda, Providencia</p>
+
+      <hr>
+
+      <h2 id="links">Links Amigos</h2>
+      <p>&gt; Panaderia La Espiga &nbsp; &gt; Floreria Doña Rosa &nbsp; &gt; Club de Ajedrez de Providencia</p>
+    </td>
+  </tr>
+</table>
+
+<p class="pie">
+  (c) 1998-2026 Cafe Los Aromos. Todos los derechos reservados. Webmaster: hernan.jr@aromos.cl<br>
+  Esta pagina fue hecha con Microsoft FrontPage 98
+</p>
+<p class="pedidos" align="right">pedidos para llevar al (2) 2234 5678 o por whatsapp +56 9 8765 4321</p>
+
+</body>
+</html>

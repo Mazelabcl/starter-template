@@ -67,6 +67,7 @@ Comandos útiles:
 | "Investiga X" | `node src/research.js pro "X"` |
 | "Genera imagen de X" | skill `image-gen` (si no sabe qué modelo, propón `image-explorer`) |
 | Decisión con tradeoffs reales | propón `/council` con su costo |
+| "Mejóralo por rondas" / rediseño audaz | `/bold-rounds <objetivo> [N]` (trabaja sobre copia; Aldot elige en el cockpit) |
 | "Crea un agente para X" | skill `agent-template` |
 | Idea al pasar | `/idea X` y sigo con la tarea actual |
 | "Qué tenemos pendiente" | `/roadmap` |

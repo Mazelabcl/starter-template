@@ -40,6 +40,10 @@ cockpit/feedback/*
 councils/results/*.json
 !councils/results/.gitkeep
 
+# bold-rounds — copias de trabajo, screenshots y variantes de cada corrida (datos del proyecto)
+/rounds/
+/rounds-*/
+
 # Generados
 /RESUMEN.html
 

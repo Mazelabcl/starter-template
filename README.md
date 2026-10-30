@@ -42,6 +42,7 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **image-explorer** | "explora este prompt en varios modelos" | Mismo prompt en 3-4 modelos, grilla HTML para elegir. |
 | **multimodal-validation** | automático tras generar imágenes | Obliga a mirar el PNG antes de darlo por bueno. |
 | **council** | `/council` | Personas expertas (CTO, devops, PM, usuario novato...) opinan por separado y se fusionan en una propuesta mejorada, con cada aporte atribuido. |
+| **bold-rounds** | `/bold-rounds <objetivo> [N]` | Rediseño audaz por rondas sobre una copia: cada ronda compara una variante ciega (sin memoria) y una con contexto, con screenshots antes/después en el cockpit. Tú eliges; el original no se toca hasta que digas "aplicar". Demo: `examples/cafeteria-90s/`. |
 | **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
@@ -62,6 +63,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 | `/roadmap` | Revisa sprint actual + backlog. |
 | `/council` | Propone el council adecuado para tu tarea y lo corre si dices que sí. |
 | `/revisar` | Publica una revisión del trabajo actual en el cockpit. |
+| `/bold-rounds <objetivo> [N]` | N rondas de mejora audaz (ciega vs. contexto) sobre una copia; eliges en el cockpit. |
 | `/resumen` | Genera `RESUMEN.html`. |
 | `/setup-openrouter`, `/setup-openai` | Configura una API key puntual. |
 
@@ -118,6 +120,7 @@ npm test
 | gpt-image-2 medium 1024×1024 | USD 0.04 |
 | Replicate (FLUX, SD 3.5, Recraft) | USD 0.003 a 0.05 |
 | Council personas / multimodel | USD 0.02-0.05 / 0.30-0.50 |
+| `/bold-rounds` | 2 agentes por ronda (~1-2 min cada uno); consume tu plan de Claude Code, no API keys |
 | Smoke test completo | ~USD 0.05 |
 
 ## Versión

@@ -22,6 +22,10 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 - **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. Modo `multimodel` para arquitectura crítica. Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
 
+### Rediseño por rondas
+
+- **bold-rounds** (skill + `scripts/bold_rounds.js`, slash `/bold-rounds <objetivo> [N]`): mejora audaz de una web, proyecto o documento sobre una COPIA en `rounds/`. Cada ronda corre dos variantes en paralelo: **ciega** (subagente sin memoria, para innovar sin sesgo) y **contexto** (conoce rondas previas y tu feedback). Screenshots escritorio 1440 / celular 390 con Playwright, diff de píxeles que rechaza cambios invisibles, revisión `kind: "rounds"` en el cockpit con antes/después, pausa de control cada 3 rondas sin humano y tope de 10. El original solo cambia cuando dices "aplicar" (`node scripts/bold_rounds.js changes` lista qué cambiaría). Modo desatendido: `node scripts/bold_rounds.js run <ronda>` (usa `claude -p`). Screenshots requieren una vez `npm install --no-save playwright-core` (usa tu Chrome o Edge). Demo: `examples/cafeteria-90s/`.
+
 ### Orquestación y calidad
 
 - **kickoff**: entrevista adaptativa que termina en un plan de batalla publicado en el cockpit (`kind: "plan"`, armado con `.claude/skills/kickoff/plan.js`): TLDRs, equipo con "actúa como", brazos, proceso, councils y riesgos. Tras aplicar el feedback autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.

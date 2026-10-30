@@ -14,6 +14,21 @@
     "cost_hint": "sin costo de API"
   },
   {
+    "name": "bold-rounds",
+    "location": "core",
+    "triggers": [
+      "/bold-rounds",
+      "mejóralo por rondas",
+      "rediseño audaz",
+      "hazlo como la demo del café",
+      "dale N rondas de mejora"
+    ],
+    "when_to_use": "Round-by-round BOLD redesign of any concept (web page, project, feature, document) on a COPY. Each round runs two variants in parallel, BLIND (fresh context, no",
+    "output": "(no declarado)",
+    "status": "stub",
+    "cost_hint": "sin costo"
+  },
+  {
     "name": "council",
     "location": "core",
     "triggers": [
