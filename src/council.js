@@ -37,6 +37,7 @@ import process from 'node:process';
 import Ajv from 'ajv';
 
 import { chat as openrouterChat, OpenRouterError } from './openrouter_client.js';
+import { publishReview } from './cockpit.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -838,8 +839,8 @@ export function buildTldr(result) {
   ].join('\n');
 }
 
-// Contrato fijo del cockpit (Sprint 2). Si src/cockpit.js expone publishReview,
-// este objeto se le puede pasar tal cual.
+// Contrato fijo del cockpit (Sprint 2): saveResult() lo publica con
+// publishReview() de src/cockpit.js, que lo valida y lo escribe de forma atómica.
 export function toCockpitReview(result) {
   const m = result.merge;
   const items = [{
@@ -888,13 +889,10 @@ export function toCockpitReview(result) {
 
 export function saveResult(result, { root = REPO_ROOT } = {}) {
   const resultsDir = join(root, 'councils', 'results');
-  const reviewsDir = join(root, 'cockpit', 'reviews');
   mkdirSync(resultsDir, { recursive: true });
-  mkdirSync(reviewsDir, { recursive: true });
   const resultPath = join(resultsDir, `${result.id}.json`);
-  const reviewPath = join(reviewsDir, `${result.id}.json`);
   writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
-  writeFileSync(reviewPath, `${JSON.stringify(toCockpitReview(result), null, 2)}\n`, 'utf8');
+  const { path: reviewPath } = publishReview(toCockpitReview(result), root);
   return { resultPath, reviewPath };
 }
 
