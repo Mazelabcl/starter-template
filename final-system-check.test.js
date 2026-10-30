@@ -55,7 +55,7 @@ function hasFrontmatter(path) {
 // ---------- 1. Skills core ----------
 
 const CORE_SKILLS_EXPECTED = [
-  'agent-template', 'council', 'image-explorer', 'image-gen', 'kickoff',
+  'agent-template', 'bold-rounds', 'council', 'image-explorer', 'image-gen', 'kickoff',
   'multimodal-validation',
 ];
 
@@ -96,7 +96,7 @@ await check('skills catálogo — todas presentes con SKILL.md y frontmatter', (
 
 const COMMANDS_EXPECTED = [
   'council', 'idea', 'kickoff', 'roadmap',
-  'setup-openai', 'setup-openrouter', 'resumen', 'revisar',
+  'setup-openai', 'setup-openrouter', 'resumen', 'revisar', 'bold-rounds',
 ];
 
 await check('slash commands — todos presentes con frontmatter', () => {
