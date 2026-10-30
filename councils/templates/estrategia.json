@@ -1,0 +1,10 @@
+{
+  "id": "estrategia",
+  "name": "Estrategia",
+  "description": "Decisiones de rumbo: qué priorizar, construir o comprar, pivotear, entrar a un mercado.",
+  "personas": ["pm", "cfo", "visionario", "contrarian"],
+  "mode": "personas",
+  "redteam": true,
+  "signals": "El usuario duda entre caminos de largo plazo, prioridades del roadmap o apuestas grandes.",
+  "keywords": ["estrategia", "estrategico", "priorizar", "prioridad", "roadmap", "pivotear", "pivote", "mercado", "competencia", "construir o comprar", "apuesta", "rumbo", "vale la pena", "conviene", "largo plazo", "vision"]
+}

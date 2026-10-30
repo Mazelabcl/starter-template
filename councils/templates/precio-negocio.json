@@ -1,0 +1,10 @@
+{
+  "id": "precio-negocio",
+  "name": "Precio y negocio",
+  "description": "Precios, planes, modelo de negocio, costos y propuestas comerciales.",
+  "personas": ["cfo", "ventas", "cliente"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario decide cuánto cobrar, qué incluye un plan, si conviene un proveedor o cómo ganar dinero con algo.",
+  "keywords": ["precio", "precios", "cobrar", "tarifa", "plan", "planes", "suscripcion", "margen", "costo", "costos", "presupuesto", "rentable", "negocio", "cotizacion", "propuesta comercial", "proveedor", "pagar", "factura", "inversion"]
+}

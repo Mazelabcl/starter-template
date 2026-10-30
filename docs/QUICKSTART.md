@@ -67,7 +67,7 @@ Va al backlog del sprint. No ejecuta nada.
 |---|---|---|
 | Research con fuentes | `node src/research.js pro "tu pregunta"` | USD 0.001 a 0.01 |
 | Research profundo (tarda minutos) | `node src/research.js deep "tu pregunta"` | USD 0.05 a 0.20 |
-| Decisión con tradeoffs reales | `/council` | USD 0.02 a 2.50 según tier |
+| Decisión con tradeoffs reales | `/council` | USD 0.02-0.05 (multimodel ~USD 0.30-0.50) |
 | Explorar un prompt de imagen en varios modelos | `node src/image_explorer.js --prompt "..." --models "gpt-image-2,flux-1.1-pro"` | ~USD 0.18 por 4 modelos |
 | Imagen con personaje consistente | skill `image-gen` (en conversación) | USD 0.04 a 0.25 |
 | Revisar entregables en el navegador | `npm run review-app` | sin costo |

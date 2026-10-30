@@ -1,6 +1,6 @@
 # Starter Template Mazelab — v6-dev
 
-Un **kit de contexto + herramientas** para arrancar proyectos con Claude Code: research con fuentes, generación de imágenes multi-modelo, memoria del proyecto, roadmap con `/idea`, review-app para revisar entregables y councils multi-modelo para decisiones difíciles. Usas lo que tu proyecto necesita; nada es obligatorio.
+Un **kit de contexto + herramientas** para arrancar proyectos con Claude Code: research con fuentes, generación de imágenes multi-modelo, memoria del proyecto, roadmap con `/idea`, review-app para revisar entregables y councils de expertos para decisiones difíciles. Usas lo que tu proyecto necesita; nada es obligatorio.
 
 ## Quickstart (copia y pega)
 
@@ -40,7 +40,7 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **image-gen** | "genera imagen de X", `/image-gen` | gpt-image-2 (y FLUX, Ideogram, Nano Banana Pro) con identity lock y referencias. |
 | **image-explorer** | "explora este prompt en varios modelos" | Mismo prompt en 3-4 modelos, grilla HTML para elegir. |
 | **multimodal-validation** | automático tras generar imágenes | Obliga a mirar el PNG antes de darlo por bueno. |
-| **council** | `/council` | 3-5 modelos deliberan una decisión con tradeoffs. Tiers con costo confirmado. |
+| **council** | `/council` | Personas expertas (CTO, devops, PM, usuario novato...) opinan por separado y se fusionan en una propuesta mejorada, con cada aporte atribuido. |
 | **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
@@ -58,7 +58,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 | `/kickoff` | Entrevista para iniciar un proyecto. |
 | `/idea <texto>` | Captura una idea al backlog sin desviar lo que estás haciendo. |
 | `/roadmap` | Revisa sprint actual + backlog. |
-| `/council` | Lista councils, invoca uno o crea uno custom. |
+| `/council` | Propone el council adecuado para tu tarea y lo corre si dices que sí. |
 | `/resumen` | Genera `RESUMEN.html`. |
 | `/setup-openrouter`, `/setup-openai` | Configura una API key puntual. |
 
@@ -70,7 +70,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 ├── .claude/           commands, skills core, _catalog/ con skills opcionales
 ├── memory/            memoria del proyecto
 ├── roadmap/           roadmap.md + current-sprint.json
-├── councils/          councils predefinidos + resultados
+├── councils/          personas, plantillas y resultados de councils
 ├── content/           principles.md / INDEX.md (los genera /kickoff) + outputs
 ├── review-app/        app local de revisión
 ├── docs/              QUICKSTART, capacidades, MCPs recomendados, guía de dictado
@@ -112,7 +112,7 @@ npm test
 | Research `deep` | USD 0.05 a 0.20 (tarda minutos) |
 | gpt-image-2 medium 1024×1024 | USD 0.04 |
 | Replicate (FLUX, SD 3.5, Recraft) | USD 0.003 a 0.05 |
-| Council Tier 1 / 2 / 3 | USD 0.02-0.10 / 0.15-0.60 / 0.80-2.50 |
+| Council personas / multimodel | USD 0.02-0.05 / 0.30-0.50 |
 | Smoke test completo | ~USD 0.05 |
 
 ## Versión

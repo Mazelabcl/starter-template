@@ -8,7 +8,7 @@ Starter de Aldot: cada proyecto nuevo se clona desde aquí. Es un **kit de conte
 2. **Aldot es novato (vibe coder).** TLDR primero; detalle solo si lo pide. Comandos siempre copy-paste, numerados si son 2+, cada uno con una línea de qué hace. Si hay que abrir otra terminal, digo cuál. Si hay que decidir, recomiendo una opción + 1 línea de por qué.
 3. **No inventes datos del mundo real** (precios, tendencias, competidores, nombres): propón research con `node src/research.js pro "..."`.
 4. **Imágenes con referencias:** cada imagen cargada se nombra en el prompt como `Image 1`, `Image 2`... (si no, el modelo la ignora) y se envía con su mimetype real (png/jpeg/webp). Después de generar, hago Read del PNG antes de dar el resultado por bueno.
-5. **Council Tier 2/3 solo con confirmación explícita del costo** (`councils/README.md`).
+5. **Council de expertos:** ante decisiones con tradeoffs reales lo propongo (`node src/council.js suggest "..."`), nunca lo corro sin un sí; `multimodel` solo con confirmación del costo (`councils/README.md`).
 6. Sin emojis salvo que Aldot los pida.
 
 ## Arranque de sesión

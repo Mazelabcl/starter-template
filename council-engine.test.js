@@ -1,346 +1,304 @@
 // council-engine.test.js
-// Tests del motor de councils (src/council.js).
+// Tests del motor del council de expertos (src/council.js) con el LLM simulado.
+// Cubre: fusión con recomendación nunca null, anonimización y re-atribución,
+// fallas parciales, red team con parada temprana, gate de costo, contexto del
+// proyecto, toCockpitReview, y que NUNCA se escriba en memory/.
 //
-// 5 tests:
-//  1. loadCouncilConfig con config válido inline pasa.
-//  2. loadCouncilConfig con config inválido (sin personas array) lanza CouncilError claro.
-//  3. estimateCouncilCost para un council Tier 1 retorna número razonable (>0, <0.5).
-//  4. invoke() live con 2 personas en Claude Haiku, pregunta simple. SKIP si no API key.
-//  5. invoke() con persona "rota" (mock vía monkey-patch de chat) continúa con N-1 y marca partial.
-//
-// PASS / FAIL / SKIP. Exit 0 si nada falló.
+// Corrida real opcional (cuesta ~USD 0.01, ~60 s): COUNCIL_LIVE=1 node council-engine.test.js
+// Esa corrida también usa un directorio temporal, nunca el memory/ real.
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import {
+  invoke, validateMerge, toCockpitReview, saveResult, buildTldr, summaryLine,
+  buildProjectContext, anonymize, CouncilError,
+} from './src/council.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = __dirname;
-const COUNCIL_PATH = join(REPO_ROOT, 'src', 'council.js');
-
+const ROOT = dirname(fileURLToPath(import.meta.url));
 let passed = 0;
 let failed = 0;
 let skipped = 0;
-const fails = [];
-
-function recordPass(label) { console.log(`PASS  ${label}`); passed += 1; }
-function recordFail(label, err) {
-  console.error(`FAIL  ${label}`);
-  console.error(`      ${err?.message || err}`);
-  if (err?.stack) console.error(err.stack.split('\n').slice(1, 4).join('\n'));
-  fails.push({ label, error: err?.message || String(err) });
-  failed += 1;
-}
-function recordSkip(label, reason) { console.log(`SKIP  ${label} — ${reason}`); skipped += 1; }
-
 async function check(label, fn) {
-  try {
-    await fn();
-    recordPass(label);
-  } catch (e) {
-    recordFail(label, e);
-  }
+  try { await fn(); console.log(`PASS  ${label}`); passed += 1; } catch (e) { console.error(`FAIL  ${label}\n      ${e.message}`); failed += 1; }
+}
+function assert(c, m) { if (!c) throw new Error(m || 'assertion failed'); }
+const sha = p => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : 'missing');
+const realDecisionsHash = sha(join(ROOT, 'memory', 'decisions.md'));
+
+function tempRoot() {
+  const dir = mkdtempSync(join(tmpdir(), 'council-test-'));
+  mkdirSync(join(dir, 'content'), { recursive: true });
+  mkdirSync(join(dir, 'memory'), { recursive: true });
+  writeFileSync(join(dir, 'content', 'principles.md'), '# Principios\n\nPRINCIPIO_UNICO: el usuario es novato.\n');
+  writeFileSync(join(dir, 'memory', 'decisions.md'), '# Decisiones\n\n## 2026-10-01: Usar Next.js\n\nDECISION_UNICA\n');
+  return dir;
 }
 
-function assert(cond, msg) {
-  if (!cond) throw new Error(msg || 'assertion failed');
-}
+// ---------- LLM simulado ----------
+// opts.mergeNullTimes: cuántas veces la fusión devuelve recommendation null antes de arreglarse.
+// opts.failModels: modelos que lanzan error. opts.attacks: ataques del red team.
+function makeMock(opts = {}) {
+  const calls = [];
+  let mergeNull = opts.mergeNullTimes || 0;
+  const reply = (obj, cost = 0.001) => ({
+    content: typeof obj === 'string' ? obj : JSON.stringify(obj),
+    usage: { prompt_tokens: 1000, completion_tokens: 300 },
+    raw: { usage: { cost } },
+    model_used: 'mock',
+  });
+  const chatFn = async ({ model, system, messages }) => {
+    const user = messages[0].content;
+    const last = messages[messages.length - 1].content;
+    calls.push({ model, system, user, last });
+    if ((opts.failModels || []).includes(model) && system.includes('ROLE:')) throw new Error(`modelo ${model} caído`);
 
-function loadEnv() {
-  const envPath = join(REPO_ROOT, '.env');
-  if (!existsSync(envPath)) return false;
-  const text = readFileSync(envPath, 'utf8');
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#') || !line.includes('=')) continue;
-    const idx = line.indexOf('=');
-    const key = line.slice(0, idx).trim();
-    let val = line.slice(idx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
+    if (user.includes('Attack this proposal')) {
+      return reply({ attacks: opts.attacks || [{ issue: 'Detalle menor de redacción', severity: 'baja', fix: 'Ajustar texto' }] });
     }
-    if (key && !process.env[key]) process.env[key] = val;
-  }
-  return true;
-}
-
-function hasLiveKey() {
-  const k = process.env.OPENROUTER_API_KEY;
-  return !!k && !/pega-aqui-tu-key|your-?key-?here|placeholder/i.test(k);
-}
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-function validInlineConfig() {
-  return {
-    name: 'test-naming',
-    description: 'Test council para naming.',
-    tier_default: 1,
-    personas: [
-      {
-        id: 'visionary',
-        actua_como: 'Eres un visionario. Prefieres nombres ambiciosos y memorables.',
-        model: 'anthropic/claude-haiku-4.5',
-        temperature: 0.85,
-        max_tokens: 300,
-      },
-      {
-        id: 'pragmatic',
-        actua_como: 'Eres un pragmático. Prefieres nombres claros, dominio disponible, SEO sólido.',
-        model: 'anthropic/claude-haiku-4.5',
-        temperature: 0.6,
-        max_tokens: 300,
-      },
-    ],
-    rounds: {
-      round1: { enabled: true },
-    },
+    if (user.includes('Patch the integrated proposal')) {
+      return reply({
+        integrated_proposal_md: 'Propuesta parchada: empezar con chat de texto [A] y medir antes de agregar voz [B]. Se agrega límite de gasto [R].',
+        contributions: [
+          { text: 'Empezar con chat de texto', voice: 'A', type: 'idea', adopted: true, why: 'Menor costo' },
+          { text: 'Poner tope de gasto mensual a la voz', voice: 'R', type: 'threat', adopted: true, why: 'El red team mostró riesgo de costo' },
+        ],
+        tensions: [],
+        recommendation: 'Lanzar con chat de texto y tope de gasto antes de probar voz.',
+        confidence: 'media',
+        what_would_change_it: 'Que el costo de voz baje a la mitad.',
+      });
+    }
+    if (system.startsWith('You are the integrator')) {
+      const voices = [...user.matchAll(/## Voz ([A-Z])/g)].map(m => m[1]);
+      const base = {
+        integrated_proposal_md: `Propuesta integrada: chat de texto primero [${voices[0]}], voz como experimento medido [${voices[1]}].`,
+        contributions: voices.map((v, i) => ({ text: `Aporte de la voz ${v}`, voice: i === 0 && voices.length > 2 ? `${v},${voices[2]}` : v, type: ['threat', 'opportunity', 'idea'][i % 3], adopted: i % 2 === 0, why: 'Razón concreta' })),
+        tensions: [{ between: [voices[0], voices[1]], issue: `Voz ${voices[0]} quiere voz ahora y Voz ${voices[1]} prefiere esperar`, suggested_resolution: 'Experimento acotado' }],
+        recommendation: 'Empezar con chat de texto y probar voz con 5 usuarios.',
+        confidence: 'media',
+        what_would_change_it: 'Que los usuarios novatos prefieran hablar.',
+      };
+      if (mergeNull > 0) { mergeNull -= 1; return reply({ ...base, recommendation: null }); }
+      return reply(base, 0.004);
+    }
+    // Persona (fase 1)
+    const id = user.match(/"persona": "([a-z-]+)"/)[1];
+    return reply({
+      persona: id,
+      threats: [`Riesgo visto por ${id}`],
+      opportunities: [`Oportunidad vista por ${id}`],
+      ideas: [`Idea de ${id}`],
+      key_concern: `La preocupación principal de ${id} sobre costos de voz`,
+      would_change_mind_if: 'Datos de uso reales',
+    });
   };
+  return { chatFn, calls };
 }
 
-// =============================================================================
-// Tests
-// =============================================================================
+const Q = '¿Voz con OpenAI Realtime o chat de texto para un usuario novato?';
 
 async function main() {
-  console.log('--- council-engine.test.js ---\n');
-  loadEnv();
-
-  // -------- Test 1: import + load config válido
-  let mod;
-  await check('test 1 — loadCouncilConfig con config válido pasa', async () => {
-    assert(existsSync(COUNCIL_PATH), `no encuentro ${COUNCIL_PATH}`);
-    mod = await import(pathToFileURL(COUNCIL_PATH).href);
-    assert(typeof mod.invoke === 'function', 'invoke no exportado');
-    assert(typeof mod.loadCouncilConfig === 'function', 'loadCouncilConfig no exportado');
-    assert(typeof mod.estimateCouncilCost === 'function', 'estimateCouncilCost no exportado');
-    assert(typeof mod.CouncilError === 'function', 'CouncilError no exportado');
-
-    const config = mod.loadCouncilConfig({ councilConfig: validInlineConfig() });
-    assert(config.name === 'test-naming', `name esperado test-naming, obtuve ${config.name}`);
-    assert(Array.isArray(config.personas), 'personas no es array');
-    assert(config.personas.length === 2, `personas esperadas 2, obtuve ${config.personas.length}`);
+  await check('validateMerge: rechaza recommendation null, vacía o evasiva; acepta una válida', () => {
+    const ok = {
+      integrated_proposal_md: 'x'.repeat(50),
+      contributions: [{ text: 'abc', voice: 'A', type: 'idea', adopted: true, why: 'porque sí' }],
+      tensions: [],
+      recommendation: 'Hacer chat de texto primero.',
+      confidence: 'alta',
+      what_would_change_it: 'nuevos datos',
+    };
+    assert(validateMerge(ok).ok, validateMerge(ok).errors.join('; '));
+    assert(!validateMerge({ ...ok, recommendation: null }).ok, 'null pasó');
+    assert(!validateMerge({ ...ok, recommendation: '   ' }).ok, 'vacía pasó');
+    assert(!validateMerge({ ...ok, recommendation: 'Requiere decisión humana' }).ok, 'evasiva pasó');
+    assert(!validateMerge({ ...ok, confidence: 'muy alta' }).ok, 'confidence inválida pasó');
+    assert(!validateMerge({ ...ok, contributions: [{ text: 'abc', voice: 'A', type: 'riesgo', adopted: true, why: 'x' }] }).ok, 'type inválido pasó');
   });
 
-  if (!mod) {
-    summary();
-    process.exit(failed > 0 ? 1 : 0);
-  }
+  const root = tempRoot();
+  const tmpDecisions = sha(join(root, 'memory', 'decisions.md'));
+  let result;
+  const mock = makeMock();
 
-  const { invoke, loadCouncilConfig, estimateCouncilCost, CouncilError } = mod;
+  await check('invoke (mock): fusión completa con recomendación, aportes atribuidos y costo real', async () => {
+    result = await invoke({ question: Q, template: 'nueva-funcionalidad', root, chatFn: mock.chatFn, now: new Date('2026-10-30T12:00:00Z') });
+    assert(result.id === 'council-2026-10-30T12-00-00-000Z', result.id);
+    assert(result.mode === 'personas' && result.template === 'nueva-funcionalidad', 'modo/plantilla');
+    assert(result.answers.length === 4, `answers ${result.answers.length}`);
+    assert(typeof result.merge.recommendation === 'string' && result.merge.recommendation.length > 10, 'sin recomendación');
+    const ids = new Set(['cto', 'pm', 'ux-research', 'usuario-novato']);
+    for (const c of result.merge.contributions) {
+      assert(ids.has(c.persona), `aporte atribuido a ${c.persona}`);
+      assert(c.persona_name && c.persona_name !== c.persona || c.persona === 'cto', 'falta nombre de persona');
+    }
+    assert(new Set(result.merge.contributions.map(c => c.persona)).size === 4, 'no están las 4 personas');
+    assert(result.merge.contributions.some(c => c.also_seen_by.length === 1), 'no re-atribuyó una voz compartida "A,C"');
+    assert(result.merge.tensions[0].between.every(b => ids.has(b)), 'tensión sin re-atribuir');
+    assert(!/\[[A-D]\]/.test(result.merge.integrated_proposal_md), 'quedaron letras de voz en la propuesta');
+    assert(!/Voz [A-D]\b/.test(JSON.stringify(result.merge)), 'quedó "Voz X" sin re-atribuir en el texto');
+    assert(/(CTO|Product manager|Investigador UX|Usuario novato) quiere voz ahora/.test(result.merge.tensions[0].issue), result.merge.tensions[0].issue);
+    assert(result.metadata.cost_source === 'openrouter', 'costo no vino de usage.cost');
+    assert(Math.abs(result.metadata.cost_usd - 0.008) < 1e-6, `costo ${result.metadata.cost_usd}`);
+    assert(result.metadata.partial === false, 'partial');
+  });
 
-  // -------- Test 2: load config inválido lanza error claro
-  await check('test 2 — config sin personas array lanza CouncilError descriptivo', () => {
+  await check('anonimización: el integrador no ve ids ni nombres de personas', () => {
+    const mergeCall = mock.calls.find(c => c.system.startsWith('You are the integrator'));
+    assert(mergeCall, 'no hubo llamada de fusión');
+    assert(!/"persona"/.test(mergeCall.user), 'el campo persona llegó al integrador');
+    for (const name of ['Product manager', 'Investigador UX', 'Usuario novato', 'usuario-novato', 'ux-research']) {
+      assert(!mergeCall.user.includes(name), `"${name}" llegó al integrador`);
+    }
+    const a = anonymize([{ persona_id: 'x', answer: { persona: 'x', key_concern: 'k' } }], { shuffle: false });
+    assert(a.map.A === 'x' && a.voices[0].answer.persona === undefined, 'anonymize no quitó persona');
+  });
+
+  await check('integrador de otra familia que las personas', () => {
+    const fams = result.personas.map(p => p.family);
+    assert(!fams.includes(result.metadata.synth_model.split('/')[0]) || new Set(fams).size === 4, `synth ${result.metadata.synth_model} vs ${fams}`);
+  });
+
+  await check('contexto: principios, decisiones recientes y --files llegan a las personas', async () => {
+    const personaCall = mock.calls.find(c => c.system.includes('ROLE:'));
+    assert(personaCall.user.includes('PRINCIPIO_UNICO'), 'faltan principios');
+    assert(personaCall.user.includes('DECISION_UNICA'), 'faltan decisiones');
+    writeFileSync(join(root, 'grande.md'), 'Z'.repeat(20000));
+    const ctx = buildProjectContext({ root, files: ['grande.md', 'no-existe.md'] });
+    const big = ctx.sources.find(s => s.path === 'grande.md');
+    assert(big && big.truncated && big.chars <= 5100, `archivo grande sin recortar: ${JSON.stringify(big)}`);
+    assert(ctx.sources.some(s => s.path === 'no-existe.md' && s.missing), 'archivo faltante no reportado');
+    assert(ctx.text.length <= 14500, `contexto total ${ctx.text.length}`);
+  });
+
+  await check('decisiones vacías (solo plantilla) no se inyectan', () => {
+    const r2 = mkdtempSync(join(tmpdir(), 'council-test-'));
+    mkdirSync(join(r2, 'memory'));
+    writeFileSync(join(r2, 'memory', 'decisions.md'), '# Decisiones del proyecto\n\nUsa addDecision().\n');
+    assert(buildProjectContext({ root: r2 }).sources.length === 0, 'inyectó la plantilla vacía');
+    rmSync(r2, { recursive: true, force: true });
+  });
+
+  await check('fusión que devuelve recommendation null se repara con un reintento', async () => {
+    const m = makeMock({ mergeNullTimes: 1 });
+    const r = await invoke({ question: Q, personas: ['cto', 'pm'], root, chatFn: m.chatFn });
+    assert(r.merge.recommendation.length > 10, 'sin recomendación');
+    assert(m.calls.filter(c => c.system.startsWith('You are the integrator')).length === 2, 'no hubo reintento de reparación');
+  });
+
+  await check('fusión que insiste en null falla con merge_failed (nunca devuelve null)', async () => {
+    const m = makeMock({ mergeNullTimes: 99 });
     let err = null;
-    try {
-      loadCouncilConfig({
-        councilConfig: {
-          name: 'broken',
-          rounds: { round1: { enabled: true } },
-          // falta personas
-        },
-      });
-    } catch (e) {
-      err = e;
+    try { await invoke({ question: Q, personas: ['cto', 'pm'], root, chatFn: m.chatFn }); } catch (e) { err = e; }
+    assert(err instanceof CouncilError && err.code === 'merge_failed', `error ${err?.code}`);
+  });
+
+  await check('una persona caída: el council sigue y marca partial', async () => {
+    const m = makeMock({ failModels: ['google/gemini-3.5-flash-lite'] });
+    const r = await invoke({ question: Q, template: 'nueva-funcionalidad', root, chatFn: m.chatFn });
+    assert(r.metadata.partial === true && r.metadata.personas_alive === 3, `alive ${r.metadata.personas_alive}`);
+    assert(r.metadata.failed[0].error.includes('caído'), 'falla no registrada');
+  });
+
+  await check('con menos de 2 personas vivas falla con insufficient_personas', async () => {
+    const m = makeMock({ failModels: ['anthropic/claude-haiku-5.5', 'openai/gpt-6-luna'] });
+    let err = null;
+    try { await invoke({ question: Q, personas: ['cto', 'pm'], root, chatFn: m.chatFn }); } catch (e) { err = e; }
+    assert(err?.code === 'insufficient_personas', `error ${err?.code}`);
+  });
+
+  await check('red team con solo ataques menores: parada temprana, sin parche', async () => {
+    const m = makeMock();
+    const r = await invoke({ question: Q, personas: ['cto', 'pm'], redteam: true, root, chatFn: m.chatFn });
+    assert(r.redteam && r.redteam.patched === false && /parada temprana/.test(r.redteam.note), JSON.stringify(r.redteam));
+    assert(!m.calls.some(c => c.user.includes('Patch the integrated proposal')), 'parchó igual');
+  });
+
+  await check('red team con ataque alto: el integrador parcha y el aporte se atribuye al contrarian', async () => {
+    const m = makeMock({ attacks: [{ issue: 'El costo de voz puede dispararse', severity: 'alta', fix: 'Tope de gasto' }] });
+    const r = await invoke({ question: Q, personas: ['cto', 'pm'], redteam: true, root, chatFn: m.chatFn });
+    assert(r.redteam.patched === true, 'no parchó');
+    const rt = r.merge.contributions.find(c => c.source === 'redteam');
+    assert(rt && rt.persona === 'contrarian', 'aporte del red team sin atribuir');
+    assert(r.merge.integrated_proposal_md.includes('[Contrarian'), 'la propuesta no re-atribuyó [R]');
+  });
+
+  await check('multimodel sin confirmar costo falla; confirmado usa >=3 familias', async () => {
+    const m = makeMock();
+    let err = null;
+    try { await invoke({ question: Q, template: 'arquitectura-critica', root, chatFn: m.chatFn }); } catch (e) { err = e; }
+    assert(err?.code === 'cost_confirmation_required', `error ${err?.code}`);
+    assert(m.calls.length === 0, 'llamó al modelo antes de confirmar');
+    const r = await invoke({ question: Q, template: 'arquitectura-critica', confirmCost: true, root, chatFn: m.chatFn });
+    assert(new Set(r.personas.map(p => p.family)).size >= 3, 'menos de 3 familias');
+    assert(r.redteam !== null, 'la plantilla pide red team');
+  });
+
+  await check('toCockpitReview cumple el contrato exacto del cockpit', () => {
+    const rv = toCockpitReview(result);
+    assert(JSON.stringify(Object.keys(rv)) === JSON.stringify(['id', 'title', 'kind', 'created_at', 'connects_to', 'context_brief', 'items']), Object.keys(rv).join(','));
+    assert(rv.kind === 'council' && rv.id === result.id, 'kind/id');
+    assert(!Number.isNaN(Date.parse(rv.created_at)), 'created_at no es ISO');
+    assert(Array.isArray(rv.connects_to) && rv.connects_to.every(s => typeof s === 'string'), 'connects_to');
+    assert(rv.context_brief.length > 100 && rv.context_brief.includes(result.merge.recommendation), 'context_brief pobre');
+    const expectedItems = 1 + result.merge.contributions.length + result.merge.tensions.length;
+    assert(rv.items.length === expectedItems, `items ${rv.items.length} != ${expectedItems}`);
+    for (const it of rv.items) {
+      assert(JSON.stringify(Object.keys(it)) === JSON.stringify(['id', 'title', 'body_md', 'media', 'tags']), `item ${it.id}: ${Object.keys(it)}`);
+      assert(typeof it.title === 'string' && typeof it.body_md === 'string' && Array.isArray(it.media) && it.tags.every(t => typeof t === 'string'), `tipos de ${it.id}`);
     }
-    assert(err !== null, 'no lanzó error');
-    assert(err instanceof CouncilError, `error no es CouncilError, es ${err?.constructor?.name}`);
-    assert(err.code === 'invalid_config', `code esperado invalid_config, obtuve ${err.code}`);
-    assert(/persona/i.test(err.message), `mensaje debería mencionar "personas", obtuve: ${err.message}`);
-
-    // También: 1 sola persona debe fallar (minItems=2).
-    let err2 = null;
-    try {
-      loadCouncilConfig({
-        councilConfig: {
-          name: 'lonely',
-          personas: [{ id: 'solo', actua_como: 'Soy solo.', model: 'anthropic/claude-haiku-4.5' }],
-          rounds: { round1: { enabled: true } },
-        },
-      });
-    } catch (e) { err2 = e; }
-    assert(err2 instanceof CouncilError, 'config con 1 persona debe fallar');
-
-    // Y: IDs duplicados deben fallar.
-    let err3 = null;
-    try {
-      loadCouncilConfig({
-        councilConfig: {
-          name: 'dupes',
-          personas: [
-            { id: 'x', actua_como: 'aaaaaaaaaa', model: 'anthropic/claude-haiku-4.5' },
-            { id: 'x', actua_como: 'bbbbbbbbbb', model: 'anthropic/claude-haiku-4.5' },
-          ],
-          rounds: { round1: { enabled: true } },
-        },
-      });
-    } catch (e) { err3 = e; }
-    assert(err3 instanceof CouncilError, 'IDs duplicados debe fallar');
-    assert(err3.code === 'duplicate_persona_id', `code esperado duplicate_persona_id, obtuve ${err3.code}`);
+    assert(new Set(rv.items.map(i => i.id)).size === rv.items.length, 'ids repetidos');
+    assert(rv.items[0].id === 'propuesta', 'el primer item debe ser la propuesta');
+    const c = rv.items.find(i => i.id === 'c1');
+    const contrib = result.merge.contributions[0];
+    assert(c.tags[0] === contrib.persona && c.tags[1] === contrib.type, `tags ${c.tags}`);
+    assert(rv.items.some(i => i.tags[0] === 'tension'), 'falta item de tensión');
   });
 
-  // -------- Test 3: estimateCouncilCost razonable
-  await check('test 3 — estimateCouncilCost Tier 1 retorna número razonable (>0, <0.5)', () => {
-    const config = loadCouncilConfig({ councilConfig: validInlineConfig() });
-    const cost = estimateCouncilCost(config, { tier: 1 });
-    assert(typeof cost === 'number', `cost no es número: ${typeof cost}`);
-    assert(cost > 0, `esperaba cost > 0, obtuve ${cost}`);
-    assert(cost < 0.5, `cost ${cost} sospechosamente alto para Tier 1 con 2 haiku`);
+  await check('saveResult escribe en councils/results y cockpit/reviews del root dado', () => {
+    const { resultPath, reviewPath } = saveResult(result, { root });
+    assert(resultPath.startsWith(root) && reviewPath.startsWith(root), 'escribió fuera del root temporal');
+    assert(JSON.parse(readFileSync(resultPath, 'utf8')).id === result.id, 'resultado ilegible');
+    assert(JSON.parse(readFileSync(reviewPath, 'utf8')).kind === 'council', 'review ilegible');
   });
 
-  // -------- Test 4: invoke live con 2 personas Haiku
-  if (!hasLiveKey()) {
-    recordSkip('test 4 — invoke live con 2 personas Haiku', 'sin OPENROUTER_API_KEY válida');
+  await check('TLDR de 5 líneas y línea resumen', () => {
+    const lines = buildTldr(result).split('\n');
+    assert(lines.length === 5 && lines[0].startsWith('1. Recomendación:'), lines.join(' | '));
+    assert(/lo vio (CTO|Product manager|Investigador UX|Usuario novato)/.test(lines[2]), lines[2]);
+    assert(summaryLine(result).startsWith('Council listo: 4/4'), summaryLine(result));
+  });
+
+  await check('nunca escribe en memory/ (ni el temporal ni el real)', () => {
+    assert(sha(join(root, 'memory', 'decisions.md')) === tmpDecisions, 'cambió decisions.md temporal');
+    assert(sha(join(ROOT, 'memory', 'decisions.md')) === realDecisionsHash, 'cambió el memory/decisions.md REAL');
+    const src = readFileSync(join(ROOT, 'src', 'council.js'), 'utf8');
+    assert(!/addDecision|memory\.js/.test(src), 'council.js todavía referencia memory.js/addDecision');
+  });
+
+  // ---------- Corrida real opcional ----------
+  const key = process.env.OPENROUTER_API_KEY;
+  if (process.env.COUNCIL_LIVE !== '1' || !key || /pega-aqui|placeholder/i.test(key)) {
+    console.log('SKIP  corrida real (activar con COUNCIL_LIVE=1 y OPENROUTER_API_KEY)');
+    skipped += 1;
   } else {
-    await check('test 4 — invoke live: 2 personas Haiku, pregunta simple', async () => {
-      const result = await invoke({
-        councilConfig: {
-          ...validInlineConfig(),
-          // Forzamos síntesis con haiku también para abaratar y acelerar.
-          rounds: {
-            round1: { enabled: true },
-            synthesis: {
-              model: 'anthropic/claude-haiku-4.5',
-              max_tokens: 1200,
-              temperature: 0.2,
-            },
-          },
-        },
-        question: '¿Cuál es un buen nombre para una app de productividad para equipos pequeños?',
-      });
-
-      assert(result.council_name === 'test-naming', `council_name esperado test-naming, obtuve ${result.council_name}`);
-      assert(result.tier_used === 1, `tier_used esperado 1, obtuve ${result.tier_used}`);
-      assert(Array.isArray(result.personas_responses.round1), 'round1 no es array');
-      assert(result.personas_responses.round1.length === 2, `round1 esperado 2 respuestas, obtuve ${result.personas_responses.round1.length}`);
-      for (const r of result.personas_responses.round1) {
-        assert(typeof r.persona_id === 'string' && r.persona_id.length > 0, 'persona_id falta');
-        assert(typeof r.content === 'string' && r.content.length > 0, `content vacío para ${r.persona_id}`);
-      }
-      assert(result.personas_responses.round2 === null, 'round2 debe ser null en Tier 1');
-      assert(typeof result.synthesis === 'object', 'synthesis no es objeto');
-      assert(Array.isArray(result.synthesis.consensus_areas), 'consensus_areas no es array');
-      assert(Array.isArray(result.synthesis.tensions), 'tensions no es array');
-      assert(Array.isArray(result.synthesis.options), 'options no es array');
-      assert(typeof result.synthesis.requires_human_decision === 'boolean', 'requires_human_decision no es boolean');
-      assert(result.metadata.total_tokens > 0, `total_tokens esperado > 0, obtuve ${result.metadata.total_tokens}`);
-      assert(result.metadata.total_cost_usd >= 0, `total_cost_usd esperado >= 0, obtuve ${result.metadata.total_cost_usd}`);
-      assert(result.metadata.personas_alive === 2, `personas_alive esperado 2, obtuve ${result.metadata.personas_alive}`);
-      assert(result.metadata.partial === false, `partial esperado false, obtuve ${result.metadata.partial}`);
-      assert(typeof result.metadata.duration_seconds === 'number' && result.metadata.duration_seconds > 0, 'duration_seconds inválido');
+    await check('corrida real barata (2 personas) en directorio temporal', async () => {
+      const liveRoot = tempRoot();
+      const r = await invoke({ question: 'Nombre corto para una app de notas para novatos', personas: ['storyteller', 'usuario-novato'], root: liveRoot });
+      assert(r.merge.recommendation.length > 10, 'sin recomendación');
+      assert(r.merge.contributions.every(c => ['storyteller', 'usuario-novato'].includes(c.persona)), 'aporte sin atribuir');
+      saveResult(r, { root: liveRoot });
+      assert(sha(join(ROOT, 'memory', 'decisions.md')) === realDecisionsHash, 'tocó memory/ real');
+      console.log(`      costo USD ${r.metadata.cost_usd} (${r.metadata.cost_source}), ${r.metadata.duration_seconds} s`);
+      rmSync(liveRoot, { recursive: true, force: true });
     });
   }
 
-  // -------- Test 5: persona rota → council continúa partial
-  // Estrategia: usamos un MOCK de openrouter_client.chat vía un módulo intercept.
-  // Como ESM no soporta monkey-patching de exports importados por terceros, hacemos
-  // un test que usa un model id "fake/broken-xyz" que el openrouter_client rechazará
-  // antes de llegar a la red — el flag `_custom: true` lo hace ir a HTTP. Como no
-  // podemos garantizar offline, usamos una técnica distinta: pasamos un model que el
-  // catálogo dice que no soporta tools junto con tools declaradas, lo que hace que
-  // chat() lance OpenRouterError code='tools_not_supported' SIN tocar red.
-  //
-  // Persona rota: deepseek/r1 (supports_tools=false en catálogo) + tools=[perplexity_research].
-  // Persona viva: claude-haiku sin tools (simulamos mock devolviendo string fijo
-  // mediante un override del módulo... mejor: usamos invoke pero stub la persona viva
-  // con un model real solo si hay key. Si no hay key, hacemos test offline puro
-  // usando dos personas rotas con tools_not_supported y verificamos que insufficient_personas).
-  await check('test 5 — una persona falla → council continúa partial (o insufficient si todas fallan)', async () => {
-    if (!hasLiveKey()) {
-      // Modo offline: ambas personas con tools en modelo que no las soporta.
-      // Esperamos error insufficient_personas porque las dos fallan inmediato.
-      let caughtErr = null;
-      try {
-        await invoke({
-          councilConfig: {
-            name: 'all-broken',
-            personas: [
-              {
-                id: 'broken1',
-                actua_como: 'aaaaaaaaaa',
-                model: 'deepseek/deepseek-r1',
-                tools: ['perplexity_research'],
-              },
-              {
-                id: 'broken2',
-                actua_como: 'bbbbbbbbbb',
-                model: 'deepseek/deepseek-r1',
-                tools: ['perplexity_research'],
-              },
-            ],
-            rounds: { round1: { enabled: true } },
-          },
-          question: 'test',
-        });
-      } catch (e) { caughtErr = e; }
-      assert(caughtErr !== null, 'esperaba que invoke fallara con todas las personas rotas');
-      assert(caughtErr instanceof CouncilError, `esperaba CouncilError, obtuve ${caughtErr?.constructor?.name}`);
-      assert(caughtErr.code === 'insufficient_personas',
-        `esperaba code='insufficient_personas', obtuve ${caughtErr.code}`);
-      return;
-    }
-
-    // Modo online: 1 persona rota (tools en modelo que no soporta) + 1 viva.
-    const result = await invoke({
-      councilConfig: {
-        name: 'one-broken',
-        personas: [
-          {
-            id: 'broken',
-            actua_como: 'Esta persona tiene tools en un modelo que no soporta tools, fallará.',
-            model: 'deepseek/deepseek-r1',
-            tools: ['perplexity_research'],
-          },
-          {
-            id: 'alive_a',
-            actua_como: 'Eres un pragmático. Responde corto.',
-            model: 'anthropic/claude-haiku-4.5',
-            max_tokens: 200,
-          },
-          {
-            id: 'alive_b',
-            actua_como: 'Eres un visionario. Responde corto.',
-            model: 'anthropic/claude-haiku-4.5',
-            max_tokens: 200,
-          },
-        ],
-        rounds: {
-          round1: { enabled: true },
-          synthesis: {
-            model: 'anthropic/claude-haiku-4.5',
-            max_tokens: 800,
-            temperature: 0.2,
-          },
-        },
-      },
-      question: 'Nombrar app de notas en una palabra.',
-    });
-
-    assert(result.metadata.partial === true, `esperaba partial=true, obtuve ${result.metadata.partial}`);
-    assert(result.metadata.personas_alive === 2, `esperaba 2 vivas, obtuve ${result.metadata.personas_alive}`);
-    assert(result.metadata.personas_total === 3, `esperaba 3 totales, obtuve ${result.metadata.personas_total}`);
-    assert(result.personas_responses.round1.length === 2, 'round1 debería tener 2 respuestas (la rota no aparece)');
-    const ids = result.personas_responses.round1.map(r => r.persona_id);
-    assert(!ids.includes('broken'), `persona "broken" no debería estar en round1, ids=${ids.join(',')}`);
-  });
-
-  summary();
-  process.exit(failed > 0 ? 1 : 0);
+  rmSync(root, { recursive: true, force: true });
+  console.log(`\nResultado: ${passed} PASS, ${failed} FAIL, ${skipped} SKIP`);
+  process.exit(failed ? 1 : 0);
 }
 
-function summary() {
-  console.log('');
-  console.log(`Resultado: ${passed} PASS, ${failed} FAIL, ${skipped} SKIP`);
-  if (failed > 0) {
-    console.log('Fallos:');
-    for (const f of fails) console.log(`  - ${f.label}: ${f.error}`);
-  }
-}
-
-main().catch(e => {
-  console.error(`fatal: ${e.message}`);
-  if (e.stack) console.error(e.stack);
-  process.exit(1);
-});
+main().catch(e => { console.error(`fatal: ${e.stack || e.message}`); process.exit(1); });

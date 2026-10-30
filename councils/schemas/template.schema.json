@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "council-template",
+  "title": "Plantilla de council (situación -> personas)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "personas", "mode", "redteam", "signals", "keywords"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 2 },
+    "description": { "type": "string", "minLength": 20 },
+    "personas": { "type": "array", "minItems": 2, "maxItems": 6, "uniqueItems": true, "items": { "type": "string" } },
+    "mode": { "enum": ["personas", "multimodel"] },
+    "redteam": { "type": "boolean" },
+    "signals": { "type": "string", "minLength": 20 },
+    "keywords": { "type": "array", "minItems": 5, "items": { "type": "string", "minLength": 2 } }
+  }
+}

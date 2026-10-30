@@ -130,22 +130,19 @@ await check('src — cada módulo importa sin lanzar', async () => {
 
 // ---------- 5. Councils JSON parseable ----------
 
-await check('councils — todos los .json predefinidos parsean', () => {
-  const dir = join(ROOT, 'councils');
-  const expected = ['creative-ideation', 'architecture-decision', 'strategy-calls', 'mazelab-council'];
-  for (const name of expected) {
-    const path = join(dir, `${name}.json`);
-    assert(existsSync(path), `falta councils/${name}.json`);
-    const parsed = JSON.parse(readFileSync(path, 'utf8'));
-    assert(parsed && typeof parsed === 'object', `councils/${name}.json no es objeto`);
-    assert(parsed.tier_default, `councils/${name}.json sin tier_default`);
-    assert(Array.isArray(parsed.personas) && parsed.personas.length >= 3, `councils/${name}.json personas insuficientes`);
+await check('councils — personas y plantillas parsean', () => {
+  for (const sub of ['personas', 'templates']) {
+    const dir = join(ROOT, 'councils', sub);
+    assert(existsSync(dir), `falta councils/${sub}/`);
+    const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+    assert(files.length >= 5, `councils/${sub}/ tiene solo ${files.length} archivos`);
+    for (const f of files) JSON.parse(readFileSync(join(dir, f), 'utf8'));
   }
 });
 
-await check('councils/templates — schema y persona template existen y parsean', () => {
-  const dir = join(ROOT, 'councils', 'templates');
-  for (const f of ['council.schema.json', 'persona-template.json']) {
+await check('councils/schemas — los 4 schemas existen y parsean', () => {
+  const dir = join(ROOT, 'councils', 'schemas');
+  for (const f of ['persona.schema.json', 'template.schema.json', 'persona-answer.schema.json', 'merge.schema.json']) {
     const path = join(dir, f);
     assert(existsSync(path), `falta ${path}`);
     JSON.parse(readFileSync(path, 'utf8'));
