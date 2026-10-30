@@ -1,11 +1,9 @@
 ---
-description: Entrevista al usuario para arrancar un proyecto y autogenera content/principles.md + content/INDEX.md
+description: Entrevista corta para arrancar un proyecto y plan de batalla revisable en el cockpit (equipo, brazos, proceso, councils)
 ---
 
-El usuario quiere arrancar un proyecto nuevo desde el starter-template. Invoca la skill `kickoff` siguiendo su protocolo:
+El usuario quiere arrancar un proyecto nuevo desde el starter. Invoca la skill `kickoff` y sigue su protocolo:
 
-1. Una pregunta a la vez. Espera respuesta antes de la siguiente.
-2. Tono directo, novato-friendly, español neutro (cero voseo, cero regionalismos rioplatenses).
-3. Sintetiza al final y muestra al usuario antes de escribir.
-4. Solo escribe `content/principles.md` y `content/INDEX.md` con confirmación explícita.
-5. Cierra sugiriendo: "cuéntame qué quieres hacer primero — usaré pipeline v2".
+1. Una pregunta a la vez (máximo 5). Tono directo, novato-friendly, español neutro (cero voseo, cero regionalismos rioplatenses).
+2. Al final arma el plan de batalla y publícalo en el cockpit (`plan.js build` + `node src/cockpit.js publish`). En el chat, solo el TLDR de 5 líneas y `npm run cockpit`.
+3. No persistas nada ni arranques el Sprint 1 hasta aplicar el feedback del cockpit (`node src/cockpit.js pending`).

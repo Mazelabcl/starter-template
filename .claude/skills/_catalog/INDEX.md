@@ -20,7 +20,8 @@ Skills core (siempre activas) NO viven aquí — viven en `.claude/skills/<skill
 | `brand-guidelines` | Mantiene `content/brand.md` con identidad visual + voz | "guía de marca", "identidad visual", "tokens de color" | content recurrente, business con marca, build con UI | sin costo |
 | `marketing` | Copy publicitario, posts, anuncios, emails (AIDA, PAS, BAB) | "copy publicitario", "post redes", "email marketing" | business/content con lado comercial | sin costo |
 | `seo` | SEO técnico + on-page proyecto-local (meta, schema, headings) | "keyword research", "meta título", "schema markup" | build/business/content con sitio web público | sin costo |
-| `remotion` | Video programático con React (data-driven, server-side render) | "video programático", "remotion", "lyric video" | content/marketing con videos personalizados | sin costo |
+| `video-director` | Dirige videos por código con intención: guion de dirección aprobado (efectos de la biblioteca de Aldot) antes de implementar en HyperFrames y renderizar | "/video-director", "dirige un video", "guion de dirección", "video con motion graphics" | content/marketing/build con reels o videos cortos hechos por código | sin costo (render local) |
+| `remotion` | Video programático con React (data-driven, server-side render). Licencia pagada desde 4 personas: preferir `video-director` + HyperFrames | "video programático", "remotion", "lyric video" | content/marketing con videos personalizados | sin costo (licencia según equipo) |
 | `web-artifacts-builder` | HTML+JS+CSS autocontenido (demos, prototipos one-off) | "artifact web", "demo en html", "calculadora interactiva" | prototipos, demos, herramientas one-off | sin costo |
 | `dual-auditor-protocol` | Audita un deliverable con DOS modelos en paralelo (Claude + GPT) + synthesizer que cruza findings | "audit con doble auditor", "audit con dos modelos", "/dual-audit", "audit de código de producción" | build/business-with-software con código de producción, audits de alto riesgo | ~2.5× costo de un audit single (3 calls) |
 | `review-app` | App HTTP local (Node nativo, cero deps) para revisar PRs/bloques de un sprint marcando OK/Feedback. Modo viewer: lee cualquier `.md` de un directorio con TLDR. Cross-sprint, cross-project, hot-reload | "review-app", "revisar PRs en HTTP", "marcar OK/Feedback", "/review-app", "ver output de agentes" | build/business-with-software con audits de código o entregables que necesitan review humano repetido | sin costo |
@@ -29,7 +30,9 @@ Skills core (siempre activas) NO viven aquí — viven en `.claude/skills/<skill
 | `confidence-loop` | Itera un artefacto (agente, skill, código, plan) hasta un score alto, máx 5 iteraciones. **Se autoevalúa**: úsala como apoyo, no como validación independiente | "revisa con confidence loop", "mejora hasta 95", "/confidence-loop" | cualquier proyecto, cuando un artefacto necesita pulido iterativo | variable según iteraciones |
 | `cold-reader-gate` | Gate GO/NO-GO con veto absoluto: lee SOLO el canon (`principles.md` o el brief) + el deliverable terminado | "evalúa cold", "cold reader", "/cold-reader-gate" | content/business/research antes de mostrar un deliverable al humano | ~USD 0.02-0.10 (1 modelo) |
 
-Total: 20 skills opcionales en `_catalog/`.
+Total: 21 skills opcionales en `_catalog/`.
+
+> **Brazos (integraciones para ejecutar):** MCPs, APIs, CLIs y plugins viven en `brazos/directorio.json`. Usa `node src/brazos.js status` para ver qué está conectado y `node src/brazos.js suggest "<proyecto>"` para ver cuáles convienen.
 
 > **Fuente machine-readable:** `_catalog/skills-catalog.json` es la fuente única para el kickoff (lista core + catalog con `triggers`, `when_to_use`, `output`, `status`, `cost_hint`). Este INDEX.md es la vista humana. El JSON se regenera con `node scripts/build_skills_catalog.js`. Si agregas/quitas una skill, regenera el JSON y corre `npm run test:skills-catalog`.
 

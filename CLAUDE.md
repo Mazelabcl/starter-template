@@ -45,6 +45,7 @@ node --env-file=.env mi-script.js
 | Visor de `.md` de agentes | `review-app/` | `npm run review-app` |
 | Resumen visual del proyecto | `RESUMEN.html` | `/resumen` |
 | Catálogo de skills opcionales | `.claude/skills/_catalog/INDEX.md` | se activan con `/kickoff` o copiando la carpeta |
+| Brazos (MCP, API, CLI, plugins para ejecutar) | `brazos/directorio.json` | `node src/brazos.js status\|suggest "..."\|connect <id>` (nunca instala sin un sí) |
 | Capacidades y tests | `docs/capacidades.md` | `npm test` |
 
 Comandos útiles:
@@ -61,7 +62,8 @@ Comandos útiles:
 
 | Pide | Hago |
 |---|---|
-| Arrancar proyecto / repo recién clonado | `/kickoff` |
+| Arrancar proyecto / repo recién clonado | `/kickoff` (termina en un plan de batalla en el cockpit; Sprint 1 recién tras aplicar el feedback) |
+| "Qué herramienta sirve para X" | `node src/brazos.js suggest "X"` |
 | "Investiga X" | `node src/research.js pro "X"` |
 | "Genera imagen de X" | skill `image-gen` (si no sabe qué modelo, propón `image-explorer`) |
 | Decisión con tradeoffs reales | propón `/council` con su costo |

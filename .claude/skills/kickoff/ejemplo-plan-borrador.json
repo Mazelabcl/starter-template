@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "proyecto": "Cafetería de barrio en Santiago: landing + pedidos online",
+  "descripcion": "Landing + mini app para una cafetería de barrio en Santiago que quiere pedidos online, con fotos generadas por IA y un video corto para Instagram. Respuestas: es para los clientes del barrio (la usan desde el celular); pedidos para retiro en el local, pagando online; flujo crítico: elegir del menú, pagar y que el local vea el pedido; sin stack obligado; quieren lanzar en 3-4 semanas con presupuesto chico.",
+  "tldr_usuario": "Quieres que una cafetería de barrio en Santiago venda online: una **landing** que dé ganas de ir, una **mini app** para pedir y pagar desde el celular (retiro en el local), **fotos hechas con IA** que se vean apetitosas y un **video corto para Instagram** que lleve gente a la landing. Plazo: 3-4 semanas, presupuesto chico.",
+  "tldr_orquestador": "Lo armo en **3 sprints cortos**. (1) Fijo los datos reales del local (menú, precios, horarios) y la dirección de arte. (2) Construyo landing + mini app de pedidos con Next.js + Supabase, cobro con Mercado Pago en modo prueba y publico en Vercel. (3) Produzco fotos finales y un reel de 15 s (con guion de dirección que apruebas antes de animar), dejo el SEO local listo y salimos a producción. Tú apruebas en el cockpit en cada gate; **nada con dinero real se activa sin tu sí**.",
+  "equipo": [
+    {
+      "id": "cafe-fullstack-dev",
+      "rol": "Desarrollador fullstack (agente nuevo)",
+      "actua_como": "Desarrollador fullstack senior, 10 años construyendo tiendas y sistemas de pedidos para comercios pequeños con Next.js y Supabase. Obsesionado con que un pedido se complete desde el celular en menos de 60 segundos y con no sobre-construir: si no lo pide el flujo crítico, no entra.",
+      "por_que": "El corazón del proyecto es que la gente pida y pague. Es código con datos (menú, pedidos, estado) y dinero de por medio: necesita un especialista dedicado, no un generalista. No existe un agente así para este proyecto, por eso se crea.",
+      "entrega": [
+        "Landing responsive con menú, horarios y ubicación",
+        "Mini app de pedidos: menú → carrito → pago con Mercado Pago (modo prueba) → confirmación",
+        "Panel simple para que el local vea y marque pedidos",
+        "Deploy en Vercel con .vercelignore y test E2E del pedido con Playwright"
+      ],
+      "nuevo": true,
+      "brazos": ["supabase-mcp", "mercadopago", "vercel-mcp", "playwright-mcp", "context7"]
+    },
+    {
+      "id": "directora-arte",
+      "rol": "Directora de arte gastronómica",
+      "actua_como": "Directora de arte especializada en fotografía de café y pastelería, 12 años trabajando con marcas de barrio. Obsesionada con que la comida se vea real y apetitosa (nunca plástica), con luz natural de mañana y una paleta coherente entre landing, fotos y reel.",
+      "por_que": "Las fotos de comida hechas con IA fallan fácil: se ven falsas o no se parecen a lo que el cliente recibe. Este rol usa fotos reales del local como referencia y valida cada imagen mirándola antes de aprobarla.",
+      "entrega": [
+        "Guía de marca mínima (content/brand.md): paleta, tipografías, tono visual",
+        "8 a 12 fotos de producto y ambiente, validadas una por una",
+        "Imagen principal (hero) de la landing"
+      ],
+      "origen": "skills image-gen + image-explorer + brand-guidelines + multimodal-validation",
+      "brazos": ["openai-gpt-image", "replicate", "higgsfield"]
+    },
+    {
+      "id": "director-video",
+      "rol": "Director de video para reels",
+      "actua_como": "Director de motion graphics para contenido vertical, 8 años haciendo reels para marcas locales. Obsesionado con el gancho de los primeros 1,5 segundos, con que todo se entienda sin sonido y con que cada efecto tenga un porqué.",
+      "por_que": "Pediste un video corto para Instagram. Un reel hecho por código con la biblioteca de efectos es barato, editable y consistente con la marca; el guion de dirección evita el video genérico lleno de efectos.",
+      "entrega": [
+        "Guion de dirección del reel (escena por escena) para aprobar en el cockpit",
+        "Reel 9:16 de 15 s en MP4, con fotos de la directora de arte",
+        "Caption y llamado a la acción hacia la landing"
+      ],
+      "origen": "skill video-director (catálogo) + HyperFrames + biblioteca de efectos de Aldot",
+      "brazos": ["hyperframes", "video-effects-library", "elevenlabs"]
+    },
+    {
+      "id": "marketing-local",
+      "rol": "Especialista en marketing local y SEO",
+      "actua_como": "Especialista en crecimiento de negocios de barrio en Santiago, 9 años con cafeterías y panaderías. Obsesionado con Google Business Profile, las reseñas y un copy que suene a vecino y no a agencia.",
+      "por_que": "Una cafetería de barrio vive de que la encuentren en Google Maps y de la gente de la cuadra. Sin SEO local y copy cercano, la landing no recibe visitas aunque esté perfecta.",
+      "entrega": [
+        "Copy de la landing en lenguaje simple (sin jerga)",
+        "SEO local: schema LocalBusiness, checklist de Google Business Profile",
+        "Plan de publicación del reel en Instagram (2 semanas)"
+      ],
+      "origen": "skills marketing + client-language (catálogo) + plugin claude-seo",
+      "brazos": ["claude-seo", "research-openrouter", "canva"]
+    }
+  ],
+  "proceso": {
+    "sprints": [
+      {
+        "numero": 1,
+        "objetivo": "Datos reales y dirección de arte",
+        "entregables": [
+          "Menú, precios y horarios reales del local (los entregas tú; no se inventan)",
+          "Research de 3 cafeterías competidoras del barrio con fuentes (research.js)",
+          "Dirección de arte + 3 fotos de prueba",
+          "Arquitectura de la mini app en 1 página"
+        ],
+        "gate": "Apruebas dirección de arte y arquitectura en el cockpit"
+      },
+      {
+        "numero": 2,
+        "objetivo": "Landing y pedidos funcionando",
+        "entregables": [
+          "Landing publicada en Vercel (preview)",
+          "Menú, carrito y pago con Mercado Pago en modo prueba",
+          "Panel del local para ver pedidos",
+          "Test E2E del pedido con Playwright"
+        ],
+        "gate": "Haces un pedido de prueba de punta a punta desde tu celular"
+      },
+      {
+        "numero": 3,
+        "objetivo": "Contenido y lanzamiento",
+        "entregables": [
+          "Set final de fotos",
+          "Reel de 15 s (guion aprobado antes de animar)",
+          "SEO local y copy final",
+          "Salida a producción con dominio y pagos reales"
+        ],
+        "gate": "Apruebas guion del reel y checklist de lanzamiento; activas pagos reales tú"
+      }
+    ],
+    "intervenciones": [
+      "Aprobar este plan (hoy)",
+      "Entregar menú, precios, logo y 5-10 fotos reales del local (Sprint 1)",
+      "Conectar las cuentas que solo tú puedes autorizar: Mercado Pago, Vercel, Supabase",
+      "Votar la dirección de arte y el guion del reel en el cockpit",
+      "Probar un pedido real desde tu celular antes del lanzamiento",
+      "Decidir el día de salida a producción"
+    ]
+  },
+  "decisiones": [
+    "Stack de pedidos: app propia con Supabase y Mercado Pago o usar una plataforma existente; base de datos y pagos",
+    "Nombre de la marca y tono en redes",
+    "Precio y pedido mínimo online, y si conviene sumar delivery más adelante",
+    "Guion y tono del video corto para Instagram"
+  ],
+  "riesgos": [
+    { "riesgo": "Fotos IA que no se parecen al producto real (reclamos, sensación de engaño)", "mitigacion": "fotos reales del local como referencia (Image 1, Image 2...), IA para luz y ambiente; cada imagen se revisa antes de aprobarla" },
+    { "riesgo": "Pagos con dinero real", "mitigacion": "Mercado Pago en modo prueba hasta el gate del Sprint 3; nunca se guardan datos de tarjeta; keys solo en .env" },
+    { "riesgo": "La mini app crece a sistema de delivery completo", "mitigacion": "Sprint 2 solo retiro en el local; delivery queda como idea en el backlog (/idea)" },
+    { "riesgo": "El MCP de Mercado Pago no está verificado", "mitigacion": "integrar con el SDK oficial de Node; el MCP es opcional" },
+    { "riesgo": "Vercel intenta un build Python por los scripts del starter", "mitigacion": ".vercelignore con scripts/, requirements.txt y .venv/ antes del primer deploy" },
+    { "riesgo": "Datos del mundo real inventados (precios de la competencia, horarios)", "mitigacion": "todo dato externo pasa por research.js con fuentes o lo entregas tú" }
+  ]
+}
