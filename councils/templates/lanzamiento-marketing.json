@@ -1,0 +1,10 @@
+{
+  "id": "lanzamiento-marketing",
+  "name": "Lanzamiento y marketing",
+  "description": "Plan de lanzamiento, campañas, mensajes y canales: cómo llega la gente y por qué compra.",
+  "personas": ["growth", "storyteller", "ventas", "cliente"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario planea lanzar, promocionar o vender algo, o define mensajes y canales.",
+  "keywords": ["lanzamiento", "lanzar", "campana", "marketing", "anuncio", "ads", "redes sociales", "instagram", "linkedin", "email", "landing", "embudo", "conversion", "adquisicion", "promocion", "mensaje", "posicionamiento", "seo"]
+}

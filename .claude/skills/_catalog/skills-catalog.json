@@ -20,12 +20,13 @@
       "convoca un council",
       "/council",
       "consulta al council",
-      "qué piensa el council de X"
+      "qué opinaría un CTO",
+      "dame otras perspectivas"
     ],
-    "when_to_use": "Decisión compleja con tradeoffs reales, naming/ideación, debate de arquitectura. NO para decisiones triviales.",
-    "output": "Deliberación multi-modelo + síntesis en councils/results/",
+    "when_to_use": "Decisión con tradeoffs reales: funcionalidad nueva, naming, estrategia, arquitectura. Proponerlo con `node src/council.js suggest`, nunca correrlo sin un sí. NO para lo verificable con tests o docs.",
+    "output": "Propuesta integrada con aportes atribuidos por persona en councils/results/ + revisión votable en cockpit/reviews/",
     "status": "v1.0",
-    "cost_hint": "Tier 1 ~USD 0.02-0.10; Tier 2/3 más caro, confirmar"
+    "cost_hint": "personas ~USD 0.02-0.05; multimodel ~USD 0.30-0.50, confirmar"
   },
   {
     "name": "image-explorer",

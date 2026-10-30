@@ -1,0 +1,10 @@
+{
+  "id": "diseno-visual",
+  "name": "Diseño visual",
+  "description": "Dirección visual, identidad, interfaz o piezas gráficas: carácter, claridad y experiencia.",
+  "personas": ["director-arte", "ux-research", "visionario"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario discute colores, tipografía, layout, identidad visual, estilo de imágenes o diseño de interfaz.",
+  "keywords": ["diseno", "visual", "paleta", "color", "colores", "tipografia", "logo", "identidad", "branding", "marca", "layout", "interfaz", "ui", "estilo", "estetica", "imagen", "ilustracion", "mockup"]
+}

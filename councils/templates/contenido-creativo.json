@@ -1,0 +1,10 @@
+{
+  "id": "contenido-creativo",
+  "name": "Contenido creativo",
+  "description": "Guiones, videos, posts, historias o series: que se entienda, emocione y se comparta.",
+  "personas": ["storyteller", "director-arte", "audiencia"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario crea o revisa contenido: guion, video, post, artículo, personaje o serie.",
+  "keywords": ["contenido", "guion", "video", "reel", "post", "historia", "personaje", "serie", "episodio", "articulo", "blog", "copy", "narrativa", "tono", "audiencia", "youtube", "tiktok"]
+}

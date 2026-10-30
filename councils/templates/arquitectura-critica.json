@@ -1,0 +1,10 @@
+{
+  "id": "arquitectura-critica",
+  "name": "Arquitectura crítica",
+  "description": "Decisiones técnicas caras de revertir: base de datos, auth, infraestructura, migraciones. Usa varias familias de modelos y red team.",
+  "personas": ["cto", "sre", "seguridad", "contrarian"],
+  "mode": "multimodel",
+  "redteam": true,
+  "signals": "Decisión técnica con costo alto de cambio, datos sensibles, infraestructura o algo que va a producción con usuarios reales.",
+  "keywords": ["arquitectura", "base de datos", "infraestructura", "migracion", "migrar", "auth", "autenticacion", "seguridad", "escalar", "escalabilidad", "backend", "servidor", "deploy", "produccion", "microservicios", "monolito", "api", "datos sensibles", "hosting", "stack"]
+}

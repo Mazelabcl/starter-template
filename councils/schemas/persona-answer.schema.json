@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "council-persona-answer",
+  "title": "Respuesta independiente de una persona (fase 1)",
+  "type": "object",
+  "required": ["persona", "threats", "opportunities", "ideas", "key_concern", "would_change_mind_if"],
+  "properties": {
+    "persona": { "type": "string", "minLength": 1 },
+    "threats": { "type": "array", "items": { "type": "string", "minLength": 3 } },
+    "opportunities": { "type": "array", "items": { "type": "string", "minLength": 3 } },
+    "ideas": { "type": "array", "items": { "type": "string", "minLength": 3 } },
+    "key_concern": { "type": "string", "minLength": 3 },
+    "would_change_mind_if": { "type": "string", "minLength": 3 }
+  }
+}

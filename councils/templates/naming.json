@@ -1,0 +1,10 @@
+{
+  "id": "naming",
+  "name": "Naming",
+  "description": "Nombres de productos, marcas, funcionalidades o proyectos: memorable, claro y vendible.",
+  "personas": ["storyteller", "ventas", "usuario-novato", "contrarian"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario busca un nombre, tagline o slogan.",
+  "keywords": ["nombre", "nombres", "naming", "llamar", "bautizar", "tagline", "slogan", "eslogan", "marca", "dominio"]
+}

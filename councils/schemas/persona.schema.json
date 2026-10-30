@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "council-persona",
+  "title": "Persona de council",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "category", "actua_como", "obsessions", "ignores", "blind_spots", "typical_questions"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 2 },
+    "category": { "enum": ["tecnico", "producto", "negocio", "creativo", "comodin"] },
+    "actua_como": { "type": "string", "minLength": 150 },
+    "obsessions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
+    "ignores": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
+    "blind_spots": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
+    "typical_questions": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 3 } },
+    "model_preference": { "enum": ["anthropic", "openai", "google", "deepseek", "x-ai"] }
+  }
+}

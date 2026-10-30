@@ -20,7 +20,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Decisiones complejas
 
-- **council** (skill + `src/council.js`): convoca 3-5 modelos distintos para deliberar. 4 councils predefinidos (`creative-ideation` Tier 1, `strategy-calls` y `mazelab-council` Tier 2, `architecture-decision` Tier 3). Auto-invocable bajo señales implícitas (con confirmación). Slash directo: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
+- **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. Modo `multimodel` para arquitectura crítica. Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
 
 ### Orquestación y calidad
 

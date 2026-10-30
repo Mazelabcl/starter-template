@@ -1,0 +1,10 @@
+{
+  "id": "nueva-funcionalidad",
+  "name": "Nueva funcionalidad",
+  "description": "Antes de construir una funcionalidad nueva: alcance, riesgos técnicos y si un novato la entiende.",
+  "personas": ["cto", "pm", "ux-research", "usuario-novato"],
+  "mode": "personas",
+  "redteam": false,
+  "signals": "El usuario quiere agregar, construir o cambiar una funcionalidad, pantalla, flujo o herramienta del producto.",
+  "keywords": ["funcionalidad", "feature", "agregar", "anadir", "construir", "implementar", "pantalla", "flujo", "boton", "integrar", "nueva opcion", "herramienta", "usuario", "novato", "chat", "voz", "cockpit", "app", "onboarding"]
+}
