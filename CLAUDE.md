@@ -16,6 +16,11 @@ Starter de Aldot: cada proyecto nuevo se clona desde aquí. Es un **kit de conte
 - El hook de inicio avisa si falta `/kickoff` o faltan API keys. Si falta kickoff, propónlo; si faltan keys, propón `npm run setup`.
 - `docs/company.md`: léelo solo si la tarea necesita contexto de la empresa.
 
+## Cockpit de revisión
+
+- Toda revisión para Aldot va al cockpit, no como muro de texto: `/revisar` arma el JSON y lo publica con `node src/cockpit.js publish <archivo>`. Aldot lo ve con `npm run cockpit` (votos, comentarios y conversación por voz).
+- Si el hook avisa feedback pendiente: `node src/cockpit.js pending`, aplícalo ANTES de seguir y márcalo con `node src/cockpit.js done <id>`.
+
 ## API keys (`.env`)
 
 Viven en `.env` (nunca las imprimas ni las subas a git). Los scripts de `src/` lo cargan solos. Para un script propio:
@@ -36,7 +41,8 @@ node --env-file=.env mi-script.js
 | Memoria del proyecto (decisiones, lessons, equipo, sprints) | `memory/` | `src/memory.js` (`summarize()`, `addDecision()`, `addLesson()`). Detalle en `memory/README.md` |
 | Roadmap y backlog | `roadmap/roadmap.md` + `roadmap/current-sprint.json` | `/idea <texto>` y `/roadmap` |
 | Ideas sueltas | backlog del roadmap | `/idea <texto>`: captura y sigue con lo que estabas |
-| Revisión de entregables | `review-app/` | `npm run review-app` |
+| Revisión con feedback (canónica) | `cockpit/` | `/revisar` + `npm run cockpit` |
+| Visor de `.md` de agentes | `review-app/` | `npm run review-app` |
 | Resumen visual del proyecto | `RESUMEN.html` | `/resumen` |
 | Catálogo de skills opcionales | `.claude/skills/_catalog/INDEX.md` | se activan con `/kickoff` o copiando la carpeta |
 | Capacidades y tests | `docs/capacidades.md` | `npm test` |

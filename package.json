@@ -9,6 +9,8 @@
     "test": "node scripts/run_tests.js",
     "research": "node src/research.js",
     "review-app": "node review-app/server.js",
+    "cockpit": "node cockpit/server.js",
+    "test:cockpit": "node cockpit.test.js",
     "smoke": "node scripts/smoke_test.js",
     "smoke:quick": "node scripts/smoke_test.js --quick",
     "test:skills-catalog": "node skills-catalog.test.js",

@@ -67,7 +67,8 @@ let frontmatter = '';
 let body = '';
 
 if (existsSync(skillFile)) {
-  skillRaw = readFileSync(skillFile, 'utf8');
+  // Normaliza CRLF → LF: en Windows con core.autocrlf=true el checkout trae CRLF.
+  skillRaw = readFileSync(skillFile, 'utf8').replace(/\r\n/g, '\n');
   // Frontmatter parseo simple: --- ... ---
   const fmMatch = skillRaw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (fmMatch) {

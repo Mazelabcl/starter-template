@@ -40,7 +40,11 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 - **roadmap.js** (`src/roadmap.js`): gestión de sprint actual + backlog priorizado. Helpers: `addIdea`, `getCurrentSprint`, `startSprint`, `closeSprint`. Slash command `/idea` para captura sin desvío. No edites a mano el contenido entre marcadores de `roadmap.md`; si faltan marcadores, `roadmap.js` los agrega.
 
-### review-app — superficie canónica para consumir output
+### cockpit — revisión con feedback que el orquestador consume
+
+- **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `npm run cockpit` (puerto 7788). Roadmap arriba, foco, votos por ítem, conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar` o `node src/cockpit.js publish <archivo>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
+
+### review-app — visor de output de agentes
 
 - **review-app** (`review-app/server.js`, catálogo): app HTTP local zero-dep para leer output de agentes. Modo "sprint/bloques" (revisar PRs marcando OK/Feedback) y modo "viewer" (lista cualquier `.md` de un directorio con TLDR = H1 + primer párrafo, click abre el `.md` renderizado). `npm run review-app`. Es la superficie HTML preferida del usuario para consumir output. Detalle: `review-app/README.md`.
 
@@ -54,6 +58,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 | `npm run smoke` | 4 checks reales (keys, memoria, research con fuentes, imagen). Gasta ~USD 0.05. |
 | `npm run smoke:quick` | Keys + memoria, sin red. |
 | `npm run test:skills-catalog` | `skills-catalog.json` en sync con las skills en disco. |
+| `npm run test:cockpit` | cockpit: contrato, feedback pendiente, rutas, path traversal, token de voz simulado. |
 | `npm run test:review-app` | review-app: modo sprint/bloques + modo viewer. |
 | `npm run test:image-refs` | Mimetype + guard "Image 1" de `openai_images.py`. |
 | `npm run test:image-wrappers` | Guard de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro). |

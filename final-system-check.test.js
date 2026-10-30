@@ -96,7 +96,7 @@ await check('skills catálogo — todas presentes con SKILL.md y frontmatter', (
 
 const COMMANDS_EXPECTED = [
   'council', 'idea', 'kickoff', 'roadmap',
-  'setup-openai', 'setup-openrouter', 'resumen',
+  'setup-openai', 'setup-openrouter', 'resumen', 'revisar',
 ];
 
 await check('slash commands — todos presentes con frontmatter', () => {
@@ -111,7 +111,7 @@ await check('slash commands — todos presentes con frontmatter', () => {
 
 const SRC_MODULES = [
   'memory.js', 'roadmap.js', 'openrouter_client.js', 'council.js',
-  'image_explorer.js', 'replicate_client.js', 'research.js',
+  'image_explorer.js', 'replicate_client.js', 'research.js', 'cockpit.js',
 ];
 
 await check('src — cada módulo importa sin lanzar', async () => {

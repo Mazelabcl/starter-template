@@ -27,6 +27,12 @@ process-log/_*.md
 # review-app — reviews persistidas (datos del proyecto consumer, no del template)
 review-app/audit/reviews/
 
+# cockpit — revisiones y feedback son datos del proyecto consumer, no del template
+cockpit/reviews/*.json
+cockpit/feedback/*.json
+!cockpit/reviews/.gitkeep
+!cockpit/feedback/.gitkeep
+
 # Councils results — generados en runtime; solo el .gitkeep va al template
 councils/results/*.json
 !councils/results/.gitkeep
