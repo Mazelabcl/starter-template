@@ -112,6 +112,7 @@ await check('slash commands — todos presentes con frontmatter', () => {
 const SRC_MODULES = [
   'memory.js', 'roadmap.js', 'openrouter_client.js', 'council.js',
   'image_explorer.js', 'replicate_client.js', 'research.js', 'cockpit.js',
+  'brazos.js',
 ];
 
 await check('src — cada módulo importa sin lanzar', async () => {

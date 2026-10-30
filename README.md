@@ -35,7 +35,8 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 
 | Capacidad | Cómo se usa | Para qué |
 |---|---|---|
-| **kickoff** | `/kickoff` | Entrevista adaptativa: tipo de proyecto, stack de skills recomendado, perfil y sprint inicial. |
+| **kickoff** | `/kickoff` | Entrevista adaptativa que termina en un **plan de batalla** en el cockpit: equipo de agentes ("actúa como" + por qué), brazos conectados y faltantes, sprints con gates, councils sugeridos y riesgos. |
+| **brazos** | `node src/brazos.js status` / `suggest "..."` | Directorio de integraciones para ejecutar (MCP, APIs, CLIs, plugins): qué está conectado, qué falta y cómo conectarlo. Ver [`brazos/README.md`](brazos/README.md). |
 | **research** | `node src/research.js pro "pregunta"` | Perplexity vía OpenRouter, con fuentes. Modos `quick`, `pro`, `search`, `reason`, `deep`. |
 | **image-gen** | "genera imagen de X", `/image-gen` | gpt-image-2 (y FLUX, Ideogram, Nano Banana Pro) con identity lock y referencias. |
 | **image-explorer** | "explora este prompt en varios modelos" | Mismo prompt en 3-4 modelos, grilla HTML para elegir. |
@@ -48,7 +49,7 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **review-app** | `npm run review-app` | Visor local de los `.md` que generan los agentes. |
 | **resumen** | `/resumen` | `RESUMEN.html` autocontenido con el estado del proyecto. |
 
-Skills opcionales (20) en `.claude/skills/_catalog/` — se activan con `/kickoff` o copiando la carpeta a `.claude/skills/`. Incluye `confidence-loop`, `cold-reader-gate`, `dual-auditor-protocol`, `superpowers-pr`, `frontend-design`, `seo`, `marketing` y más. Catálogo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
+Skills opcionales (21, incluye `video-director` para reels hechos por código con HyperFrames) en `.claude/skills/_catalog/` — se activan con `/kickoff` o copiando la carpeta a `.claude/skills/`. Incluye `confidence-loop`, `cold-reader-gate`, `dual-auditor-protocol`, `superpowers-pr`, `frontend-design`, `seo`, `marketing` y más. Catálogo: [`.claude/skills/_catalog/INDEX.md`](.claude/skills/_catalog/INDEX.md).
 
 Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs/capacidades.md).
 
@@ -72,6 +73,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 ├── .claude/           commands, skills core, _catalog/ con skills opcionales
 ├── memory/            memoria del proyecto
 ├── roadmap/           roadmap.md + current-sprint.json
+├── brazos/           directorio de integraciones (MCP, API, CLI, plugins) + schema
 ├── councils/          personas, plantillas y resultados de councils
 ├── content/           principles.md / INDEX.md (los genera /kickoff) + outputs
 ├── cockpit/           revisión con voz + feedback (reviews/ y feedback/)

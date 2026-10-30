@@ -353,6 +353,22 @@
     "cost_hint": "sin costo"
   },
   {
+    "name": "video-director",
+    "location": "catalog",
+    "triggers": [
+      "/video-director",
+      "dirige un video",
+      "haz un video de X",
+      "guion de dirección",
+      "video con motion graphics",
+      "anima esto como video"
+    ],
+    "when_to_use": "Video corto hecho por código (reel, motion graphics, teaser): guion de dirección con efectos de la biblioteca, aprobado en el cockpit antes de implementar en HyperFrames.",
+    "output": "video/guion-direccion.md + video/direction.json + MP4 renderizado",
+    "status": "v1.0",
+    "cost_hint": "sin costo de API (render local)"
+  },
+  {
     "name": "web-artifacts-builder",
     "location": "catalog",
     "triggers": [

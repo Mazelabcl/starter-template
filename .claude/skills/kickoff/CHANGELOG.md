@@ -1,5 +1,14 @@
 # kickoff — changelog
 
+## v4 — 2026-10-30 (v6 Sprint 3: plan de batalla + brazos)
+
+- **Plan de batalla en el cockpit.** El kickoff termina en una revisión `kind: "plan"`: TLDR del usuario, TLDR del orquestador, un ítem por integrante del equipo ("actúa como" + por qué + entrega), brazos (conectados / falta auth / no instalados + comando `connect`), proceso (sprints, gates, dónde interviene el usuario), councils sugeridos y riesgos. El chat recibe solo 5 líneas + `npm run cockpit`.
+- **`plan.js`** arma la revisión desde un borrador corto: completa brazos con `src/brazos.js` (estado real) y councils con `suggestTemplates`, y escribe el `context_brief` para la guía de voz. Ejemplo: `ejemplo-plan-borrador.json` (cafetería).
+- **Gate antes del Sprint 1:** se lee `node src/cockpit.js pending`, se ajusta el plan y recién entonces se persiste y arranca el sprint. `addAgent` registra el equipo aprobado.
+- **Agentes nuevos** se crean en el kickoff con aviso de reiniciar Claude Code.
+- **detector.js:** tiebreaker build > content (landing con fotos/video = software), comando CLI `contrast`, keyword de `video-director`.
+- SKILL.md bajó de ~370 a ≤150 líneas.
+
 ## v3 — 2026-05-09 (Sprint 2.1)
 
 ### Cambios estructurales

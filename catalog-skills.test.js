@@ -58,6 +58,8 @@ const EXPECTED_SKILLS = [
   // v6 Sprint 1 — movidas de core a catálogo (opcionales).
   'confidence-loop',
   'cold-reader-gate',
+  // v6 Sprint 3 — dirección de video por código (HyperFrames + biblioteca de efectos).
+  'video-director',
 ];
 
 // Skills nuevas del Sprint 5.2 que son stubs y deben seguir el formato canónico

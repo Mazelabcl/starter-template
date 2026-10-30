@@ -1,5 +1,7 @@
 # MCPs recomendados
 
+> **Fuente actualizada (v6 Sprint 3):** el directorio vivo de integraciones es `brazos/directorio.json` (~40 entradas con comando verificado, credencial, costo y riesgos). Usa `node src/brazos.js status` y `node src/brazos.js suggest "<proyecto>"`. Este documento queda como explicación general de qué es un MCP.
+
 Los MCP servers (Model Context Protocol) son **distintos** a las skills. Una skill es un archivo markdown con instrucciones que Claude lee; un MCP server es un proceso externo que expone herramientas a Claude vía protocolo. Por eso viven en el `mcpServers` de `~/.claude/settings.json`, no en `.claude/skills/`.
 
 Este doc lista los MCPs útiles para distintos perfiles de proyecto. Aldo decide cuáles instalar según necesidad — no son ni core ni catálogo, son ortogonales.

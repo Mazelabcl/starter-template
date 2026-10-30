@@ -173,9 +173,10 @@ export function detectSignals(input) {
   if (sortedTypes[0].score === 0) {
     type = 'mixed';
   } else if (sortedTypes.length > 1 && sortedTypes[0].score - sortedTypes[1].score < 1 && sortedTypes[1].score >= 2) {
-    // Empate: aplicamos tiebreaker build > business si ambos están entre los empatados.
+    // Empate: tiebreaker build > business y build > content. Una landing o app
+    // con fotos/video se ejecuta como software; lo creativo entra como brazos.
     const tiedTypes = sortedTypes.filter(t => t.score === sortedTypes[0].score).map(t => t.type);
-    if (tiedTypes.includes('build') && tiedTypes.includes('business')) {
+    if (tiedTypes.includes('build') && (tiedTypes.includes('business') || tiedTypes.includes('content'))) {
       type = 'build';
     } else {
       type = 'mixed';
@@ -366,6 +367,11 @@ const CATALOG_KEYWORDS = [
     why: 'detecté planillas Excel — `xlsx` lee/escribe sin scripts ad-hoc.',
   },
   {
+    skill: 'video-director',
+    patterns: [/\bvideos?\b/i, /\breels?\b/i, /\bmotion graphics?\b/i, /\banimaci[oó]n\b/i, /\bteaser\b/i],
+    why: 'detecté un video — `video-director` escribe un guion de dirección aprobado antes de animar en HyperFrames.',
+  },
+  {
     skill: 'remotion',
     patterns: [/\bremotion\b/i, /\bvideo (program[aá]tico|lyric)/i],
     why: 'detecté video programático — `remotion` lo hace data-driven con React.',
@@ -518,6 +524,7 @@ export function suggestInitialSprint(type, mode) {
 //   node detector.js detect "<texto del usuario>"
 //   node detector.js stack  "<type>"
 //   node detector.js sprint "<type>" "<mode>"
+//   node detector.js contrast "<type>" "<respuestas del usuario>"
 //
 // Imprime el JSON resultante a stdout. Determinístico, sin red, sin LLM.
 
@@ -537,8 +544,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     case 'sprint':
       result = suggestInitialSprint(arg, process.argv[4]);
       break;
+    case 'contrast':
+      result = enrichStackWithContrast(arg, process.argv[4]);
+      break;
     default:
-      console.error('Uso: node detector.js <detect|stack|sprint> "<texto>"');
+      console.error('Uso: node detector.js <detect|stack|sprint|contrast> "<texto>"');
       process.exit(1);
   }
   console.log(JSON.stringify(result, null, 2));

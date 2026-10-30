@@ -114,3 +114,37 @@ USUARIO: confirma.
 
 [Persistencia + creación de archivos]
 ```
+
+> Nota v4: los escenarios A y B muestran la entrevista. Desde v4 el cierre ya no es un bloque de texto en el chat sino el plan de batalla en el cockpit (escenario C).
+
+---
+
+## Escenario C — landing + pedidos para una cafetería (plan de batalla, v4)
+
+```
+USUARIO: Landing + mini app para una cafetería de barrio en Santiago que quiere
+pedidos online, con fotos generadas por IA y un video corto para Instagram.
+
+[detect → type=build (tiebreaker build > content), size=medio, output=codigo]
+
+KICKOFF: 1. ¿Quién la usa? → clientes del barrio, desde el celular.
+         2. ¿Delivery o retiro? → retiro en el local, pagando online.
+         3. ¿Qué debe funcionar primero? → elegir del menú, pagar y que el local vea el pedido.
+         4. ¿Plazo y presupuesto? → 3-4 semanas, presupuesto chico.
+
+[contrast build → extras: video-director · brazos.js suggest --estado · council suggest]
+[borrador → memory/plan-de-batalla.borrador.json (ver ejemplo-plan-borrador.json)]
+[plan.js build → memory/plan-de-batalla.json · cockpit.js publish]
+
+KICKOFF (chat, 5 líneas):
+Plan de batalla listo: Cafetería de barrio en Santiago: landing + pedidos online.
+Equipo: Desarrollador fullstack (agente nuevo), Directora de arte gastronómica, Director de video para reels, Especialista en marketing local y SEO.
+Brazos: 14 sugeridos, 8 por conectar.
+Sprint 1: Datos reales y dirección de arte.
+Abre el cockpit: npm run cockpit → http://localhost:7788
+
+[Aldot vota y conversa por voz → Guardar feedback]
+[cockpit.js pending → ajustar → (v2 si hay cambios grandes) → done → persistir → crear agente nuevo + aviso de reinicio]
+```
+
+La cantidad de brazos "por conectar" depende de cada computador (`node src/brazos.js status`).

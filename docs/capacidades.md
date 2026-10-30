@@ -24,7 +24,9 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Orquestación y calidad
 
-- **kickoff**: entrevista adaptativa, autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.
+- **kickoff**: entrevista adaptativa que termina en un plan de batalla publicado en el cockpit (`kind: "plan"`, armado con `.claude/skills/kickoff/plan.js`): TLDRs, equipo con "actúa como", brazos, proceso, councils y riesgos. Tras aplicar el feedback autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.
+- **brazos** (`src/brazos.js` + `brazos/directorio.json`): ~40 integraciones para ejecutar (MCP, API, CLI, skill, librería, plugin, conector) con comando de conexión, credencial, costo, riesgos y si está verificado. `status` (conectado / falta auth / no instalado), `suggest "<proyecto>"`, `connect <id>` (solo imprime pasos), `mcp-json <ids> [--write]`. Detalle: `brazos/README.md`.
+- **video-director** (catálogo): video por código con guion de dirección aprobado antes de animar; usa la biblioteca de efectos de Aldot y HyperFrames.
 - **agent-template**: genera un agente nuevo con las secciones estructurales listas.
 - **confidence-loop** (catálogo, opcional): itera un artefacto hasta un score alto (5 iteraciones máx). Se autoevalúa: úsala como apoyo, no como validación independiente.
 - **cold-reader-gate** (catálogo, opcional): lectura en frío con voto GO/NO-GO; recibe solo el canon (`principles.md` o el brief) + el deliverable.
@@ -63,6 +65,8 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 | `npm run test:image-refs` | Mimetype + guard "Image 1" de `openai_images.py`. |
 | `npm run test:image-wrappers` | Guard de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro). |
 | `npm run test:load-env` | Carga idempotente del `.env`. |
+| `node brazos.test.js` | Directorio de brazos: schema, status simulado, ranking de `suggest`, `mcp-json`. |
+| `node kickoff-plan.test.js` | Plan de batalla del kickoff: ítems, brazos, councils, publicación en el cockpit. |
 | `node roadmap-integration.test.js` | Roadmap: ideas, tareas, sprints y auto-reparación de marcadores. |
 | `node memory/test.js` | Helpers de memoria (incluye mapeo de `reversibility`). |
 | `node research.test.js` | Extracción de fuentes y timeouts de `research.js` (sin red). |
