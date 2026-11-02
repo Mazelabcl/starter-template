@@ -129,9 +129,27 @@
         "node src/council.js suggest \"elegir el nombre del producto\""
       ]
     },
+    "astra": {
+      "description": "Puente automático a Astra (Codex de OpenAI): los agentes piden imágenes a Codex con el plan de ChatGPT, sin copiar y pegar.",
+      "requires": [],
+      "files": [
+        "src/astra.js",
+        "astra-bridge/README.md",
+        "astra-bridge/pedidos/.gitkeep",
+        "astra-bridge/resultados/.gitkeep",
+        ".claude/skills/astra/SKILL.md"
+      ],
+      "npm": {},
+      "scripts": {},
+      "gitignore": [],
+      "verify": [
+        "node src/astra.js estado"
+      ],
+      "notes": "Requiere la app Codex instalada y con sesión de ChatGPT en el mismo PC."
+    },
     "brazos": {
       "description": "Directorio de brazos (MCP, API, CLI, plugins): qué herramienta sirve para qué, qué está conectado y cómo conectar lo que falta.",
-      "requires": [],
+      "requires": ["astra"],
       "files": [
         "src/brazos.js",
         "brazos/README.md",
