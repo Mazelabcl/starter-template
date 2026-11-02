@@ -27,6 +27,7 @@
 //   node src/council.js suggest "texto de la tarea"
 //   node src/council.js list
 //   node src/council.js run --question "..." [--template id] [--personas a,b]
+//                           [--crear "Rol: foco"]... [--guardar]
 //                           [--mode multimodel] [--files a.md,b.md] [--redteam]
 //                           [--context "..."] [--yes] [--dry-run]
 
@@ -180,6 +181,92 @@ export function loadTemplates({ dir = TEMPLATES_DIR, personas = loadPersonas() }
     out.push(data);
   }
   return out;
+}
+
+// =============================================================================
+// Personas a mano: alias y personas creadas al vuelo (--crear)
+// =============================================================================
+
+// Nombres cómodos para ids reales. Un id real con ese nombre siempre gana.
+export const PERSONA_ALIASES = { 'steve-jobs': 'visionario' };
+
+function slugify(text) {
+  const slug = String(text || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug.length > 48 ? slug.slice(0, 48).replace(/-[^-]*$/, '') : slug;
+}
+
+// "Experta en aforo: mira seguridad" -> { role: 'Experta en aforo', focus: 'mira seguridad' }
+export function parseCrear(spec) {
+  const text = typeof spec === 'string' ? spec.trim() : '';
+  const i = text.indexOf(':');
+  const role = i > 0 ? text.slice(0, i).trim() : '';
+  const focus = i > 0 ? text.slice(i + 1).trim() : '';
+  if (role.length < 2 || focus.length < 3 || !slugify(role)) {
+    throw new CouncilError(
+      `--crear necesita el formato "Rol: foco", por ejemplo --crear "Experta en aforo de eventos: mira seguridad y permisos". Recibí: ${text || '(vacío)'}`,
+      { code: 'invalid_crear' },
+    );
+  }
+  return { role, focus };
+}
+
+// Misma estructura que councils/personas/*.json. Sin model_preference: entra a la
+// rotación de modelos del modo (assignModels) y no gasta más que las demás.
+export function buildAdhocPersona({ role, focus }, id = slugify(role)) {
+  const topic = focus.replace(/^(mira|revisa|cuida|analiza|eval[uú]a|enf[oó]cate en)\s+/i, '') || focus;
+  const lowerRole = /^\p{Lu}\p{Lu}/u.test(role) ? role : role.charAt(0).toLowerCase() + role.slice(1);
+  return {
+    id,
+    name: role,
+    category: 'comodin',
+    actua_como: `Actúas como ${lowerRole}, con años de experiencia práctica en ese campo. Te convocaron a este council por una razón concreta: ${focus}. Miras cada propuesta desde ahí, señalas lo que los demás pasan por alto y aterrizas tu opinión en pasos concretos, sin salirte de tu especialidad.`,
+    obsessions: [topic, 'lo que falta definir en tu especialidad antes de decidir'],
+    ignores: ['temas fuera de tu especialidad', 'preferencias de estilo que no cambian el resultado'],
+    blind_spots: ['puede sobredimensionar su especialidad frente al resto del proyecto', 'tiende a ver riesgos de su campo donde otros ven detalles menores'],
+    typical_questions: [`¿Qué puede salir mal con ${topic}?`, `¿Qué falta definir sobre ${topic} antes de decidir?`, '¿Cuál es el paso más pequeño que reduce ese riesgo?'],
+  };
+}
+
+// Agrega al mapa las personas de --crear. No toca el disco.
+// Si el id ya existe con otro contenido usa un sufijo (-2, -3); si es idéntica
+// (ya guardada o repetida en la misma corrida) reutiliza la que hay.
+export function withAdhocPersonas(crear = [], personasMap = loadPersonas()) {
+  const map = new Map(personasMap);
+  const adhoc = [];
+  const ids = [];
+  for (const spec of crear) {
+    const parsed = parseCrear(spec);
+    const base = slugify(parsed.role);
+    let id = base;
+    for (let n = 2; map.has(id) && JSON.stringify(map.get(id)) !== JSON.stringify(buildAdhocPersona(parsed, id)); n += 1) {
+      id = `${base}-${n}`;
+    }
+    if (!map.has(id)) {
+      const persona = buildAdhocPersona(parsed, id);
+      const v = validatePersona(persona);
+      if (!v.ok) throw new CouncilError(`Persona creada inválida (${id}): ${v.errors.join('; ')}`, { code: 'invalid_crear' });
+      map.set(id, persona);
+      adhoc.push(persona);
+    }
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return { personasMap: map, adhoc, ids };
+}
+
+// Persiste una persona creada para reutilizarla (--guardar). Nunca sobrescribe.
+export function savePersona(persona, { dir = PERSONAS_DIR } = {}) {
+  const v = validatePersona(persona);
+  if (!v.ok) throw new CouncilError(`Persona inválida (${persona?.id}): ${v.errors.join('; ')}`, { code: 'invalid_persona' });
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${persona.id}.json`);
+  try {
+    writeFileSync(path, `${JSON.stringify(persona, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  } catch (e) {
+    if (e.code === 'EEXIST') throw new CouncilError(`Ya existe ${path}; no la sobrescribo.`, { code: 'persona_exists' });
+    throw e;
+  }
+  return path;
 }
 
 // =============================================================================
@@ -633,30 +720,37 @@ export function makeCouncilId(date = new Date()) {
   return `council-${date.toISOString().replace(/[:.]/g, '-')}`;
 }
 
-export function resolveCouncilPlan({ template, personas: personaIds, mode, redteam, personasMap = loadPersonas(), templates } = {}) {
+export function resolveCouncilPlan({ template, personas: personaIds, crear = [], mode, redteam, personasMap = loadPersonas(), templates } = {}) {
   let tpl = null;
   if (template) {
     tpl = (templates || loadTemplates({ personas: personasMap })).find(t => t.id === template);
     if (!tpl) throw new CouncilError(`Plantilla "${template}" no existe. Mira: node src/council.js list`, { code: 'template_not_found' });
   }
-  const ids = personaIds && personaIds.length ? personaIds : tpl?.personas;
-  if (!ids || ids.length < 2) throw new CouncilError('Hacen falta al menos 2 personas (usa --template o --personas a,b).', { code: 'invalid_personas' });
+  // Se valida antes de mezclar con --crear: la lista de ids válidos es la de la biblioteca.
+  const baseIds = (personaIds && personaIds.length ? personaIds : tpl?.personas || [])
+    .map(id => (!personasMap.has(id) && PERSONA_ALIASES[id]) || id);
+  const missing = baseIds.filter(id => !personasMap.has(id));
+  if (missing.length) {
+    throw new CouncilError(`Personas desconocidas: ${missing.join(', ')}. Ids válidos: ${[...personasMap.keys(), ...Object.keys(PERSONA_ALIASES)].join(', ')}`, { code: 'invalid_personas' });
+  }
+  const { personasMap: allPersonas, adhoc, ids: adhocIds } = withAdhocPersonas(crear, personasMap);
+  const ids = [...new Set([...baseIds, ...adhocIds])];
+  if (ids.length < 2) throw new CouncilError('Hacen falta al menos 2 personas (usa --template, --personas a,b o --crear "Rol: foco").', { code: 'invalid_personas' });
   if (ids.length > 6) throw new CouncilError('Máximo 6 personas por council.', { code: 'invalid_personas' });
-  const missing = ids.filter(id => !personasMap.has(id));
-  if (missing.length) throw new CouncilError(`Personas desconocidas: ${missing.join(', ')}`, { code: 'invalid_personas' });
   const finalMode = mode || tpl?.mode || 'personas';
-  const assignments = assignModels(ids.map(id => personasMap.get(id)), finalMode);
+  const assignments = assignModels(ids.map(id => allPersonas.get(id)), finalMode);
   if (finalMode === 'multimodel') {
     const fams = new Set(assignments.map(a => a.family)).size;
     if (fams < Math.min(3, ids.length)) throw new CouncilError('multimodel necesita al menos 3 familias de modelos.', { code: 'invalid_mode' });
   }
-  return { template: tpl, mode: finalMode, redteam: redteam ?? tpl?.redteam ?? false, assignments };
+  return { template: tpl, mode: finalMode, redteam: redteam ?? tpl?.redteam ?? false, assignments, adhoc, personasMap: allPersonas };
 }
 
 export async function invoke({
   question,
   template,
   personas: personaIds,
+  crear = [],
   mode,
   redteam,
   files = [],
@@ -671,7 +765,7 @@ export async function invoke({
 } = {}) {
   if (!question || !String(question).trim()) throw new CouncilError('Falta la pregunta del council.', { code: 'invalid_question' });
   const t0 = Date.now();
-  const plan = resolveCouncilPlan({ template, personas: personaIds, mode, redteam, personasMap });
+  const plan = resolveCouncilPlan({ template, personas: personaIds, crear, mode, redteam, personasMap });
   const lim = LIMITS[plan.mode];
   const ctx = buildProjectContext({ root, files, extra: context });
   const est = estimateCouncilCost({ assignments: plan.assignments, mode: plan.mode, redteam: plan.redteam, contextChars: ctx.text.length });
@@ -737,7 +831,7 @@ export async function invoke({
   // ---- Fase 3: red team opcional (con parada temprana)
   let redteamOut = null;
   if (plan.redteam) {
-    const contrarian = personasMap.get('contrarian');
+    const contrarian = plan.personasMap.get('contrarian');
     const rtModel = pickRedteamModel(synthModel, plan.mode);
     const rt = await callJson({
       chatFn,
@@ -776,7 +870,7 @@ export async function invoke({
     onProgress({ type: 'redteam_done', patched: redteamOut.patched });
   }
 
-  const merge = reattribute(mergeAnon, map, personasMap);
+  const merge = reattribute(mergeAnon, map, plan.personasMap);
   const realCost = costs.every(c => c.real);
   const id = makeCouncilId(now);
   return {
@@ -788,6 +882,7 @@ export async function invoke({
     template: plan.template?.id || null,
     redteam_requested: plan.redteam,
     personas: plan.assignments.map(a => ({ id: a.persona.id, name: a.persona.name, model: a.model, family: a.family })),
+    adhoc_personas: plan.adhoc,
     context_sources: ctx.sources,
     answers,
     merge,
@@ -815,6 +910,14 @@ export async function invoke({
 function trunc(s, n) {
   const t = String(s || '').replace(/\s+/g, ' ').trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
+// Títulos visibles del cockpit: máximo 10 palabras; el detalle va en body_md.
+const TITLE_MAX_WORDS = 10;
+
+export function capWords(text, max = TITLE_MAX_WORDS) {
+  const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ');
+  return words.length > max ? `${words.slice(0, max).join(' ')}…` : words.join(' ');
 }
 
 export function summaryLine(result) {
@@ -846,7 +949,7 @@ export function toCockpitReview(result) {
   const items = [{
     id: 'propuesta',
     title: 'Propuesta integrada',
-    body_md: `${m.integrated_proposal_md}\n\n**Recomendación:** ${m.recommendation}\n\n**Confianza:** ${m.confidence}. **Cambiaría si:** ${m.what_would_change_it}`,
+    body_md: `**Pregunta:** ${result.question}\n\n${m.integrated_proposal_md}\n\n**Recomendación:** ${m.recommendation}\n\n**Confianza:** ${m.confidence}. **Cambiaría si:** ${m.what_would_change_it}`,
     media: [],
     tags: ['propuesta', `confianza-${m.confidence}`],
   }];
@@ -854,7 +957,7 @@ export function toCockpitReview(result) {
     const seen = c.also_seen_by.length ? ` (también lo vio: ${c.also_seen_by.join(', ')})` : '';
     items.push({
       id: c.id,
-      title: `${c.persona_name}: ${TYPE_LABEL[c.type]}`,
+      title: `${capWords(c.persona_name, TITLE_MAX_WORDS - 1)}: ${TYPE_LABEL[c.type]}`,
       body_md: `${c.text}\n\n${c.adopted ? 'Adoptado' : 'No adoptado'} en la propuesta: ${c.why}${seen}`,
       media: [],
       tags: [c.persona, c.type, c.adopted ? 'adoptado' : 'no-adoptado', ...(c.source === 'redteam' ? ['redteam'] : [])],
@@ -863,8 +966,8 @@ export function toCockpitReview(result) {
   for (const t of m.tensions) {
     items.push({
       id: t.id,
-      title: `Tensión: ${t.between_names.join(' vs ')}`,
-      body_md: `${t.issue}\n\n**Resolución sugerida:** ${t.suggested_resolution}`,
+      title: capWords(`Tensión: ${t.between_names.map(n => capWords(n, 4)).join(' vs ')}`),
+      body_md: `**Entre:** ${t.between_names.join(' y ')}\n\n${t.issue}\n\n**Resolución sugerida:** ${t.suggested_resolution}`,
       media: [],
       tags: ['tension', ...t.between],
     });
@@ -873,7 +976,7 @@ export function toCockpitReview(result) {
   const topTension = m.tensions[0] ? ` La tensión principal es entre ${m.tensions[0].between_names.join(' y ')}: ${m.tensions[0].issue}` : '';
   return {
     id: result.id,
-    title: `Council: ${trunc(result.question, 90)}`,
+    title: `Council: ${capWords(result.question, TITLE_MAX_WORDS - 1)}`,
     kind: 'council',
     created_at: result.created_at,
     connects_to: [`councils/results/${result.id}.json`, ...(result.template ? [`councils/templates/${result.template}.json`] : [])],
@@ -900,14 +1003,19 @@ export function saveResult(result, { root = REPO_ROOT } = {}) {
 // CLI
 // =============================================================================
 
+const REPEATABLE_ARGS = new Set(['crear']);
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a.startsWith('--')) {
+      const key = a.slice(2);
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) args[a.slice(2)] = true;
-      else { args[a.slice(2)] = next; i += 1; }
+      const value = next === undefined || next.startsWith('--') ? true : next;
+      if (value !== true) i += 1;
+      if (REPEATABLE_ARGS.has(key)) (args[key] ||= []).push(value);
+      else args[key] = value;
     } else args._.push(a);
   }
   return args;
@@ -924,7 +1032,9 @@ function cliUsage() {
     '',
     'Opciones de run:',
     '  --template <id>          plantilla (ej. nueva-funcionalidad)',
-    '  --personas a,b,c         personas a mano (reemplaza las de la plantilla)',
+    '  --personas a,b,c         personas a mano, sin plantilla (reemplaza las de la plantilla)',
+    '  --crear "Rol: foco"      crea un experto solo para esta corrida; se repite y se combina con --personas',
+    '  --guardar                guarda en councils/personas/ los expertos de --crear para reutilizarlos',
     '  --mode multimodel        modelos fuertes de >=3 familias (requiere --yes)',
     '  --files a.md,b.md        archivos extra de contexto',
     '  --context "..."          contexto extra en texto',
@@ -963,6 +1073,7 @@ async function runCli() {
     }
     console.log('\nPersonas:');
     for (const p of personas.values()) console.log(`  ${p.id}: ${p.name}`);
+    console.log(`\nAlias: ${Object.entries(PERSONA_ALIASES).map(([a, id]) => `${a} -> ${id}`).join(', ')}`);
     return;
   }
 
@@ -972,10 +1083,15 @@ async function runCli() {
   }
 
   const root = args.root ? resolve(args.root) : REPO_ROOT;
+  // Con --root, las personas guardadas en ese proyecto se suman a la biblioteca.
+  const personasDir = join(root, 'councils', 'personas');
+  const personasMap = root === REPO_ROOT ? loadPersonas() : new Map([...loadPersonas(), ...loadPersonas({ dir: personasDir })]);
   const opts = {
     question: args.question,
     template: typeof args.template === 'string' ? args.template : undefined,
     personas: list(args.personas),
+    crear: args.crear || [],
+    personasMap,
     mode: typeof args.mode === 'string' ? args.mode : undefined,
     redteam: args.redteam ? true : undefined,
     files: list(args.files),
@@ -989,6 +1105,12 @@ async function runCli() {
   console.log(`Council ${plan.mode}${plan.redteam ? ' + red team' : ''}: ${plan.assignments.map(a => `${a.persona.name} (${a.model})`).join(', ')}`);
   console.log(`Integrador: ${est.synth_model}. Contexto: ${ctx.sources.map(s => s.path + (s.missing ? ' (no existe)' : '')).join(', ') || 'ninguno'}`);
   console.log(`Costo estimado: ~USD ${est.usd.toFixed(3)} · tiempo estimado: ${est.seconds[0]}-${est.seconds[1]} s`);
+  if (plan.adhoc.length) {
+    const ids = plan.adhoc.map(p => p.id).join(', ');
+    console.log(args.guardar ? `Expertos creados (se guardan al terminar en councils/personas/): ${ids}` : `Expertos creados solo para esta corrida (no se guardan; agrega --guardar para conservarlos): ${ids}`);
+  } else if (args.guardar) {
+    console.log('--guardar: no hay expertos nuevos que guardar.');
+  }
   if (args['dry-run']) return;
 
   const result = await invoke({
@@ -1005,6 +1127,16 @@ async function runCli() {
   console.log(`\n${summaryLine(result)}`);
   console.log(`\n${buildTldr(result)}`);
   console.log(`\nResultado: ${relative(root, resultPath)}\nRevisión cockpit: ${relative(root, reviewPath)}`);
+  // Al final a propósito: si falla el guardado, el council ya pagado queda intacto.
+  if (args.guardar) {
+    for (const p of plan.adhoc) {
+      try {
+        console.log(`Experto guardado: ${relative(root, savePersona(p, { dir: personasDir }))} (reutilízalo con --personas ${p.id})`);
+      } catch (e) {
+        console.error(`[council] No pude guardar ${p.id}: ${e.message}`);
+      }
+    }
+  }
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

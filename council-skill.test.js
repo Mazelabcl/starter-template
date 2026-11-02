@@ -66,6 +66,15 @@ check('documenta los comandos reales del CLI', () => {
   for (const flag of ['--files', '--redteam', '--mode multimodel', '--yes', '--dry-run']) assert(body.includes(flag), `falta ${flag}`);
 });
 
+check('tres formas de elegir expertos: --personas, --crear/--guardar y panel armado por el orquestador', () => {
+  assert(/node src\/council\.js run --personas cto,steve-jobs/.test(body), 'falta --personas sin plantilla');
+  assert(/--crear "[^"]+: [^"]+"/.test(body) && body.includes('--guardar'), 'falta --crear/--guardar');
+  assert(/arma tú el panel de expertos/i.test(fm.description) && /arma tú el panel de expertos/i.test(body), 'falta el trigger del panel');
+  assert(/3-5 experts/.test(body) && /Armaría este panel \(~USD/.test(body) && /¿Lo corro\?/.test(body), 'falta la plantilla del panel');
+  assert(/ONLY after a yes/.test(body), 'debe correr solo tras un sí');
+  assert(/arma tú el panel/i.test(cmdBody), 'el slash command no despacha el panel');
+});
+
 check('presentación: cockpit + TLDR de 5 líneas + atribución', () => {
   assert(/cockpit\/reviews\//.test(body), 'no menciona la revisión del cockpit');
   assert(/5-line TLDR/i.test(body), 'no exige TLDR de 5 líneas');

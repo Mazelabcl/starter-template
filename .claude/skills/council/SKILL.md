@@ -1,6 +1,6 @@
 ---
 name: council
-description: Expert-persona council (CTO, devops, PM, novice user, Steve Jobs-inspired visionary...). Each persona answers independently, then a synthesizer MERGES their threats, opportunities and ideas into one improved proposal with every contribution attributed. Proactively PROPOSE it (never run it silently) on decisions with real tradeoffs, new features, naming, strategy or architecture. Triggers "convoca un council", "/council", "consulta al council", "qué opinaría un CTO", "dame otras perspectivas".
+description: Expert-persona council (CTO, devops, PM, novice user, Steve Jobs-inspired visionary...). Each persona answers independently, then a synthesizer MERGES their threats, opportunities and ideas into one improved proposal with every contribution attributed. Proactively PROPOSE it (never run it silently) on decisions with real tradeoffs, new features, naming, strategy or architecture. Triggers "convoca un council", "/council", "consulta al council", "qué opinaría un CTO", "dame otras perspectivas", "arma tú el panel de expertos".
 allowed-tools: Bash, Read, Edit
 ---
 
@@ -30,6 +30,25 @@ Do NOT propose one when the answer is verifiable: a bug, a failing test, "how do
 2. Show the user the literal line it prints, e.g.:
    `Para esto te sirve un council de CTO + Product manager + Investigador UX + Usuario novato (plantilla "nueva-funcionalidad", ~USD 0.03, ~40-100 s). ¿Lo armo?`
 3. Wait for a yes. If the user wants other voices, swap with `--personas a,b,c` (ids from `node src/council.js list`).
+
+## Three ways to choose the experts
+
+Besides a template, the panel can be chosen in three ways:
+
+1. **The user chooses.** `node src/council.js run --personas cto,steve-jobs --question "..."` uses existing personas without a template. An unknown id fails with the list of valid ids.
+2. **The user creates their own.** `--crear "Experta en aforo de eventos: mira seguridad y permisos"`: before the colon the role, after it the focus. Repeatable, and combinable with `--personas` or `--template`. Uses the same cheap model rotation. It is NOT saved unless you add `--guardar`, which writes it to `councils/personas/` for reuse; add it only if the user asks to keep the expert.
+3. **"Arma tú el panel de expertos": you choose.** When the user says that:
+   - Run `node src/council.js list`, then pick 3-5 experts for THIS question: existing personas first, `--crear` only for a gap none of them covers. Mix angles that can disagree.
+   - Get the real estimate without spending: same command with `--dry-run` (calls no model, saves nothing).
+   - Show the panel, one reason per expert in very few words, plus the cost, using this template:
+     ```
+     Armaría este panel (~USD <costo>, ~<segundos> s):
+     - CTO: costo de revertir
+     - Experta en aforo: permisos y seguridad
+     - Usuario novato: qué se entiende
+     ¿Lo corro?
+     ```
+   - Run ONLY after a yes, with the same command minus `--dry-run`. If the user swaps someone, show the panel again with the new cost.
 
 ## How to run it
 
@@ -62,13 +81,15 @@ The council never writes to memory. Only when the user explicitly picks a direct
 
 - 16 personas in 5 groups: technical (cto, sre, seguridad, datos), product (pm, ux-research, growth), business (cfo, ventas, cliente), creative (director-arte, storyteller), wildcards (visionario, contrarian, usuario-novato, audiencia).
 - Templates: nueva-funcionalidad, arquitectura-critica (multimodel + redteam), lanzamiento-marketing, diseno-visual, precio-negocio, contenido-creativo, naming, estrategia (redteam).
-- New persona: copy one JSON in `councils/personas/`, edit it, then run `node councils-library.test.js`. Personas may be "inspired by" a real person, never claim to BE them.
+- New persona: `--crear "Rol: foco" --guardar` during a run, or copy one JSON in `councils/personas/`, edit it, then run `node councils-library.test.js`. Personas may be "inspired by" a real person, never claim to BE them; write the `--crear` role that way too.
 
 ## Anti-patterns
 
 | Don't | Do instead |
 |---|---|
 | Run a council without asking | Propose with the literal line, wait for yes |
+| Create experts when an existing persona covers the angle | `--personas` first, `--crear` only for the gap |
+| Add `--guardar` by default | Only when the user asks to keep the expert |
 | Ask a vague question ("¿qué opinan?") | A decision with options and constraints |
 | Run without the files the decision is about | Pass them with `--files` |
 | Present a winner or a vote count | Present the merged proposal and who saw what |

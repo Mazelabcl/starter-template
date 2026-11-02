@@ -17,7 +17,15 @@ Cada persona recibe automáticamente `content/principles.md`, las decisiones rec
 3. `node src/council.js run --template nueva-funcionalidad --question "¿X o Y?" --files docs/spec.md` → (esto corre el council y guarda el resultado)
 4. Agrega `--dry-run` → (esto muestra costo y tiempo estimados sin gastar nada)
 
-Opciones de `run`: `--personas cto,pm` (elegir voces a mano), `--redteam`, `--mode multimodel`, `--context "..."`, `--yes` (confirma el costo).
+Opciones de `run`: `--personas cto,pm` (elegir voces a mano), `--crear "Rol: foco"`, `--guardar`, `--redteam`, `--mode multimodel`, `--context "..."`, `--yes` (confirma el costo).
+
+## Tres formas de elegir a los expertos
+
+1. **Tú eliges:** `node src/council.js run --personas cto,steve-jobs --question "¿X o Y?"` → (usa personas que ya existen, sin plantilla; si un id no existe, el error lista los válidos)
+2. **Creas el tuyo:** `node src/council.js run --personas cto --crear "Experta en aforo de eventos: mira seguridad y permisos" --question "¿X o Y?"` → (antes de los dos puntos va el rol y después el foco; se puede repetir y combinar con `--personas`)
+3. **Que lo arme Claude:** dile "arma tú el panel de expertos". → (elige de 3 a 5 expertos, te muestra por qué cada uno y el costo, y corre solo si dices que sí)
+
+Un experto de `--crear` vive solo en esa corrida. Agrega `--guardar` para dejarlo en `councils/personas/` y reutilizarlo con `--personas`.
 
 ## Modos y costo
 
@@ -41,16 +49,18 @@ Opciones de `run`: `--personas cto,pm` (elegir voces a mano), `--redteam`, `--mo
 | `naming` | storyteller + ventas + usuario novato + contrarian |
 | `estrategia` | PM + CFO + visionario + contrarian (red team) |
 
-Personas disponibles (16): `cto`, `sre`, `seguridad`, `datos`, `pm`, `ux-research`, `growth`, `cfo`, `ventas`, `cliente`, `director-arte`, `storyteller`, `visionario`, `contrarian`, `usuario-novato`, `audiencia`.
+Personas base (16; `steve-jobs` es un alias de `visionario`): `cto`, `sre`, `seguridad`, `datos`, `pm`, `ux-research`, `growth`, `cfo`, `ventas`, `cliente`, `director-arte`, `storyteller`, `visionario`, `contrarian`, `usuario-novato`, `audiencia`.
 
 ## Dónde queda el resultado
 
 - `councils/results/<id>.json`: todo (respuestas de cada persona, fusión, red team, costo real).
-- `cockpit/reviews/<id>.json`: la revisión para el cockpit, con un item por propuesta, aporte y tensión, para votar con pulgar arriba o abajo.
+- `cockpit/reviews/<id>.json`: la revisión para el cockpit, con un item por propuesta, aporte y tensión, para votar con pulgar arriba o abajo. Cada título tiene como máximo 10 palabras; el detalle está dentro del item.
 
 El council **nunca** escribe en `memory/`. Si decides algo a partir de él, Claude lo registra con `addDecision()` solo cuando tú lo confirmas.
 
 ## Agregar una persona o plantilla
+
+Lo más rápido para una persona: `--crear "Rol: foco" --guardar` en una corrida. Para ajustarla a mano:
 
 1. Copia un JSON de `councils/personas/` (o `councils/templates/`) con otro nombre.
 2. Edítalo: el `id` debe ser igual al nombre del archivo.

@@ -24,8 +24,9 @@ const templateFiles = readdirSync(join(ROOT, 'councils', 'templates')).filter(f 
 const personas = loadPersonas();
 const templates = loadTemplates({ personas });
 
-await check('hay entre 12 y 16 personas', () => {
-  assert(personaFiles.length >= 12 && personaFiles.length <= 16, `hay ${personaFiles.length}`);
+// Sin tope: en un proyecto, --guardar agrega personas a esta carpeta.
+await check('hay al menos 12 personas', () => {
+  assert(personaFiles.length >= 12, `hay ${personaFiles.length}`);
 });
 
 await check('cada persona cumple el schema y su id coincide con el archivo', () => {

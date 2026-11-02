@@ -7,14 +7,16 @@
 // Corrida real opcional (cuesta ~USD 0.01, ~60 s): COUNCIL_LIVE=1 node council-engine.test.js
 // Esa corrida también usa un directorio temporal, nunca el memory/ real.
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import {
   invoke, validateMerge, toCockpitReview, saveResult, buildTldr, summaryLine,
-  buildProjectContext, anonymize, CouncilError,
+  buildProjectContext, anonymize, CouncilError, parseCrear, buildAdhocPersona, withAdhocPersonas,
+  savePersona, loadPersonas, validatePersona, resolveCouncilPlan, capWords, MODEL_CATALOG,
 } from './src/council.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
@@ -85,7 +87,7 @@ function makeMock(opts = {}) {
       return reply(base, 0.004);
     }
     // Persona (fase 1)
-    const id = user.match(/"persona": "([a-z-]+)"/)[1];
+    const id = user.match(/"persona": "([a-z0-9-]+)"/)[1];
     return reply({
       persona: id,
       threats: [`Riesgo visto por ${id}`],
@@ -276,6 +278,131 @@ async function main() {
     assert(sha(join(ROOT, 'memory', 'decisions.md')) === realDecisionsHash, 'cambió el memory/decisions.md REAL');
     const src = readFileSync(join(ROOT, 'src', 'council.js'), 'utf8');
     assert(!/addDecision|memory\.js/.test(src), 'council.js todavía referencia memory.js/addDecision');
+  });
+
+  // ---------- Tres formas de elegir expertos (sin red) ----------
+  const AFORO = 'Experta en aforo de eventos: mira seguridad y permisos';
+  const SEGURO = 'Corredora de seguros: cuida coberturas por cancelación';
+  const personaFilesBefore = readdirSync(join(ROOT, 'councils', 'personas')).join();
+
+  await check('--personas sin plantilla: usa ids existentes y el alias steve-jobs', async () => {
+    const m = makeMock();
+    const r = await invoke({ question: Q, personas: ['cto', 'steve-jobs'], root, chatFn: m.chatFn });
+    assert(r.template === null, 'no debió usar plantilla');
+    assert(r.personas.map(p => p.id).join() === 'cto,visionario', r.personas.map(p => p.id).join());
+    assert(r.merge.recommendation.length > 10, 'sin recomendación');
+  });
+
+  await check('persona desconocida: error claro con la lista de ids válidos y sin llamar al modelo', async () => {
+    const m = makeMock();
+    let err = null;
+    try { await invoke({ question: Q, personas: ['cto', 'no-existe'], root, chatFn: m.chatFn }); } catch (e) { err = e; }
+    assert(err?.code === 'invalid_personas', `error ${err?.code}`);
+    assert(/no-existe/.test(err.message) && /Ids válidos:.*\bcto\b.*\bvisionario\b.*\bsteve-jobs\b/.test(err.message), err.message);
+    assert(m.calls.length === 0, 'llamó al modelo');
+  });
+
+  await check('parseCrear: separa rol y foco en el primer ":" y rechaza formatos inválidos', () => {
+    const p = parseCrear(' Experta: mira esto: y aquello ');
+    assert(p.role === 'Experta' && p.focus === 'mira esto: y aquello', JSON.stringify(p));
+    for (const bad of ['sin dos puntos', ': solo foco', 'Rol:', '¿¿: foco válido', true, undefined]) {
+      let err = null;
+      try { parseCrear(bad); } catch (e) { err = e; }
+      assert(err?.code === 'invalid_crear' && /Rol: foco/.test(err.message), `pasó: ${bad}`);
+    }
+  });
+
+  await check('buildAdhocPersona: cumple el schema de las personas y entra a la rotación', () => {
+    const p = buildAdhocPersona(parseCrear(AFORO));
+    const v = validatePersona(p);
+    assert(v.ok, v.errors.join('; '));
+    assert(p.id === 'experta-en-aforo-de-eventos' && p.name === 'Experta en aforo de eventos', p.id);
+    assert(p.actua_como.startsWith('Actúas como experta en aforo') && p.actua_como.includes('mira seguridad y permisos'), p.actua_como);
+    assert(p.obsessions[0] === 'seguridad y permisos', p.obsessions[0]);
+    assert(!('model_preference' in p), 'no debe fijar modelo');
+    assert(buildAdhocPersona(parseCrear('CTO de fintech: mira costos')).actua_como.startsWith('Actúas como CTO'), 'no respetó la sigla');
+    assert(validatePersona(buildAdhocPersona(parseCrear('Diseñadora de señalética: ve flujos'))).ok && buildAdhocPersona(parseCrear('Diseñadora de señalética: ve flujos')).id === 'disenadora-de-senaletica', 'slug con tildes');
+  });
+
+  await check('--crear + --personas: modelos baratos en rotación, atribución, anonimato y fusión', async () => {
+    const m = makeMock();
+    const r = await invoke({ question: Q, personas: ['cto'], crear: [AFORO, SEGURO], root, chatFn: m.chatFn });
+    assert(r.personas.map(p => p.id).join() === 'cto,experta-en-aforo-de-eventos,corredora-de-seguros', r.personas.map(p => p.id).join());
+    assert(new Set(r.personas.map(p => p.family)).size === 3, r.personas.map(p => p.family).join());
+    for (const p of r.personas) assert(MODEL_CATALOG[p.model].out <= 2.5, `${p.model} no es barato`);
+    assert(m.calls.some(c => c.system.includes('ROLE: Actúas como experta en aforo')), 'la persona creada no llegó al modelo');
+    const mergeCall = m.calls.find(c => c.system.startsWith('You are the integrator'));
+    assert(!/Experta en aforo|Corredora de seguros|experta-en-aforo|corredora-de-seguros/i.test(mergeCall.user), 'el nombre llegó al integrador');
+    assert(r.merge.contributions.some(c => c.persona_name === 'Experta en aforo de eventos'), 'sin atribución a la persona creada');
+    assert(r.adhoc_personas.length === 2, 'el resultado no registra las personas creadas');
+    saveResult(r, { root });
+    assert(!existsSync(join(root, 'councils', 'personas')), '--crear sin --guardar escribió personas');
+    assert(readdirSync(join(ROOT, 'councils', 'personas')).join() === personaFilesBefore, 'tocó councils/personas real');
+  });
+
+  await check('--crear: recomendación nunca null también con personas creadas', async () => {
+    const m = makeMock({ mergeNullTimes: 99 });
+    let err = null;
+    try { await invoke({ question: Q, crear: [AFORO, SEGURO], root, chatFn: m.chatFn }); } catch (e) { err = e; }
+    assert(err?.code === 'merge_failed', `error ${err?.code}`);
+  });
+
+  await check('--crear: exige 2+ personas, tope 6, y se combina con plantilla', () => {
+    const fails = opts => { try { resolveCouncilPlan(opts); return null; } catch (e) { return e.code; } };
+    assert(fails({ crear: [AFORO] }) === 'invalid_personas', 'una sola debió fallar');
+    assert(fails({ template: 'nueva-funcionalidad', crear: ['A1: foco uno', 'B2: foco dos', 'C3: foco tres'] }) === 'invalid_personas', 'más de 6 debió fallar');
+    const plan = resolveCouncilPlan({ template: 'nueva-funcionalidad', crear: [AFORO] });
+    assert(plan.assignments.length === 5 && plan.assignments[4].persona.id === 'experta-en-aforo-de-eventos', 'no sumó a la plantilla');
+  });
+
+  await check('--crear: id repetido usa sufijo; texto idéntico se reutiliza sin duplicar', () => {
+    const base = loadPersonas();
+    const c = withAdhocPersonas(['CTO: mira costos de nube', AFORO, AFORO], base);
+    assert(c.ids.join() === 'cto-2,experta-en-aforo-de-eventos', c.ids.join());
+    assert(base.get('cto').category === 'tecnico' && c.personasMap.get('cto').category === 'tecnico', 'pisó la persona real');
+    assert(!base.has('cto-2'), 'mutó el mapa original');
+  });
+
+  await check('savePersona (--guardar): se recarga válida, no sobrescribe y se reutiliza', () => {
+    const dir = join(root, 'guardadas');
+    const p = buildAdhocPersona(parseCrear(AFORO));
+    const path = savePersona(p, { dir });
+    assert(path === join(dir, `${p.id}.json`), path);
+    const loaded = loadPersonas({ dir });
+    assert(JSON.stringify(loaded.get(p.id)) === JSON.stringify(p), 'cambió al guardarla');
+    let err = null;
+    try { savePersona(p, { dir }); } catch (e) { err = e; }
+    assert(err?.code === 'persona_exists', `error ${err?.code}`);
+    const again = withAdhocPersonas([AFORO], loaded);
+    assert(again.adhoc.length === 0 && again.ids[0] === p.id, 'duplicó una persona ya guardada');
+    assert(resolveCouncilPlan({ personas: [p.id, 'cto'], personasMap: new Map([...loadPersonas(), ...loaded]) }).assignments.length === 2, 'no se reutiliza con --personas');
+  });
+
+  await check('CLI --dry-run con --crear repetido y --guardar: muestra el panel y no escribe nada', () => {
+    const r2 = tempRoot();
+    const cli = spawnSync(process.execPath, [join(ROOT, 'src', 'council.js'), 'run', '--personas', 'cto,steve-jobs', '--crear', AFORO, '--crear', SEGURO, '--guardar', '--question', Q, '--dry-run', '--root', r2], { encoding: 'utf8', env: { ...process.env, OPENROUTER_API_KEY: '' } });
+    assert(cli.status === 0, cli.stderr);
+    assert(/Experta en aforo de eventos \(/.test(cli.stdout) && /Corredora de seguros \(/.test(cli.stdout) && /Visionario/.test(cli.stdout), cli.stdout);
+    assert(/Costo estimado: ~USD/.test(cli.stdout), cli.stdout);
+    for (const sub of ['personas', 'results']) assert(!existsSync(join(r2, 'councils', sub)), `dry-run escribió councils/${sub}`);
+    const bad = spawnSync(process.execPath, [join(ROOT, 'src', 'council.js'), 'run', '--personas', 'cto,no-existe', '--question', Q, '--dry-run'], { encoding: 'utf8' });
+    assert(bad.status === 1 && /Ids válidos:.*cto/.test(bad.stderr), bad.stderr);
+    rmSync(r2, { recursive: true, force: true });
+  });
+
+  await check('cockpit: títulos de máximo 10 palabras; el detalle sigue en body_md', async () => {
+    const longRole = 'Especialista certificada en normativa municipal de seguridad para grandes eventos masivos al aire libre';
+    const longQ = '¿Conviene hacer el festival en el parque central o en el estadio municipal considerando permisos, aforo, costos, clima y accesos?';
+    const m = makeMock();
+    const r = await invoke({ question: longQ, crear: [`${longRole}: mira permisos`, 'Otra experta con un cargo igualmente largo y muy difícil de leer en la tarjeta: mira accesos'], root, chatFn: m.chatFn });
+    const rv = toCockpitReview(r);
+    const words = s => s.trim().split(/\s+/).length;
+    assert(words(rv.title) <= 10, rv.title);
+    for (const it of rv.items) assert(words(it.title) <= 10, `${it.id}: ${it.title}`);
+    assert(rv.items[0].body_md.includes(longQ), 'la pregunta completa no quedó en body_md');
+    assert(rv.items.find(i => i.tags[0] === 'tension').body_md.includes(longRole), 'el nombre completo no quedó en la tensión');
+    assert(capWords('uno dos', 10) === 'uno dos' && capWords('a b c', 2) === 'a b…', 'capWords');
+    saveResult(r, { root }); // publishReview valida el contrato del cockpit
   });
 
   // ---------- Corrida real opcional ----------
