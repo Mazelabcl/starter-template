@@ -2,7 +2,23 @@
 
 Un **kit de contexto + herramientas** para arrancar proyectos con Claude Code: research con fuentes, generación de imágenes multi-modelo, memoria del proyecto, roadmap con `/idea`, review-app para revisar entregables y councils de expertos para decisiones difíciles. Usas lo que tu proyecto necesita; nada es obligatorio.
 
-## Quickstart (copia y pega)
+## Atajo en Windows: un solo comando
+
+Instálalo una vez (desde la carpeta del starter, en PowerShell):
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1
+```
+(copia el script a `$HOME\.mazelab\` y agrega el comando `nuevo-proyecto` a tu perfil de PowerShell)
+
+Desde ahí, en cualquier ventana NUEVA de PowerShell:
+
+```
+nuevo-proyecto mi-proyecto
+```
+(clona el starter en `~\.gemini\antigravity\scratch\mi-proyecto`, lo desconecta del repo del starter, copia tu `.env`, corre `npm install` y abre Claude Code con `/kickoff`)
+
+## Quickstart manual (copia y pega)
 
 1. Clona el template y entra en la carpeta:
    ```bash

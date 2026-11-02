@@ -2,6 +2,8 @@
 
 Para quien clona el starter por primera vez. Al terminar tienes un proyecto listo para trabajar con Claude Code.
 
+> **Atajo en Windows:** si ya instalaste el atajo (`powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1`, una sola vez), escribe `nuevo-proyecto mi-proyecto` en una ventana nueva de PowerShell y te saltas los pasos 1, 2 y 4: clona, copia tu `.env`, instala y abre Claude Code con `/kickoff`.
+
 ## Paso 1 — Clonar el template
 
 ```bash
