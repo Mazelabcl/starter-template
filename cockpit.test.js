@@ -27,7 +27,17 @@ import {
   buildGuideInstructions,
   formatPending,
   isSafeMediaPath,
+  probeCockpit,
+  ensureServer,
+  findRunningServer,
+  openCockpit,
+  stopServer,
+  serverFiles,
+  cockpitUrl,
+  browserCommand,
+  defaultPort,
 } from './src/cockpit.js';
+import net from 'node:net';
 import { countPendingCockpit, cockpitLine } from './scripts/session_brief.js';
 import { startCockpit, REALTIME_DEFAULTS } from './cockpit/server.js';
 
@@ -444,6 +454,104 @@ try {
   server.closeAllConnections?.();
 }
 
+// ---------------------------------------------------------------------------
+// 4. open / stop: server en segundo plano, sin segunda terminal
+// ---------------------------------------------------------------------------
+
+function freePort() {
+  return new Promise((ok, fail) => {
+    const s = net.createServer();
+    s.once('error', fail);
+    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); });
+  });
+}
+
+process.env.COCKPIT_NO_BROWSER = '1';
+const bgRoot = makeRoot();
+const bgPort = await freePort();
+let bgPid = null;
+
+try {
+  await check('cockpitUrl y browserCommand por sistema', () => {
+    assertEqual(cockpitUrl(7788), 'http://localhost:7788', 'url base');
+    assertEqual(cockpitUrl(7788, 'plan-1'), 'http://localhost:7788/#/r/plan-1', 'url con id');
+    assertThrows(() => cockpitUrl(7788, '../x'), /review_id/, 'id inválido');
+    const w = browserCommand('http://localhost:1/#/r/a', 'win32');
+    assertEqual([w.cmd, ...w.args], ['cmd', '/c', 'start', '""', 'http://localhost:1/#/r/a'], 'windows');
+    assert(w.verbatim === true, 'windows usa argumentos literales');
+    assertEqual(browserCommand('u', 'darwin').cmd, 'open', 'mac');
+    assertEqual(browserCommand('u', 'linux').cmd, 'xdg-open', 'linux');
+  });
+
+  await check('COCKPIT_PORT cambia el puerto por defecto', () => {
+    const prev = process.env.COCKPIT_PORT;
+    process.env.COCKPIT_PORT = '7999';
+    try { assertEqual(defaultPort(), 7999, 'override'); } finally {
+      if (prev === undefined) delete process.env.COCKPIT_PORT; else process.env.COCKPIT_PORT = prev;
+    }
+  });
+
+  await check('probe: puerto sin server devuelve null', async () => {
+    assertEqual(await probeCockpit(bgPort), null, 'probe');
+    assertEqual(await findRunningServer({ root: bgRoot, port: bgPort }), null, 'find');
+  });
+
+  await check('open: levanta el server en segundo plano y registra PID y log', async () => {
+    const s = await openCockpit({ root: bgRoot, port: bgPort, reviewId: 'r1' });
+    bgPid = s.pid;
+    assert(s.started === true, 'debió iniciarlo');
+    assertEqual(s.port, bgPort, 'puerto');
+    assertEqual(s.url, `http://localhost:${bgPort}/#/r/r1`, 'url');
+    assert(s.browser === false, 'COCKPIT_NO_BROWSER evita abrir el navegador');
+    const h = await probeCockpit(bgPort);
+    assert(h && h.ok, 'health responde');
+    const f = serverFiles(bgRoot);
+    assert(existsSync(f.pid) && existsSync(f.log), 'pid y log existen');
+    assertEqual(JSON.parse(readFileSync(f.pid, 'utf8')).pid, s.pid, 'pid registrado');
+  });
+
+  await check('open: segunda llamada es idempotente (no levanta otro)', async () => {
+    const s = await openCockpit({ root: bgRoot, port: bgPort });
+    assert(s.started === false, 'no debió iniciar otro');
+    assertEqual(s.port, bgPort, 'mismo puerto');
+    assertEqual(s.pid, bgPid, 'mismo pid');
+  });
+
+  await check('open: si el puerto lo ocupa otra cosa, usa el siguiente libre', async () => {
+    const otherRoot = makeRoot();
+    const s = await ensureServer({ root: otherRoot, port: bgPort });
+    try {
+      assert(s.started === true && s.port !== bgPort, `puerto ${s.port}`);
+      const h = await probeCockpit(s.port);
+      assert(h && h.root.toLowerCase().includes('cockpit-test-'), 'responde el cockpit de la otra raíz');
+    } finally {
+      const st = await stopServer({ root: otherRoot });
+      assert(st.stopped, 'cierra el de la otra raíz');
+    }
+  });
+
+  await check('stop: cierra el server, borra el PID y queda idempotente', async () => {
+    const st = await stopServer({ root: bgRoot });
+    assert(st.stopped === true, JSON.stringify(st));
+    assertEqual(await probeCockpit(bgPort), null, 'ya no responde');
+    assert(!existsSync(serverFiles(bgRoot).pid), 'pid borrado');
+    const again = await stopServer({ root: bgRoot });
+    assertEqual(again, { stopped: false, reason: 'none' }, 'segunda vez');
+    bgPid = null;
+  });
+
+  await check('stop: PID viejo (proceso muerto) se limpia sin error', async () => {
+    const f = serverFiles(bgRoot);
+    writeFileSync(f.pid, JSON.stringify({ pid: 999999, port: bgPort }));
+    const st = await stopServer({ root: bgRoot });
+    assertEqual(st.reason, 'stale', 'stale');
+    assert(!existsSync(f.pid), 'pid borrado');
+  });
+} finally {
+  if (bgPid) { try { process.kill(bgPid); } catch { /* ya cerró */ } }
+}
+
+await new Promise(r => setTimeout(r, 300)); // Windows suelta el log del server
 for (const d of tmpDirs) {
   try { rmSync(d, { recursive: true, force: true }); } catch { /* ignore */ }
 }

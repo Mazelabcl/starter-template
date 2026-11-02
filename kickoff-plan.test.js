@@ -80,7 +80,7 @@ check('context_brief guía el recorrido por voz y menciona lo que falta', () => 
 check('chatTldr: 5 líneas y comando del cockpit', () => {
   const t = chatTldr(DRAFT, result).split('\n');
   assert(t.length === 5, `${t.length} líneas`);
-  assert(/npm run cockpit/.test(t[4]) && /7788/.test(t[4]), t[4]);
+  assert(/Te abrí el cockpit en el navegador/.test(t[4]) && !/npm run cockpit/.test(t[4]), t[4]);
 });
 
 check('borrador incompleto falla con todos los errores juntos', () => {
@@ -110,7 +110,7 @@ check('SKILL.md del kickoff ≤150 líneas y describe el plan de batalla', () =>
   const md = readFileSync('.claude/skills/kickoff/SKILL.md', 'utf8');
   const lines = md.split('\n').length;
   assert(lines <= 150, `${lines} líneas`);
-  for (const t of ['plan.js build', 'cockpit.js publish', 'cockpit.js pending', 'brazos.js', 'reiniciar Claude Code', 'npm run cockpit']) assert(md.includes(t), `falta "${t}"`);
+  for (const t of ['plan.js build', 'cockpit.js publish', 'cockpit.js pending', 'brazos.js', 'reiniciar Claude Code', 'cockpit.js open']) assert(md.includes(t), `falta "${t}"`);
 });
 
 console.log(`\nTOTAL: ${passed} passed, ${failed} failed`);

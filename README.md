@@ -46,7 +46,7 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
-| **cockpit** | `/revisar` + `npm run cockpit` | Revisión con roadmap, votos por ítem y conversación por voz; el feedback lo lee Claude al continuar. Ver [`cockpit/README.md`](cockpit/README.md). |
+| **cockpit** | `/revisar` (Claude lo abre solo con `node src/cockpit.js open <id>`) | Revisión con roadmap, votos por ítem y conversación por voz; el feedback lo lee Claude al continuar. Ver [`cockpit/README.md`](cockpit/README.md). |
 | **review-app** | `npm run review-app` | Visor local de los `.md` que generan los agentes. |
 | **resumen** | `/resumen` | `RESUMEN.html` autocontenido con el estado del proyecto. |
 

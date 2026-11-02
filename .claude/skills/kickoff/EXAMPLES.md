@@ -134,14 +134,14 @@ KICKOFF: 1. ¿Quién la usa? → clientes del barrio, desde el celular.
 
 [contrast build → extras: video-director · brazos.js suggest --estado · council suggest]
 [borrador → memory/plan-de-batalla.borrador.json (ver ejemplo-plan-borrador.json)]
-[plan.js build → memory/plan-de-batalla.json · cockpit.js publish]
+[plan.js build → memory/plan-de-batalla.json · cockpit.js publish · cockpit.js open <id>]
 
 KICKOFF (chat, 5 líneas):
 Plan de batalla listo: Cafetería de barrio en Santiago: landing + pedidos online.
 Equipo: Desarrollador fullstack (agente nuevo), Directora de arte gastronómica, Director de video para reels, Especialista en marketing local y SEO.
 Brazos: 14 sugeridos, 8 por conectar.
 Sprint 1: Datos reales y dirección de arte.
-Abre el cockpit: npm run cockpit → http://localhost:7788
+Te abrí el cockpit en el navegador: vota, comenta o conversa por voz y guarda el feedback.
 
 [Aldot vota y conversa por voz → Guardar feedback]
 [cockpit.js pending → ajustar → (v2 si hay cambios grandes) → done → persistir → crear agente nuevo + aviso de reinicio]

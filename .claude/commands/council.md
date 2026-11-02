@@ -11,4 +11,4 @@ Follow the `council` skill (`.claude/skills/council/SKILL.md`). Dispatch:
 - **Argument starts with a template id** (e.g. `nueva-funcionalidad ¿X o Y?`): treat the rest as the question, show the cost with `--dry-run`, ask `¿Lo corro?`, then run it as the skill says.
 - **Any other text:** it is the task. Run `node src/council.js suggest "$ARGUMENTS"`, show the proposal line it prints and wait for a yes before running.
 
-Rules: Spanish neutro, no voseo. Never run multimodel or anything over USD 0.50 without explicit OK. Never dump the raw JSON; give the 5-line TLDR and point to the cockpit review.
+Rules: Spanish neutro, no voseo. Never run multimodel or anything over USD 0.50 without explicit OK. Never dump the raw JSON; give the 5-line TLDR and open the cockpit review yourself with `node src/cockpit.js open <id>` (the user never opens a second terminal); then say "Te abrí el cockpit en el navegador".

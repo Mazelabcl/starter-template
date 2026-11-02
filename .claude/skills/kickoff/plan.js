@@ -188,7 +188,7 @@ export function chatTldr(draft, result) {
     `Equipo: ${draft.equipo.map(m => m.rol).join(', ')}.`,
     `Brazos: ${result.brazos.length} sugeridos, ${faltan} por conectar.`,
     `Sprint 1: ${draft.proceso.sprints[0].objetivo}.`,
-    'Abre el cockpit: `npm run cockpit` → http://localhost:7788 (vota, comenta o conversa por voz y guarda el feedback).',
+    'Te abrí el cockpit en el navegador: vota, comenta o conversa por voz y guarda el feedback.',
   ].join('\n');
 }
 

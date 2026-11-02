@@ -80,7 +80,8 @@ Script rules: one primary + max one secondary action per scene; every effect cit
 
 ### Step 5 — Approval gate (HARD STOP)
 Publish the script as a cockpit review (`kind: "deliverable"`, one item per scene) with `node src/cockpit.js publish <archivo>` and end with, in Spanish:
-`¿Apruebas este guion? Puedes votar cada escena en el cockpit (npm run cockpit → http://localhost:7788). No escribo código hasta que me confirmes.`
+`¿Apruebas este guion? Te abrí el cockpit en el navegador para que votes cada escena. No escribo código hasta que me confirmes.`
+(Before saying that, run `node src/cockpit.js open <review_id>` yourself: it starts the cockpit in the background if needed and opens the browser.)
 If changes are requested, update the script and re-run Step 4.
 
 ### Step 6 — Implement (only after approval)

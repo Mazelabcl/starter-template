@@ -48,7 +48,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### cockpit — revisión con feedback que el orquestador consume
 
-- **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `npm run cockpit` (puerto 7788). Roadmap arriba, foco, votos por ítem, conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar` o `node src/cockpit.js publish <archivo>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
+- **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `node src/cockpit.js open [id]` lo levanta en segundo plano (puerto 7788 o el siguiente libre; PID en `cockpit/.server.pid`, log en `cockpit/.server.log`) y abre el navegador; `node src/cockpit.js stop` lo cierra. Modo manual: `npm run cockpit`. Roadmap arriba, foco, votos por ítem, conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar` o `node src/cockpit.js publish <archivo>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
 
 ### review-app — visor de output de agentes
 

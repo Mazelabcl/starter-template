@@ -4,13 +4,19 @@ Página local donde revisas lo que hace Claude: arriba el roadmap (hecho / ahora
 
 ## Cómo abrirlo
 
-1. `npm run cockpit`
-   (esto levanta el servidor del cockpit en tu computador; déjalo corriendo en esa terminal)
-2. Abre `http://localhost:7788` en el navegador.
-   (si llega una revisión nueva, aparece sola; no hace falta recargar)
-3. Para cerrarlo: `Ctrl + C` en la terminal del paso 1.
+No tienes que hacer nada: cuando Claude publica una revisión, él mismo corre
 
-Si dice que el puerto está ocupado, probablemente tienes la `review-app` abierta. Ciérrala, o usa otro puerto en PowerShell:
+```
+node src/cockpit.js open <id>
+```
+(esto levanta el servidor del cockpit en segundo plano si no estaba corriendo y abre tu navegador en esa revisión; no necesitas otra terminal)
+
+- Si ya estaba abierto, solo abre la pestaña. Si llega una revisión nueva, aparece sola.
+- Si el puerto 7788 está ocupado (por ejemplo, por la `review-app`), usa el siguiente libre (7789, 7790...) y te da la URL correcta.
+- Para cerrarlo: `node src/cockpit.js stop` (o `npm run cockpit:stop`).
+- El servidor guarda su PID en `cockpit/.server.pid` y su log en `cockpit/.server.log` (ambos ignorados por git). Si algo falla, el comando muestra las últimas líneas del log.
+
+Modo manual (opcional, en primer plano): `npm run cockpit` y abre `http://localhost:7788`; se cierra con `Ctrl + C`. Para otro puerto en PowerShell:
 
 ```
 $env:COCKPIT_PORT='7790'; npm run cockpit

@@ -49,7 +49,7 @@ Rules: never add `--yes` without the user's explicit OK for that cost. Never pas
 
 ## How to present the result
 
-1. The run already wrote the cockpit review (`cockpit/reviews/<id>.json`). If `src/cockpit.js` exists, publish/open it the way that module documents; otherwise tell the user the file path.
+1. The run already wrote the cockpit review (`cockpit/reviews/<id>.json`). Open it yourself (the user never opens a second terminal): `node src/cockpit.js open <id>` (starts the cockpit in the background if needed and opens the browser on that review), then say `Te abrí el cockpit en el navegador.` If `src/cockpit.js` does not exist, tell the user the file path.
 2. In chat, give exactly the 5-line TLDR the CLI printed (recommendation, confidence, key contributions with who saw them, main tension, cost + where to vote). Do not dump the JSON.
 3. Invite review: `Revisa la propuesta en el cockpit y vota cada aporte con pulgar arriba o abajo; con eso ajusto el plan.`
 4. Attribution matters: when you mention an idea, say who saw it ("esto lo vio el devops").

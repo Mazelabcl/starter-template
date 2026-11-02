@@ -35,6 +35,9 @@ cockpit/reviews/*
 cockpit/feedback/*
 !cockpit/reviews/.gitkeep
 !cockpit/feedback/.gitkeep
+# server en segundo plano de `node src/cockpit.js open` (PID y log locales)
+cockpit/.server.pid
+cockpit/.server.log
 
 # Councils results — generados en runtime; solo el .gitkeep va al template
 councils/results/*.json

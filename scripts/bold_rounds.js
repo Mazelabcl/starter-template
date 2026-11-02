@@ -686,7 +686,7 @@ async function cli(argv) {
     }
     case 'review': {
       const r = review(a, { out });
-      print(`Publicada "${r.review.title}" (${r.review.items.length} ítems; candidatas: ${r.candidates.join(', ') || 'ninguna'}). Ábrela con npm run cockpit → http://localhost:7788/#/r/${r.review.id}`);
+      print(`Publicada "${r.review.title}" (${r.review.items.length} ítems; candidatas: ${r.candidates.join(', ') || 'ninguna'}). Ábrela con: node src/cockpit.js open ${r.review.id}`);
       return 0;
     }
     case 'choice': print(choice(a, { out })); return 0;

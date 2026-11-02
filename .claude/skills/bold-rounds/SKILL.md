@@ -42,8 +42,8 @@ node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<obj
 3. Each variant writes `rounds/NNN/<variant>/notes.md`. If one is missing, note it in the review; do not write it yourself.
 4. **After + diff check:** `node scripts/bold_rounds.js after N` (screenshots "after", pixel diff vs before, rejects variants without visible change).
 5. **Look yourself:** Read the before/after PNGs (desktop and mobile) of each candidate. If a variant broke the page (overflow, unreadable text, invented facts), say so in your TLDR.
-6. **Publish:** `node scripts/bold_rounds.js review N` (cockpit review with blind, context and, if both pass, "integrar ambas"; before/after media). Tell the user:
-   `Ronda N lista en el cockpit: npm run cockpit → http://localhost:7788. Vota a favor de UNA opción (ciega, contexto o integrar) y guarda.`
+6. **Publish:** `node scripts/bold_rounds.js review N` (cockpit review with blind, context and, if both pass, "integrar ambas"; before/after media). Then open it yourself (the user never opens a second terminal): `node src/cockpit.js open <review_id>` (starts the cockpit in the background if needed and opens the browser). Tell the user:
+   `Ronda N lista. Te abrí el cockpit en el navegador. Vota a favor de UNA opción (ciega, contexto o integrar) y guarda.`
    Then give a 3-line TLDR: what each variant changed (category + one sentence) and which one you would pick and why.
 7. **Checkpoint.** Wait for the vote: `node scripts/bold_rounds.js choice N` (or `node src/cockpit.js pending`). If the user said up front "sigue solo" / unattended, you may pick yourself with `apply N <variante> --auto`; the helper forces a pause after `pause_every` such rounds.
    - If the user chose "integrar": spawn one Agent that copies `rounds/NNN/context/` to `rounds/NNN/integrada/` and merges in the chosen parts of `blind/` per the user's comment, writing its own `notes.md`; then run `after N` and show it before applying.

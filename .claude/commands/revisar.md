@@ -38,10 +38,15 @@ node src/cockpit.js publish cockpit/reviews/_borrador.json
 
 Luego borra `cockpit/reviews/_borrador.json`.
 
-5. Responde a Aldot en máximo 3 líneas:
+5. Abre el cockpit tú mismo (Aldot NO abre otra terminal):
+
+```bash
+node src/cockpit.js open <id>
+```
+(esto levanta el servidor del cockpit en segundo plano si no estaba corriendo y abre el navegador en la revisión; si ya estaba abierto, solo abre la pestaña)
+
+6. Responde a Aldot en máximo 3 líneas:
    - Qué publicaste (título y número de ítems).
-   - Cómo verlo:
-     1. `npm run cockpit` (esto abre el servidor del cockpit; déjalo corriendo en otra terminal)
-     2. Abre `http://localhost:7788/#/r/<id>` (si ya estaba abierto, aparece solo)
+   - "Te abrí el cockpit en el navegador." (si el comando dijo que no pudo abrir el navegador, pásale la URL que imprimió)
    - "Vota, comenta o conversa por voz y presiona Guardar feedback. Lo leo al continuar."
-6. Cuando Aldot vuelva, lee `node src/cockpit.js pending`, aplica el feedback (decisiones, pedidos, votos negativos con su comentario) y márcalo con `node src/cockpit.js done <id>`.
+7. Cuando Aldot vuelva, lee `node src/cockpit.js pending`, aplica el feedback (decisiones, pedidos, votos negativos con su comentario) y márcalo con `node src/cockpit.js done <id>`.

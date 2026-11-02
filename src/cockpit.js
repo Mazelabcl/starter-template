@@ -14,6 +14,9 @@
 //   node src/cockpit.js publish <archivo>  (valida y publica una revisión)
 //   node src/cockpit.js done <review_id>   (marca el feedback como procesado)
 //   node src/cockpit.js list               (revisiones publicadas)
+//   node src/cockpit.js open [review_id]   (levanta el server en segundo plano si
+//                                           no está y abre el navegador; idempotente)
+//   node src/cockpit.js stop               (cierra el server que levantó `open`)
 //
 // Raíz: por defecto la raíz del repo; se puede cambiar con COCKPIT_ROOT o
 // pasando `root` como último argumento de cada función (lo usan los tests).
@@ -27,10 +30,15 @@ import {
   readdirSync,
   renameSync,
   unlinkSync,
+  openSync,
+  closeSync,
 } from 'node:fs';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import net from 'node:net';
 
 import { getCurrentSprint, _internal as roadmapInternal } from './roadmap.js';
 
@@ -490,11 +498,224 @@ export function parseSummary(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Server en segundo plano (open / stop): el usuario no abre otra terminal.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_PORT = 7788;
+const SERVER_SCRIPT = join(REPO_ROOT, 'cockpit', 'server.js');
+const PORT_SCAN = 10; // si 7788 lo ocupa otra cosa, prueba 7789..7797
+
+export function defaultPort() {
+  const p = parseInt(process.env.COCKPIT_PORT || '', 10);
+  return Number.isInteger(p) && p > 0 ? p : DEFAULT_PORT;
+}
+
+export function serverFiles(root) {
+  const dir = join(resolveRoot(root), 'cockpit');
+  return { dir, pid: join(dir, '.server.pid'), log: join(dir, '.server.log') };
+}
+
+export function cockpitUrl(port, reviewId) {
+  const base = `http://localhost:${port}`;
+  if (!reviewId) return base;
+  assertId(reviewId, 'review_id');
+  return `${base}/#/r/${reviewId}`;
+}
+
+/** Pregunta por HTTP a /api/health. Devuelve { ok, root } si responde un cockpit, o null. */
+export function probeCockpit(port, timeoutMs = 800) {
+  return new Promise(done => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/api/health', timeout: timeoutMs }, res => {
+      let buf = '';
+      res.setEncoding('utf8');
+      res.on('data', c => { buf += c; });
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(buf);
+          done(res.statusCode === 200 && j && j.ok === true ? j : null);
+        } catch { done(null); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); done(null); });
+    req.on('error', () => done(null));
+  });
+}
+
+function portFree(port) {
+  return new Promise(done => {
+    const s = net.createServer();
+    s.once('error', () => done(false));
+    s.listen(port, '127.0.0.1', () => s.close(() => done(true)));
+  });
+}
+
+function sameRoot(a, b) {
+  if (!a || !b) return false;
+  const norm = p => resolve(p).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+}
+
+function readPidFile(root) {
+  const f = serverFiles(root).pid;
+  if (!existsSync(f)) return null;
+  try {
+    const j = JSON.parse(readFileSync(f, 'utf8'));
+    return Number.isInteger(j.pid) && Number.isInteger(j.port) ? j : null;
+  } catch { return null; }
+}
+
+function removePidFile(root) {
+  try { unlinkSync(serverFiles(root).pid); } catch { /* no existía */ }
+}
+
+function processAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/** Busca un cockpit de ESTA raíz ya corriendo (puerto del .pid o el puerto por defecto). */
+export async function findRunningServer({ root, port } = {}) {
+  const r = resolveRoot(root);
+  const info = readPidFile(r);
+  const candidates = [...new Set([info?.port, port ?? defaultPort()].filter(Boolean))];
+  for (const p of candidates) {
+    const h = await probeCockpit(p);
+    if (h && sameRoot(h.root, r)) return { port: p, pid: info && info.port === p ? info.pid : null };
+  }
+  return null;
+}
+
+function tailLog(file, n = 8) {
+  try { return readFileSync(file, 'utf8').trim().split(/\r?\n/).slice(-n).join('\n'); } catch { return ''; }
+}
+
+/**
+ * Deja un cockpit de esta raíz respondiendo. Si ya hay uno, no hace nada.
+ * Si el puerto lo ocupa otra cosa (review-app, cockpit de otro proyecto), usa el siguiente libre.
+ * Devuelve { port, pid, started }.
+ */
+export async function ensureServer({ root, port, timeoutMs = 15000, serverScript = SERVER_SCRIPT } = {}) {
+  const r = resolveRoot(root);
+  const base = port ?? defaultPort();
+  const running = await findRunningServer({ root: r, port: base });
+  if (running) return { ...running, started: false };
+
+  let chosen = null;
+  for (let p = base; p < base + PORT_SCAN; p++) {
+    if (await portFree(p)) { chosen = p; break; }
+  }
+  if (!chosen) throw new CockpitError(`No encontré un puerto libre entre ${base} y ${base + PORT_SCAN - 1}.`);
+
+  const files = serverFiles(r);
+  mkdirSync(files.dir, { recursive: true });
+  const fd = openSync(files.log, 'a');
+  let child;
+  try {
+    child = spawn(process.execPath, [serverScript], {
+      cwd: r,
+      env: { ...process.env, COCKPIT_ROOT: r, COCKPIT_PORT: String(chosen) },
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', fd, fd],
+    });
+  } finally {
+    closeSync(fd);
+  }
+  let exited = null;
+  child.on('exit', code => { exited = code ?? 'señal'; });
+  child.on('error', e => { exited = e.message; });
+  child.unref();
+  writeFileSync(files.pid, JSON.stringify({ pid: child.pid, port: chosen, started_at: new Date().toISOString() }) + '\n');
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const h = await probeCockpit(chosen, 500);
+    if (h && sameRoot(h.root, r)) return { port: chosen, pid: child.pid, started: true };
+    if (exited !== null) break;
+    await sleep(200);
+  }
+  if (exited === null) { try { process.kill(child.pid); } catch { /* ya cerró */ } }
+  removePidFile(r);
+  const tail = tailLog(files.log);
+  throw new CockpitError(`El cockpit no arrancó${exited !== null ? ` (salió con ${exited})` : ' a tiempo'}.${tail ? `\nÚltimas líneas de cockpit/.server.log:\n${tail}` : ''}`);
+}
+
+/** Comando para abrir el navegador por defecto según el sistema. */
+export function browserCommand(url, platform = process.platform) {
+  if (platform === 'win32') return { cmd: 'cmd', args: ['/c', 'start', '""', url], verbatim: true };
+  if (platform === 'darwin') return { cmd: 'open', args: [url], verbatim: false };
+  return { cmd: 'xdg-open', args: [url], verbatim: false };
+}
+
+/** Abre el navegador. Con COCKPIT_NO_BROWSER=1 no abre nada (tests). Devuelve true si lo intentó. */
+export function openBrowser(url) {
+  if (process.env.COCKPIT_NO_BROWSER === '1') return false;
+  const { cmd, args, verbatim } = browserCommand(url);
+  try {
+    const p = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: verbatim });
+    p.on('error', () => { /* sin navegador: el usuario usa la URL impresa */ });
+    p.unref();
+    return true;
+  } catch { return false; }
+}
+
+export async function openCockpit({ root, port, reviewId, timeoutMs } = {}) {
+  if (reviewId) assertId(reviewId, 'review_id');
+  const s = await ensureServer({ root, port, timeoutMs });
+  const url = cockpitUrl(s.port, reviewId);
+  const browser = openBrowser(url);
+  return { ...s, url, browser };
+}
+
+/** Cierra el server que levantó `open` (el del .server.pid). Devuelve { stopped, reason }. */
+export async function stopServer({ root, timeoutMs = 5000 } = {}) {
+  const r = resolveRoot(root);
+  const info = readPidFile(r);
+  if (!info) {
+    const other = await findRunningServer({ root: r });
+    if (other) return { stopped: false, reason: 'manual', port: other.port };
+    return { stopped: false, reason: 'none' };
+  }
+  if (!processAlive(info.pid)) { removePidFile(r); return { stopped: false, reason: 'stale' }; }
+  // Solo matamos el PID si en su puerto responde un cockpit de esta raíz (evita matar
+  // un proceso ajeno que reutilizó el PID).
+  const h = await probeCockpit(info.port);
+  if (!h || !sameRoot(h.root, r)) { removePidFile(r); return { stopped: false, reason: 'stale' }; }
+  try { process.kill(info.pid); } catch { /* ya cerró */ }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && await probeCockpit(info.port, 300)) await sleep(150);
+  removePidFile(r);
+  return { stopped: true, port: info.port, pid: info.pid };
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
+async function cliOpen(reviewId) {
+  const s = await openCockpit({ reviewId });
+  const how = s.started ? `servidor iniciado en segundo plano, PID ${s.pid}, log en cockpit/.server.log` : 'el servidor ya estaba corriendo';
+  if (s.browser) console.log(`Te abrí el cockpit en el navegador: ${s.url} (${how}).`);
+  else console.log(`Cockpit listo en ${s.url} (${how}). Ábrelo en el navegador.`);
+  return 0;
+}
+
+async function cliStop() {
+  const s = await stopServer();
+  if (s.stopped) console.log(`Cockpit cerrado (puerto ${s.port}).`);
+  else if (s.reason === 'manual') console.log(`Hay un cockpit en el puerto ${s.port}, pero no lo abrí yo: ciérralo con Ctrl + C en la terminal donde corre npm run cockpit.`);
+  else if (s.reason === 'stale') console.log('El cockpit ya estaba cerrado (limpié el registro viejo).');
+  else console.log('No hay ningún cockpit corriendo.');
+  return 0;
+}
+
 function cliMain(argv) {
   const [cmd, arg] = argv;
+  if (cmd === 'open' || cmd === 'stop') {
+    const run = cmd === 'open' ? cliOpen(arg) : cliStop();
+    return run.catch(e => { console.error(e.message); return 1; });
+  }
   try {
     if (cmd === 'pending') {
       const list = pendingFeedback();
@@ -508,7 +729,7 @@ function cliMain(argv) {
       let data;
       try { data = JSON.parse(raw); } catch (e) { console.error(`JSON inválido en ${arg}: ${e.message}`); return 1; }
       const { path, review } = publishReview(data);
-      console.log(`Publicada "${review.title}" (${review.items.length} ítems) en ${path}. Ábrela con npm run cockpit → http://localhost:7788/#/r/${review.id}`);
+      console.log(`Publicada "${review.title}" (${review.items.length} ítems) en ${path}. Ábrela con: node src/cockpit.js open ${review.id}`);
       return 0;
     }
     if (cmd === 'done') {
@@ -523,7 +744,7 @@ function cliMain(argv) {
       for (const r of list) console.log(`${r.id}  [${r.kind}] ${r.title}  (${r.item_count} ítems, ${r.feedback_status})`);
       return 0;
     }
-    console.log('Uso: node src/cockpit.js pending [--json] | publish <archivo> | done <id> | list');
+    console.log('Uso: node src/cockpit.js pending [--json] | publish <archivo> | done <id> | list | open [id] | stop');
     return cmd ? 1 : 0;
   } catch (e) {
     console.error(e.message);
@@ -532,4 +753,4 @@ function cliMain(argv) {
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
-if (isMain) process.exit(cliMain(process.argv.slice(2)));
+if (isMain) Promise.resolve(cliMain(process.argv.slice(2))).then(code => process.exit(code));

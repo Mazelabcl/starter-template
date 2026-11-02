@@ -82,8 +82,8 @@ node src/cockpit.js publish memory/plan-de-batalla.json
 
 ## Step 6 — Chat output (5 lines max)
 
-Paste the 5-line TLDR that `plan.js` prints, ending with:
-`Abre el cockpit: npm run cockpit → http://localhost:7788` (esto levanta la página de revisión; vota cada ítem, comenta o conversa por voz y presiona Guardar feedback).
+First open the cockpit yourself (the user never opens a second terminal): `node src/cockpit.js open <id>` (starts the server in the background if needed and opens the browser on the plan). Then paste the 5-line TLDR that `plan.js` prints; its last line is:
+`Te abrí el cockpit en el navegador: vota, comenta o conversa por voz y guarda el feedback.` If `open` could not launch the browser, give the URL it printed. Manual fallback only if `open` fails: `npm run cockpit` in another terminal.
 Do not dump the plan in the chat.
 
 ## Step 7 — Apply feedback (gate before Sprint 1)

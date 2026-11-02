@@ -9,7 +9,8 @@
 // agentes de council y video). Reutiliza las ideas que funcionan de la
 // review-app: zero deps, loopback por defecto, escritura atómica, render XSS-safe.
 //
-// Uso: npm run cockpit   (http://localhost:7788)
+// Uso: node src/cockpit.js open [id]  (lo levanta en segundo plano y abre el navegador)
+//      npm run cockpit                (modo manual en primer plano, http://localhost:7788)
 // Env: COCKPIT_PORT, COCKPIT_HOST, COCKPIT_ROOT, COCKPIT_VOICE_MODEL,
 //      COCKPIT_VOICE, COCKPIT_CHAT_MODEL.
 // La key real (OPENAI_API_KEY) NUNCA sale al navegador: el server acuña un
@@ -412,7 +413,7 @@ if (isMain) {
     console.log(`[cockpit] voz: ${process.env.OPENAI_API_KEY ? 'disponible' : 'sin OPENAI_API_KEY (solo texto)'} · chat: ${process.env.OPENROUTER_API_KEY ? 'disponible' : 'sin OPENROUTER_API_KEY'}`);
     console.log('[cockpit] Ctrl+C para cerrar.');
   }).catch(e => {
-    if (e.code === 'EADDRINUSE') console.error('[cockpit] el puerto 7788 está ocupado (¿la review-app u otro cockpit abierto?). Ciérralo o usa COCKPIT_PORT=7790.');
+    if (e.code === 'EADDRINUSE') console.error(`[cockpit] el puerto ${process.env.COCKPIT_PORT || '7788'} está ocupado (¿la review-app u otro cockpit abierto?). Usa node src/cockpit.js open, que busca un puerto libre solo.`);
     else console.error(`[cockpit] no pude arrancar: ${e.message}`);
     process.exit(1);
   });
