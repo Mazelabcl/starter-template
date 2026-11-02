@@ -81,6 +81,7 @@ Referencia completa (qué usar y qué test correr): [`docs/capacidades.md`](docs
 | `/revisar` | Publica una revisión del trabajo actual en el cockpit. |
 | `/bold-rounds <objetivo> [N]` | N rondas de mejora audaz (ciega vs. contexto) sobre una copia; eliges en el cockpit. |
 | `/resumen` | Genera `RESUMEN.html`. |
+| `/importar-modulo <nombre>` | Dentro de un proyecto VIEJO: trae un módulo del starter v6 (cockpit, bold-rounds, council, brazos, video-director) según `modulos.json`, sin pisar archivos, y lo verifica corriéndolo. |
 | `/setup-openrouter`, `/setup-openai` | Configura una API key puntual. |
 
 ## Estructura

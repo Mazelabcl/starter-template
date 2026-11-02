@@ -50,6 +50,11 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 - **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `node src/cockpit.js open [id]` lo levanta en segundo plano (puerto 7788 o el siguiente libre; PID en `cockpit/.server.pid`, log en `cockpit/.server.log`) y abre el navegador; `node src/cockpit.js stop` lo cierra. Modo manual: `npm run cockpit`. Roadmap arriba, foco, votos por ítem, conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar` o `node src/cockpit.js publish <archivo>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
 
+### Proyectos nuevos y viejos
+
+- **nuevo-proyecto** (`scripts/nuevo-proyecto.ps1`, Windows): `nuevo-proyecto <nombre>` clona el starter v6, quita el remote, copia el `.env`, instala y abre Claude Code con `/kickoff`. El atajo se instala una vez con `powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1`.
+- **importar-modulo** (`modulos.json` + `scripts/importar_modulo.js`): `/importar-modulo <nombre>` dentro de un proyecto viejo trae cockpit, bold-rounds, council, brazos o video-director con sus dependencias, sin sobrescribir archivos (reporta conflictos), y lo verifica corriéndolo.
+
 ### review-app — visor de output de agentes
 
 - **review-app** (`review-app/server.js`, catálogo): app HTTP local zero-dep para leer output de agentes. Modo "sprint/bloques" (revisar PRs marcando OK/Feedback) y modo "viewer" (lista cualquier `.md` de un directorio con TLDR = H1 + primer párrafo, click abre el `.md` renderizado). `npm run review-app`. Es la superficie HTML preferida del usuario para consumir output. Detalle: `review-app/README.md`.

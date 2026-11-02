@@ -1,0 +1,166 @@
+{
+  "$comment": "Manifiesto de módulos del starter para /importar-modulo. Lo lee el comando desde el starter v6 (origen) y copia a un proyecto VIEJO. 'files': rutas relativas a la raíz del starter; un string se copia a la misma ruta; un objeto {src, dest} se copia a otra ruta (src es carpeta si termina en /). 'requires': otros módulos que se importan antes. 'requires_exports': si el proyecto ya tiene ese archivo (no se sobrescribe), debe exportar estos nombres o el módulo no funcionará. 'verify': comandos SIN costo que prueban el módulo de verdad. Idioma: español neutro.",
+  "version": 1,
+  "starter_version": "v6",
+  "module_type": "esm",
+  "modules": {
+    "base": {
+      "description": "Núcleo compartido: carga del .env, cliente de OpenRouter, memoria y roadmap. Lo necesitan cockpit y council.",
+      "internal": true,
+      "requires": [],
+      "files": [
+        "src/load_env.js",
+        "src/openrouter_client.js",
+        "src/memory.js",
+        "memory/schemas/active-team.schema.json",
+        "memory/schemas/project-profile.schema.json",
+        "src/roadmap.js"
+      ],
+      "requires_exports": {
+        "src/load_env.js": ["loadEnv", "parseEnv"],
+        "src/openrouter_client.js": ["chat", "OpenRouterError"],
+        "src/memory.js": ["addSprint", "summarize"],
+        "src/roadmap.js": ["getCurrentSprint", "_internal"]
+      },
+      "npm": { "ajv": "^8.17.1", "ajv-formats": "^3.0.1" },
+      "scripts": {},
+      "gitignore": [".env", "node_modules/"],
+      "verify": [
+        "node -e \"import('./src/roadmap.js').then(m => { if (!m.getCurrentSprint) process.exit(1); console.log('base OK'); })\""
+      ]
+    },
+    "cockpit": {
+      "description": "Cockpit de revisión: roadmap arriba, votos por ítem, conversación por voz o texto, feedback que Claude lee. Incluye open/stop en segundo plano y el comando /revisar.",
+      "requires": ["base"],
+      "files": [
+        "src/cockpit.js",
+        "cockpit/server.js",
+        "cockpit/public/index.html",
+        "cockpit/public/app.js",
+        "cockpit/public/style.css",
+        "cockpit/README.md",
+        "cockpit/ejemplo-review.json",
+        "cockpit/reviews/.gitkeep",
+        "cockpit/feedback/.gitkeep",
+        ".claude/commands/revisar.md"
+      ],
+      "tests": ["cockpit.test.js"],
+      "npm": {},
+      "scripts": {
+        "cockpit": "node cockpit/server.js",
+        "cockpit:open": "node src/cockpit.js open",
+        "cockpit:stop": "node src/cockpit.js stop"
+      },
+      "gitignore": [
+        "cockpit/reviews/*",
+        "cockpit/feedback/*",
+        "!cockpit/reviews/.gitkeep",
+        "!cockpit/feedback/.gitkeep",
+        "cockpit/.server.pid",
+        "cockpit/.server.log"
+      ],
+      "verify": [
+        "node src/cockpit.js publish cockpit/ejemplo-review.json",
+        "node src/cockpit.js list",
+        "node src/cockpit.js open ejemplo-cockpit",
+        "node src/cockpit.js stop"
+      ],
+      "notes": "El aviso de feedback pendiente al iniciar sesión vive en scripts/session_brief.js (hook). Si el proyecto viejo tiene su propio session_brief.js, no se toca: se informa como mejora opcional. El test cockpit.test.js importa scripts/session_brief.js; cópialo solo si ese archivo existe y exporta countPendingCockpit."
+    },
+    "bold-rounds": {
+      "description": "Rediseño audaz por rondas sobre una copia (variante ciega vs. con contexto) que se vota en el cockpit.",
+      "requires": ["cockpit"],
+      "files": [
+        "scripts/bold_rounds.js",
+        ".claude/skills/bold-rounds/SKILL.md",
+        ".claude/commands/bold-rounds.md"
+      ],
+      "tests": ["bold-rounds.test.js"],
+      "npm": {},
+      "optional_npm": { "playwright-core": "solo para screenshots; se instala con npm install --no-save playwright-core" },
+      "scripts": {},
+      "gitignore": ["/rounds/", "/rounds-*/"],
+      "verify": ["node scripts/bold_rounds.js"]
+    },
+    "council": {
+      "description": "Council de expertos: personas independientes y un integrador que fusiona amenazas, oportunidades e ideas con atribución.",
+      "requires": ["base", "cockpit"],
+      "files": [
+        "src/council.js",
+        "councils/README.md",
+        "councils/results/.gitkeep",
+        "councils/schemas/merge.schema.json",
+        "councils/schemas/persona-answer.schema.json",
+        "councils/schemas/persona.schema.json",
+        "councils/schemas/template.schema.json",
+        "councils/personas/audiencia.json",
+        "councils/personas/cfo.json",
+        "councils/personas/cliente.json",
+        "councils/personas/contrarian.json",
+        "councils/personas/cto.json",
+        "councils/personas/datos.json",
+        "councils/personas/director-arte.json",
+        "councils/personas/growth.json",
+        "councils/personas/pm.json",
+        "councils/personas/seguridad.json",
+        "councils/personas/sre.json",
+        "councils/personas/storyteller.json",
+        "councils/personas/usuario-novato.json",
+        "councils/personas/ux-research.json",
+        "councils/personas/ventas.json",
+        "councils/personas/visionario.json",
+        "councils/templates/arquitectura-critica.json",
+        "councils/templates/contenido-creativo.json",
+        "councils/templates/diseno-visual.json",
+        "councils/templates/estrategia.json",
+        "councils/templates/lanzamiento-marketing.json",
+        "councils/templates/naming.json",
+        "councils/templates/nueva-funcionalidad.json",
+        "councils/templates/precio-negocio.json",
+        ".claude/skills/council/SKILL.md",
+        ".claude/commands/council.md"
+      ],
+      "tests": ["council-engine.test.js", "councils-library.test.js", "council-skill.test.js"],
+      "npm": { "ajv": "^8.17.1" },
+      "scripts": {},
+      "gitignore": ["councils/results/*.json", "!councils/results/.gitkeep"],
+      "verify": [
+        "node src/council.js list",
+        "node src/council.js suggest \"elegir el nombre del producto\""
+      ]
+    },
+    "brazos": {
+      "description": "Directorio de brazos (MCP, API, CLI, plugins): qué herramienta sirve para qué, qué está conectado y cómo conectar lo que falta.",
+      "requires": [],
+      "files": [
+        "src/brazos.js",
+        "brazos/README.md",
+        "brazos/directorio.json",
+        "brazos/directorio.schema.json"
+      ],
+      "tests": ["brazos.test.js"],
+      "npm": { "ajv": "^8.17.1" },
+      "scripts": { "test:brazos": "node brazos.test.js" },
+      "gitignore": [".cache/"],
+      "verify": [
+        "node src/brazos.js status",
+        "node src/brazos.js suggest \"video para instagram\""
+      ]
+    },
+    "video-director": {
+      "description": "Skill de dirección de video (guion por escenas, render con HyperFrames). Publica el guion en el cockpit y usa los brazos de video.",
+      "requires": ["cockpit", "brazos"],
+      "files": [
+        { "src": ".claude/skills/_catalog/video-director/SKILL.md", "dest": ".claude/skills/video-director/SKILL.md" },
+        { "src": ".claude/skills/_catalog/video-director/CHANGELOG.md", "dest": ".claude/skills/video-director/CHANGELOG.md" }
+      ],
+      "npm": {},
+      "scripts": {},
+      "gitignore": [],
+      "verify": [
+        "node src/brazos.js suggest \"reel de video\""
+      ],
+      "notes": "Queda activa en .claude/skills/video-director/ (en el starter vive en el catálogo). Las skills nuevas se ven sin reiniciar Claude Code."
+    }
+  }
+}

@@ -47,6 +47,7 @@ node --env-file=.env mi-script.js
 | Catálogo de skills opcionales | `.claude/skills/_catalog/INDEX.md` | se activan con `/kickoff` o copiando la carpeta |
 | Brazos (MCP, API, CLI, plugins para ejecutar) | `brazos/directorio.json` | `node src/brazos.js status\|suggest "..."\|connect <id>` (nunca instala sin un sí) |
 | Capacidades y tests | `docs/capacidades.md` | `npm test` |
+| Módulos para proyectos viejos | `modulos.json` | `/importar-modulo <nombre>` (desde el proyecto viejo) |
 
 Comandos útiles:
 
