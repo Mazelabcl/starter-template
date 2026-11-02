@@ -39,6 +39,12 @@ cockpit/feedback/*
 cockpit/.server.pid
 cockpit/.server.log
 
+# astra-bridge — pedidos y resultados de Codex son datos del proyecto; solo README y .gitkeep van al template
+astra-bridge/pedidos/*
+astra-bridge/resultados/*
+!astra-bridge/pedidos/.gitkeep
+!astra-bridge/resultados/.gitkeep
+
 # Councils results — generados en runtime; solo el .gitkeep va al template
 councils/results/*.json
 !councils/results/.gitkeep

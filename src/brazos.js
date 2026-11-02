@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import Ajv from 'ajv';
+import { codexStatus } from './astra.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(__dirname, '..');
@@ -155,6 +156,7 @@ export function mcpStateFromList(listText, name) {
 export function realContext({ root = REPO_ROOT, sinMcp = false, refresh = false } = {}) {
   const dotenv = readDotEnv(root);
   let mcpText;
+  let codexSt;
   return {
     env: name => {
       const v = process.env[name] ?? dotenv[name];
@@ -171,6 +173,12 @@ export function realContext({ root = REPO_ROOT, sinMcp = false, refresh = false 
       return existsSync(isAbsolute(full) ? full : join(root, full));
     },
     plugin: name => pluginInstalled(name, homedir()),
+    codex: () => {
+      if (codexSt === undefined) {
+        try { codexSt = codexStatus(); } catch { codexSt = null; }
+      }
+      return codexSt;
+    },
   };
 }
 
@@ -203,6 +211,15 @@ export function evaluateEntry(entry, ctx) {
         else if (st === 'falla') { incierto = true; notas.push('instalado pero no conecta'); continue; }
         else ok = true;
         break;
+      }
+      case 'codex': {
+        // Codex (Astra): instalado = instalación; sesión de ChatGPT = auth.
+        const st = ctx.codex ? ctx.codex() : null;
+        if (!st) { incierto = true; notas.push('no se pudo revisar Codex'); continue; }
+        if (!st.instalado) { instalacion = false; notas.push(st.arreglo || 'Codex no instalado'); continue; }
+        if (!st.logueado) { auth = false; notas.push(st.arreglo || 'Codex sin sesión'); continue; }
+        notas.push(st.detalle);
+        continue;
       }
       case 'manual': incierto = true; notas.push(c.valor); continue;
       default: incierto = true; notas.push(`check desconocido: ${c.tipo}`); continue;
