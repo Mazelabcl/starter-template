@@ -60,7 +60,7 @@
             "required": ["tipo", "valor"],
             "additionalProperties": false,
             "properties": {
-              "tipo": { "enum": ["env", "mcp", "cli", "file", "plugin", "manual"] },
+              "tipo": { "enum": ["env", "mcp", "cli", "file", "plugin", "manual", "codex"] },
               "valor": { "type": "string", "minLength": 1 },
               "rol": { "enum": ["instalacion", "auth"] }
             }

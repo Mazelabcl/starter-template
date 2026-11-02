@@ -72,6 +72,20 @@
     "cost_hint": "~USD 0.04-0.40 por imagen según calidad"
   },
   {
+    "name": "astra",
+    "location": "core",
+    "triggers": [
+      "pídele a Astra",
+      "genera con Astra",
+      "imágenes con el plan de ChatGPT",
+      "/astra"
+    ],
+    "when_to_use": "Generar imágenes con Codex (Astra) usando la cuota del plan de ChatGPT, sin API key ni humano en el medio. Más barato, más lento y secuencial.",
+    "output": "PNG(s) en la carpeta --out + astra-bridge/resultados/<id>.json",
+    "status": "v1.0",
+    "cost_hint": "USD 0 extra (cuota del plan de ChatGPT); ~1 min por imagen"
+  },
+  {
     "name": "kickoff",
     "location": "core",
     "triggers": [

@@ -66,6 +66,7 @@ Comandos útiles:
 | "Qué herramienta sirve para X" | `node src/brazos.js suggest "X"` |
 | "Investiga X" | `node src/research.js pro "X"` |
 | "Genera imagen de X" | skill `image-gen` (si no sabe qué modelo, propón `image-explorer`) |
+| Lote de imágenes donde importa el costo / "pídele a Astra" | skill `astra` (Codex con el plan de ChatGPT, sin API key) |
 | Decisión con tradeoffs reales | propón `/council` con su costo |
 | "Mejóralo por rondas" / rediseño audaz | `/bold-rounds <objetivo> [N]` (trabaja sobre copia; Aldot elige en el cockpit) |
 | "Crea un agente para X" | skill `agent-template` |

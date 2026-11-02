@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "actualizado": "2026-10-30",
+  "actualizado": "2026-11-01",
   "nota": "Directorio de brazos del starter. Lo lee src/brazos.js (status | suggest | connect | mcp-json). verificado.ok=true solo si el comando o la URL se vio en una página oficial en la fecha indicada.",
   "entradas": [
     {
@@ -355,6 +355,30 @@
       "check": [{ "tipo": "file", "valor": "scripts/openai_images.py" }, { "tipo": "env", "valor": "OPENAI_API_KEY" }],
       "riesgos": "En Windows, Smart App Control puede bloquear la DLL jiter del SDK openai: si falla el import, usa la ruta Replicate (nano-banana-pro) o llama la API con fetch desde Node.",
       "verificado": { "ok": true, "fecha": "2026-10-30", "fuente": "repo (image-refs.test.js)" }
+    },
+    {
+      "id": "astra-codex",
+      "nombre": "Astra (Codex con tu plan de ChatGPT, src/astra.js)",
+      "tipo": "cli",
+      "categoria": "creativo-imagen",
+      "recomendado": true,
+      "para_que": "Imágenes con Codex usando la cuota del plan de ChatGPT, sin API key ni copiar y pegar: node src/astra.js pedir.",
+      "cuando_usar": "Lotes de imágenes donde el costo importa más que la velocidad (storyboards, variantes, assets de video). Skill astra.",
+      "keywords": ["imagen", "imagenes", "fotos", "astra", "codex", "chatgpt", "barato", "storyboard", "generadas por ia", "lote"],
+      "link": "src/astra.js",
+      "costo": "sin costo extra: usa la cuota de imágenes del plan de ChatGPT",
+      "oficial": true,
+      "como_conectar": {
+        "pasos": [
+          "Instala Codex: la app de escritorio desde Microsoft Store (trae la CLI incluida) o, en PowerShell, npm i -g @openai/codex.",
+          "Inicia sesión con tu cuenta de ChatGPT: codex login (con la app basta haber entrado en ella).",
+          "Verifica con: node src/astra.js estado"
+        ]
+      },
+      "auth": { "necesita": true, "credencial": "sesión de ChatGPT en Codex (codex login)" },
+      "check": [{ "tipo": "codex", "valor": "codex" }],
+      "riesgos": "Más lento que la API (~30-60 s por imagen) y secuencial; consume la cuota del plan (si se agota, usa image-gen con API). Codex corre con sandbox workspace-write limitado a la carpeta --out.",
+      "verificado": { "ok": true, "fecha": "2026-11-01", "fuente": "corrida real en el PC de Aldot (codex-cli 0.166.0-alpha.5.1, app OpenAI.Codex 26.1027): 1 imagen en 32 s" }
     },
     {
       "id": "replicate",
