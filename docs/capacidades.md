@@ -20,7 +20,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Decisiones complejas
 
-- **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. Modo `multimodel` para arquitectura crítica. Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
+- **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. También se eligen expertos a mano (`--personas`), se crean al vuelo (`--crear "Rol: foco"`, con `--guardar` para conservarlos) o los elige Claude ("arma tú el panel de expertos"). Modo `multimodel` para arquitectura crítica. Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
 
 ### Rediseño por rondas
 
@@ -52,7 +52,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Proyectos nuevos y viejos
 
-- **nuevo-proyecto** (`scripts/nuevo-proyecto.ps1`, Windows): `nuevo-proyecto <nombre>` clona el starter v6, quita el remote, copia el `.env`, instala y abre Claude Code con `/kickoff`. El atajo se instala una vez con `powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1`.
+- **nuevo-proyecto** (`scripts/nuevo-proyecto.ps1`, Windows): `nuevo-proyecto <nombre>` crea el proyecto en la carpeta actual (si estás en tu carpeta de usuario, en `C:\` o en una carpeta del sistema, usa `~\.gemini\antigravity\scratch`; dentro de otro repo git pide confirmación salvo `-Forzar`), clona el starter v6, quita el remote, copia el `.env`, instala y abre Claude Code con `/kickoff`. El atajo se instala una vez con `powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1`.
 - **importar-modulo** (`modulos.json` + `scripts/importar_modulo.js`): `/importar-modulo <nombre>` dentro de un proyecto viejo trae cockpit, bold-rounds, council, brazos o video-director con sus dependencias, sin sobrescribir archivos (reporta conflictos), y lo verifica corriéndolo.
 
 ### review-app — visor de output de agentes

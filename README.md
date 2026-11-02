@@ -11,12 +11,17 @@ powershell -ExecutionPolicy Bypass -File scripts\instalar-atajo.ps1
 ```
 (copia el script a `$HOME\.mazelab\` y agrega el comando `nuevo-proyecto` a tu perfil de PowerShell)
 
-Desde ahí, en cualquier ventana NUEVA de PowerShell:
+Desde ahí, abre una ventana NUEVA de PowerShell en la carpeta donde quieres el proyecto y escribe:
 
 ```
-nuevo-proyecto mi-proyecto
+nuevo-proyecto Proyecto-X
 ```
-(clona el starter en `~\.gemini\antigravity\scratch\mi-proyecto`, lo desconecta del repo del starter, copia tu `.env`, corre `npm install` y abre Claude Code con `/kickoff`)
+(crea la subcarpeta `Proyecto-X` ahí mismo, clona el starter, lo desconecta del repo del starter, copia tu `.env`, corre `npm install` y abre Claude Code con `/kickoff`; siempre muestra la ruta completa)
+
+- Si estás en tu carpeta de usuario, en `C:\` o en una carpeta del sistema, lo crea en `~\.gemini\antigravity\scratch` y te avisa.
+- Si estás dentro de otro repo git, te pide confirmación, porque un repo dentro de otro suele ser un error (`-Forzar` se salta la pregunta).
+- `-Carpeta <ruta>` elige otra ubicación.
+- Si ya tenías el atajo, vuelve a correr el instalador para recibir estos cambios.
 
 ## Quickstart manual (copia y pega)
 

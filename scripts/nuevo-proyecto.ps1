@@ -3,7 +3,10 @@
   Crea un proyecto nuevo desde el starter Mazelab (rama v6) con un solo comando.
 
 .DESCRIPTION
-  1. Valida el nombre (sin espacios ni tildes) y que la carpeta no exista.
+  1. Valida el nombre (sin espacios ni tildes), decide la carpeta y revisa que
+     el proyecto no exista. Por defecto se crea en la carpeta ACTUAL. Si esa
+     carpeta es tu home, C:\ o una carpeta del sistema, usa $CarpetaRespaldo.
+     Dentro de otro repo git pide confirmacion, salvo -Forzar.
   2. Clona el starter desde GitHub (si falla, usa la copia local del repo).
   3. Quita el remote "origin" (el proyecto nuevo no apunta al starter).
   4. Copia tu .env con las claves API, si existe (nunca muestra su contenido).
@@ -14,8 +17,9 @@
   tildes en archivos sin BOM). Idioma: espanol neutro.
 
 .EXAMPLE
-  nuevo-proyecto mi-cafeteria
-  (con el atajo instalado por scripts/instalar-atajo.ps1)
+  nuevo-proyecto Proyecto-X
+  (con el atajo instalado por scripts/instalar-atajo.ps1; crea la subcarpeta
+  Proyecto-X en la carpeta donde abriste PowerShell)
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\nuevo-proyecto.ps1 mi-cafeteria
@@ -25,8 +29,14 @@ param(
   [Parameter(Mandatory = $true, Position = 0)]
   [string]$Nombre,
 
-  # Carpeta donde se crea el proyecto.
-  [string]$Carpeta = (Join-Path $HOME '.gemini\antigravity\scratch'),
+  # Carpeta donde se crea el proyecto. Por defecto, la carpeta actual.
+  [string]$Carpeta = '',
+
+  # Se usa si la carpeta actual es tu home, C:\ o una carpeta del sistema.
+  [string]$CarpetaRespaldo = (Join-Path $HOME '.gemini\antigravity\scratch'),
+
+  # No pregunta si la carpeta esta dentro de otro repo git.
+  [switch]$Forzar,
 
   # Rama del starter que se clona.
   [string]$Rama = 'v6',
@@ -59,6 +69,23 @@ function Falla($texto) {
 }
 function Tiene($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
+# Home, raiz del disco del sistema o carpeta del sistema (y sus subcarpetas).
+# Las subcarpetas de home (Escritorio, Documentos...) si son validas.
+function EsCarpetaProtegida($ruta) {
+  $normal = $ruta.TrimEnd('\')
+  $exactas = @($HOME, $env:SystemDrive, 'C:')
+  foreach ($e in $exactas) {
+    if ($e -and $normal -ieq $e.TrimEnd('\')) { return $true }
+  }
+  $sistema = @($env:windir, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData)
+  foreach ($s in $sistema) {
+    if (-not $s) { continue }
+    $base = $s.TrimEnd('\')
+    if ($normal -ieq $base -or $normal.StartsWith("$base\", [StringComparison]::OrdinalIgnoreCase)) { return $true }
+  }
+  return $false
+}
+
 # --- 1. Validaciones -------------------------------------------------------
 Paso 1 "Validando el nombre '$Nombre'..."
 if ($Nombre -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
@@ -67,6 +94,15 @@ if ($Nombre -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
 if (-not (Tiene 'git')) { Falla 'No encuentro git. Instalalo desde https://git-scm.com y vuelve a intentar.' }
 if (-not (Tiene 'node')) { Falla 'No encuentro Node.js. Instalalo desde https://nodejs.org y vuelve a intentar.' }
 
+if (-not $Carpeta) {
+  $actual = (Get-Location -PSProvider FileSystem).ProviderPath
+  if (EsCarpetaProtegida $actual) {
+    $Carpeta = $CarpetaRespaldo
+    Write-Host "      Aviso: no creo proyectos en $actual (carpeta de usuario, raiz del disco o del sistema). Uso $Carpeta." -ForegroundColor Yellow
+  } else {
+    $Carpeta = $actual
+  }
+}
 if (-not (Test-Path -LiteralPath $Carpeta)) {
   New-Item -ItemType Directory -Path $Carpeta -Force -ErrorAction Stop | Out-Null
 }
@@ -75,6 +111,25 @@ $destino = Join-Path $Carpeta $Nombre
 if (Test-Path -LiteralPath $destino) {
   Falla "Ya existe la carpeta $destino. Elige otro nombre."
 }
+
+$dentroDeRepo = (& git -C $Carpeta rev-parse --is-inside-work-tree 2>$null) -eq 'true'
+if ($dentroDeRepo) {
+  Write-Host "      Aviso: $Carpeta ya esta dentro de un repo git. Un repo dentro de otro suele ser un error." -ForegroundColor Yellow
+  # Falla cerrado: sin un "s" explicito no sigue. Con stdin cerrado, Read-Host de
+  # PowerShell 5.1 aborta el bloque sin lanzar error, por eso el chequeo va afuera.
+  $confirmado = [bool]$Forzar
+  if (-not $confirmado) {
+    try {
+      $respuesta = Read-Host '      Crear el proyecto aqui de todos modos? (s/N)'
+      if ($respuesta -match '^(s|si)$') { $confirmado = $true }
+    } catch { }
+  }
+  if (-not $confirmado) {
+    Write-Host '      Cancelado. No se creo nada. Abre PowerShell en otra carpeta, o usa -Forzar si es a proposito.'
+    exit 1
+  }
+}
+Write-Host "      El proyecto se creara en: $destino" -ForegroundColor Green
 
 # --- 2. Clonar ---------------------------------------------------------------
 function Clonar($fuente) {
