@@ -8,10 +8,24 @@
       "agentifica X",
       "/agent-template"
     ],
-    "when_to_use": "Antes de escribir un agent.md a mano: da scaffold con las 6 secciones y score base ~92/100.",
-    "output": "Archivo de agente en ~/.claude/agents/<slug>.md",
+    "when_to_use": "Al crear un especialista: decide ficha de rol (sin reiniciar, por defecto) o archivo fijo (solo si hay que restringir herramientas).",
+    "output": "Ficha en roles/<id>.md y, si restringe herramientas, agente en .claude/agents/<slug>.md",
     "status": "v1.0",
     "cost_hint": "sin costo de API"
+  },
+  {
+    "name": "astra",
+    "location": "core",
+    "triggers": [
+      "pídele a Astra",
+      "genera con Astra",
+      "imágenes con el plan de ChatGPT",
+      "/astra"
+    ],
+    "when_to_use": "Generate images through Astra (OpenAI Codex installed on this PC) using the ChatGPT plan quota, fully automatic via src/astra.js (no API key, no human copy-past",
+    "output": "(no declarado)",
+    "status": "stub",
+    "cost_hint": "sin costo"
   },
   {
     "name": "bold-rounds",
@@ -36,7 +50,8 @@
       "/council",
       "consulta al council",
       "qué opinaría un CTO",
-      "dame otras perspectivas"
+      "dame otras perspectivas",
+      "arma tú el panel de expertos"
     ],
     "when_to_use": "Decisión con tradeoffs reales: funcionalidad nueva, naming, estrategia, arquitectura. Proponerlo con `node src/council.js suggest`, nunca correrlo sin un sí. NO para lo verificable con tests o docs.",
     "output": "Propuesta integrada con aportes atribuidos por persona en councils/results/ + revisión votable en cockpit/reviews/",
@@ -70,20 +85,6 @@
     "output": "PNG(s) en content/output/<scene>/",
     "status": "v1.0",
     "cost_hint": "~USD 0.04-0.40 por imagen según calidad"
-  },
-  {
-    "name": "astra",
-    "location": "core",
-    "triggers": [
-      "pídele a Astra",
-      "genera con Astra",
-      "imágenes con el plan de ChatGPT",
-      "/astra"
-    ],
-    "when_to_use": "Generar imágenes con Codex (Astra) usando la cuota del plan de ChatGPT, sin API key ni humano en el medio. Más barato, más lento y secuencial.",
-    "output": "PNG(s) en la carpeta --out + astra-bridge/resultados/<id>.json",
-    "status": "v1.0",
-    "cost_hint": "USD 0 extra (cuota del plan de ChatGPT); ~1 min por imagen"
   },
   {
     "name": "kickoff",

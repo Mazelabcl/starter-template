@@ -56,6 +56,21 @@
       "more": "Ves el equipo, los pasos y el camino como diagramas. Nada empieza hasta que apruebas el plan."
     },
     {
+      "id": "especialista",
+      "title": "Crear un especialista",
+      "tag": "Listo al instante, sin reiniciar.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Pides el rol", "icon": "chat", "tone": "you" },
+          { "label": "Ficha del rol", "icon": "pencil" },
+          { "label": "Trabaja al instante", "icon": "bolt" }
+        ]
+      },
+      "phrase": "Crea un especialista en SEO local para este proyecto y pídele que revise la landing",
+      "more": "Claude escribe una **ficha** en `roles/` (quién es, qué debe lograr, qué archivos lee) y se la entrega al agente general. Por eso no hay que reiniciar nada.\n\nSolo si hay que prohibirle herramientas se crea además un archivo fijo de agente, y ahí sí toca reiniciar: `/exit` y luego `claude -c`.\n\nPor debajo usa `node src/roles.js`."
+    },
+    {
       "id": "astra",
       "title": "Imágenes con Astra",
       "tag": "Usa tu plan de ChatGPT, sin API key.",

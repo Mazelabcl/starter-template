@@ -134,6 +134,23 @@
         "node src/council.js suggest \"elegir el nombre del producto\""
       ]
     },
+    "roles": {
+      "description": "Fichas de rol: un especialista al instante con el agente general, sin reiniciar Claude Code. El equipo del kickoff se arma con estas fichas.",
+      "requires": ["base"],
+      "files": [
+        "src/roles.js",
+        "roles/README.md",
+        "roles/role.schema.json"
+      ],
+      "tests": ["roles.test.js"],
+      "npm": { "ajv": "^8.17.1" },
+      "scripts": {},
+      "gitignore": [],
+      "verify": [
+        "node src/roles.js list"
+      ],
+      "notes": "El kickoff (.claude/skills/kickoff/plan.js) importa src/roles.js. Las fichas del proyecto viven en roles/ y no se tocan al importar."
+    },
     "astra": {
       "description": "Puente automático a Astra (Codex de OpenAI): los agentes piden imágenes a Codex con el plan de ChatGPT, sin copiar y pegar.",
       "requires": [],

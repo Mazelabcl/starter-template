@@ -144,7 +144,7 @@ Sprint 1: Datos reales y dirección de arte.
 Te abrí el cockpit en el navegador: vota, comenta o conversa por voz y guarda el feedback.
 
 [Aldot vota y conversa por voz → Guardar feedback]
-[cockpit.js pending → ajustar → (v2 si hay cambios grandes) → done → persistir → crear agente nuevo + aviso de reinicio]
+[cockpit.js pending → ajustar → (v2 si hay cambios grandes) → done → persistir → crear las fichas del equipo con roles.js, sin reiniciar]
 ```
 
 La cantidad de brazos "por conectar" depende de cada computador (`node src/brazos.js status`).

@@ -32,7 +32,7 @@ const OUT_PATH = join(CATALOG_DIR, 'skills-catalog.json');
 // stubs v0.1 excepto superpowers-pr (v2.0), dual-auditor-protocol y review-app.
 const META = {
   // ---- core (siempre activas) ----
-  'agent-template': { when_to_use: 'Antes de escribir un agent.md a mano: da scaffold con las 6 secciones y score base ~92/100.', output: 'Archivo de agente en ~/.claude/agents/<slug>.md', status: 'v1.0', cost_hint: 'sin costo de API' },
+  'agent-template': { when_to_use: 'Al crear un especialista: decide ficha de rol (sin reiniciar, por defecto) o archivo fijo (solo si hay que restringir herramientas).', output: 'Ficha en roles/<id>.md y, si restringe herramientas, agente en .claude/agents/<slug>.md', status: 'v1.0', cost_hint: 'sin costo de API' },
   'cold-reader-gate': { when_to_use: 'Al cerrar un artefacto creativo antes de mostrarlo al humano: voto binario GO/NO-GO con veto absoluto.', output: 'Veredicto GO/NO-GO + justificación', status: 'v1.0', cost_hint: '~USD 0.02-0.10 (1 modelo)' },
   'confidence-loop': { when_to_use: 'Opcional. Para iterar la calidad de un artefacto (agente, skill, código, plan), máx 5 iteraciones. Se autoevalúa: no reemplaza una revisión independiente.', output: 'Artefacto mejorado + score final', status: 'v1.0', cost_hint: 'variable según iteraciones' },
   'council': { when_to_use: 'Decisión con tradeoffs reales: funcionalidad nueva, naming, estrategia, arquitectura. Proponerlo con `node src/council.js suggest`, nunca correrlo sin un sí. NO para lo verificable con tests o docs.', output: 'Propuesta integrada con aportes atribuidos por persona en councils/results/ + revisión votable en cockpit/reviews/', status: 'v1.0', cost_hint: 'personas ~USD 0.02-0.05; multimodel ~USD 0.30-0.50, confirmar' },

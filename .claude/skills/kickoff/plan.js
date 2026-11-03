@@ -23,11 +23,39 @@ import { fileURLToPath } from 'node:url';
 import { loadDirectorio, suggest, statusAll, realContext, ESTADOS } from '../../../src/brazos.js';
 import { suggestTemplates, formatProposal, loadPersonas, loadTemplates } from '../../../src/council.js';
 import { validateReview } from '../../../src/cockpit.js';
+import { loadRoles, humanizeId } from '../../../src/roles.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..', '..');
 
 export class PlanError extends Error {}
+
+/**
+ * Equipo del plan completado con las fichas de roles/. Un integrante con `ficha: <id>`
+ * (o con un `id` que ya tiene ficha) solo trae lo que quiera cambiar. Sin equipo en el
+ * borrador (plan de un proyecto ya en marcha), el equipo son todas las fichas.
+ */
+export function resolveEquipo(equipo, { root = REPO_ROOT } = {}) {
+  const { roles } = loadRoles({ root });
+  const list = Array.isArray(equipo) && equipo.length ? equipo : [...roles.keys()].map(ficha => ({ ficha }));
+  return list.map(m => {
+    if (!m || typeof m !== 'object') return m;
+    if (m.ficha && !roles.has(m.ficha)) throw new PlanError(`El integrante pide la ficha "${m.ficha}", que no existe en roles/ (revisa: node src/roles.js list).`);
+    const card = roles.get(m.ficha || m.id);
+    if (!card) return m;
+    return {
+      ...m,
+      id: card.id,
+      rol: m.rol || humanizeId(card.id),
+      actua_como: m.actua_como || card.actua_como,
+      por_que: m.por_que || card.objetivo,
+      entrega: m.entrega?.length ? m.entrega : [card.objetivo],
+      herramientas_restringidas: m.herramientas_restringidas ?? card.herramientas_restringidas,
+      origen: m.origen || `ficha roles/${card.id}.md`,
+      nuevo: false,
+    };
+  });
+}
 
 const slug = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'x';
@@ -58,10 +86,14 @@ const brief = (s, n = 5) => {
   return words.length > n ? `${words.slice(0, n).join(' ')}…` : words.join(' ');
 };
 
+function teamOrigin(m) {
+  if (m.herramientas_restringidas) return '**Agente fijo:** este rol necesita herramientas restringidas, así que además de su ficha lleva un archivo en `.claude/agents/`, creado con `agent-template`. Hay que reiniciar Claude Code antes de poder invocarlo (`/exit` y luego `claude -c`).';
+  if (m.nuevo) return '**Ficha nueva:** se crea en `roles/` al aprobar el plan y funciona al instante, sin reiniciar Claude Code.';
+  return `**Origen:** ${m.origen || 'agente o skill existente'}.`;
+}
+
 function teamBody(m) {
-  const origen = m.nuevo
-    ? '**Agente nuevo:** se crea durante el kickoff con `agent-template`. Hay que reiniciar Claude Code antes de poder invocarlo.'
-    : `**Origen:** ${m.origen || 'agente o skill existente'}.`;
+  const origen = teamOrigin(m);
   const body = [
     `### ${m.rol}`,
     `**Actúa como:** ${m.actua_como}`,
@@ -84,7 +116,7 @@ function teamItem(equipo) {
     headline: `Tu equipo: ${equipo.length} ${equipo.length === 1 ? 'rol' : 'roles'}`,
     ask: '¿Te sirve este equipo?',
     body_md: equipo.map(teamBody).join('\n\n'),
-    tags: ['equipo', ...(equipo.some(m => m.nuevo) ? ['agente-nuevo'] : [])],
+    tags: ['equipo', ...(equipo.some(m => m.nuevo && !m.herramientas_restringidas) ? ['ficha-nueva'] : []), ...(equipo.some(m => m.herramientas_restringidas) ? ['agente-fijo'] : [])],
     visual: {
       type: 'diagram',
       kind: 'org',
@@ -93,7 +125,7 @@ function teamItem(equipo) {
         label: m.corto || brief(m.rol),
         icon: m.icono || 'user',
         ...(m.nota ? { note: m.nota } : {}),
-        ...(m.nuevo ? { badge: 'Nuevo' } : {}),
+        ...(m.herramientas_restringidas ? { badge: 'Agente fijo' } : m.nuevo ? { badge: 'Nuevo' } : {}),
       })),
     },
   };
@@ -271,7 +303,7 @@ export function buildContextBrief(d, { faltan = [], equipo = [] } = {}) {
   return [
     `Plan de batalla del proyecto "${d.proyecto}", recién salido del kickoff. Aldot es novato (vibe coder): explica en simple, sin jerga.`,
     'Él ve cada ítem como una lámina con un diagrama: nombra lo que está viendo. Recórrelo en este orden: 1) el TLDR (qué pidió y cómo lo haría el orquestador), 2) el equipo, un integrante a la vez (rol, por qué, qué entrega), 3) los brazos y lo que falta conectar, 4) el proceso y dónde interviene él, 5) el roadmap, 6) los councils sugeridos, 7) los riesgos.',
-    `En cada ítem pregunta si lo aprueba, lo cambia o lo quita. El equipo tiene ${equipo.length} integrantes${equipo.some(m => m.nuevo) ? '; los marcados como agente nuevo exigen reiniciar Claude Code después del kickoff' : ''}.`,
+    `En cada ítem pregunta si lo aprueba, lo cambia o lo quita. El equipo tiene ${equipo.length} integrantes${equipo.some(m => m.herramientas_restringidas) ? '; los marcados como agente fijo exigen reiniciar Claude Code, los demás funcionan al instante' : ''}.`,
     faltan.length ? `Faltan por conectar: ${faltan.map(s => s.id).join(', ')}. Pregunta cuáles quiere conectar ahora y cuáles después; ninguno se instala sin su sí.` : 'Todos los brazos sugeridos ya están conectados.',
     'No prometas costos ni plazos que no estén escritos en los ítems. Nada empieza hasta que guarde el feedback: el orquestador lo lee y ajusta el plan antes del Sprint 1.',
   ].join(' ');
@@ -279,9 +311,12 @@ export function buildContextBrief(d, { faltan = [], equipo = [] } = {}) {
 
 /**
  * Construye la revisión del cockpit. `ctx` permite inyectar checks falsos en
- * tests; `entries`, `templates` y `personas` también son inyectables.
+ * tests; `entries`, `templates` y `personas` también son inyectables. `root` es donde
+ * se buscan las fichas de roles/.
  */
-export function buildPlanReview(draft, { ctx = null, entries = null, templates, personas, sinMcp = false } = {}) {
+export function buildPlanReview(input, { ctx = null, entries = null, templates, personas, sinMcp = false, root = REPO_ROOT } = {}) {
+  if (!input || typeof input !== 'object') throw new PlanError('El borrador debe ser un objeto JSON.');
+  const draft = { ...input, equipo: resolveEquipo(input.equipo, { root }) };
   validateDraft(draft);
   const all = entries || loadDirectorio();
   const c = ctx || realContext({ sinMcp });
@@ -313,7 +348,7 @@ export function buildPlanReview(draft, { ctx = null, entries = null, templates, 
       risksItem(draft.riesgos),
     ],
   };
-  return { review: validateReview(review), brazos: brazos.top.map(s => ({ id: s.id, estado: s.estado })), councils: councils.found };
+  return { review: validateReview(review), equipo: draft.equipo, brazos: brazos.top.map(s => ({ id: s.id, estado: s.estado })), councils: councils.found };
 }
 
 /** Las 5 líneas para el chat (el detalle vive en el cockpit). */
@@ -321,7 +356,7 @@ export function chatTldr(draft, result) {
   const faltan = result.brazos.filter(b => b.estado && b.estado !== ESTADOS.conectado).length;
   return [
     `Plan de batalla listo: ${draft.proyecto}.`,
-    `Equipo: ${draft.equipo.map(m => m.rol).join(', ')}.`,
+    `Equipo: ${(result.equipo || draft.equipo).map(m => m.rol).join(', ')}.`,
     `Brazos: ${result.brazos.length} sugeridos, ${faltan} por conectar.`,
     `Sprint 1: ${draft.proceso.sprints[0].objetivo}.`,
     'Te abrí el cockpit en el navegador: vota, comenta o conversa por voz y guarda el feedback.',
@@ -340,7 +375,10 @@ function cliMain(argv) {
   }
   try {
     const draft = JSON.parse(readFileSync(resolve(file), 'utf8'));
-    const result = buildPlanReview(draft, { sinMcp: Boolean(flags['sin-mcp']) });
+    const result = buildPlanReview(draft, {
+      sinMcp: Boolean(flags['sin-mcp']),
+      ...(typeof flags.root === 'string' ? { root: resolve(flags.root) } : {}),
+    });
     const out = resolve(typeof flags.out === 'string' ? flags.out : join(REPO_ROOT, 'memory', 'plan-de-batalla.json'));
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, JSON.stringify(result.review, null, 2) + '\n', 'utf8');

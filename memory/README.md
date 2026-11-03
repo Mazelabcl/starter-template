@@ -110,7 +110,9 @@ addLesson({
 
 Se toca cada vez que un agente entra o sale del proyecto, y `touchAgent` se llama
 en cada invocación para mantener métricas. El orquestador usa esto para decidir
-"qué agente lleva más tiempo sin invocarse, ¿sigue siendo útil?".
+"qué agente lleva más tiempo sin invocarse, ¿sigue siendo útil?". Las fichas de rol
+(`roles/`) se registran solas: `node src/roles.js crear` llama a `addAgent` y `prompt`
+a `touchAgent`.
 
 ```js
 import { addAgent, addSkill, touchAgent, getActiveTeam } from '../src/memory.js';

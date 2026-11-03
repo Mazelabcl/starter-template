@@ -19,8 +19,7 @@ All user-facing text in neutral Spanish (tuteo, zero voseo). The user is a novic
 ## Step 0 — Pre-flight (silent if all is OK)
 
 1. No `node_modules/` → offer `npm install` (ask first).
-2. `.env` missing or `OPENROUTER_API_KEY` empty/placeholder → offer `npm run setup` (OpenRouter required; OpenAI and Replicate optional, skippable).
-3. Only mention what is missing; then go to Step 1.
+2. `.env` missing or `OPENROUTER_API_KEY` empty/placeholder → offer `npm run setup` (OpenRouter required; OpenAI and Replicate optional, skippable). Only mention what is missing; then go to Step 1.
 
 ## Step 1 — Greeting (literal, one question)
 
@@ -69,7 +68,7 @@ Write `memory/plan-de-batalla.borrador.json` (format: `ejemplo-plan-borrador.jso
 
 - `tldr_usuario`: what the user asked, in their terms (2-3 lines).
 - `tldr_orquestador`: how you would do it: sprints, key stack, where the user approves.
-- `equipo[]`: 3-5 members. Each: `rol`, `actua_como` (rich persona: specialty, years, what they obsess about), `por_que` (why THIS project needs this role), `entrega[]`, `brazos[]` (ids from the directory), `nuevo` (true if a new agent must be created) or `origen` (existing agent/skill).
+- `equipo[]`: 3-5 members. Each: `id`, `rol`, `actua_como` (rich persona: specialty, years, what they obsess about), `por_que` (why THIS project needs this role), `entrega[]`, `brazos[]` (ids from the directory), `nuevo: true` (a new role card, no restart) or `origen` (existing agent/skill) or `ficha: <id>` (existing card, fills the rest). `herramientas_restringidas: true` only if tools must really be forbidden.
 - `proceso`: `sprints[]` (numero, objetivo, entregables, gate) + `intervenciones[]` (where the user acts: approvals, credentials only they can authorize, real data they must provide).
 - `decisiones[]`, `riesgos[]` (`{ riesgo, mitigacion }`).
 - The plan becomes a picture deck (org, flow, timeline; full text stays behind "Ver más"), so also give the short labels of 2-5 words: `titular` (max 10 words), `tldr_pasos[]`, and `corto` on team members, sprints, decisions (`{ texto, corto }`) and risks; plus `nota`, `icono` and `gate_corto` where they help.
@@ -98,28 +97,31 @@ When the user says they saved feedback (or the session hook warns):
 ## Step 8 — Persist (only after the plan is approved)
 
 ```js
-import { writeProfile, addSkill, addAgent } from './src/memory.js';
+import { writeProfile, addSkill } from './src/memory.js';
 import { startSprint } from './src/roadmap.js';
 import { CORE_SKILLS } from './.claude/skills/kickoff/detector.js';
 writeProfile({ project_type, mode, description /* ≤240 chars */, created_at: new Date().toISOString(),
   owner, skills_activas: [...CORE_SKILLS, ...approvedSkills], agentes_activos: approvedAgentNames,
   sprint_inicial: 'sprint-1', tags: [type, size] });
 for (const name of [...CORE_SKILLS, ...approvedSkills]) addSkill({ name, notas: why });
-for (const m of approvedTeam) addAgent({ name: m.id, role: m.rol, notas: m.actua_como });
 startSprint({ number: 1, objective: plan.proceso.sprints[0].objetivo }); // NEVER addSprint here: that is for closing (closeSprint)
 ```
-- `content/principles.md` from `content/principles.template.md` (fill the `{{...}}`; "Qué NO ES" comes from rejected items and risks). `content/INDEX.md` from `content/INDEX.template.md`.
-- Never hand-edit between the markers of `roadmap/roadmap.md`; `startSprint` fills it.
+- `content/principles.md` from `content/principles.template.md` (fill the `{{...}}`; "Qué NO ES" comes from rejected items and risks). `content/INDEX.md` from `content/INDEX.template.md`. Never hand-edit between the markers of `roadmap/roadmap.md`; `startSprint` fills it.
 - Activate approved catalog skills: copy `.claude/skills/_catalog/<skill>` to `.claude/skills/<skill>`.
 - Approved arms: show `node src/brazos.js connect <id>` for each missing one, and offer `node src/brazos.js mcp-json <ids...>` (preview; `--write` only with a yes). Never install anything without a yes.
 - Record explicit user decisions from the review with `addDecision`.
 
-## Step 9 — New specialized agents
+## Step 9 — The team becomes role cards (no restart)
 
-If a member has `nuevo: true`: invoke `agent-template`, create the agent with the persona from the plan (system prompt in English, output in neutral Spanish). The user must reiniciar Claude Code before it can be invoked; warn literally:
+For every approved member (except an `origen` that is already an agent file), write persona and objective in English and run (add the skill's `SKILL.md` to `--contexto` if `origen` names one):
 ```
-Creé el agente <nombre>. Reinicia Claude Code para que cargue: los agentes nuevos no aparecen en la sesión donde se crean.
-Mientras tanto, para tareas urgentes uso un agente general con el mismo rol.
+node src/roles.js crear --id <id> --actua-como "<persona>" --objetivo "<goal>" [--modelo sonnet] [--contexto a.md,b.md]
+```
+(creates `roles/<id>.md` and registers it in `active-team.json`; it works at once). To use a member: `node src/roles.js prompt <id> "tarea"`, then the Agent tool with `subagent_type: general-purpose`, that prompt and the card's `model` (`roles/README.md`).
+
+Only if `herramientas_restringidas: true`: add `--herramientas-restringidas`, invoke `agent-template` for the fixed file in `.claude/agents/`, and warn literally (the user must reiniciar Claude Code):
+```
+Creé el agente <nombre>. Reinicia Claude Code para que cargue: escribe /exit y luego claude -c (retoma esta conversación). Mientras tanto uso un agente general con el mismo rol, sin esa restricción.
 ```
 
 ## Step 10 — Close
@@ -139,7 +141,7 @@ Si quieres validar que todo arranca limpio: npm run smoke:quick (no gasta crédi
 4. Installing MCPs/plugins or writing `.mcp.json` without an explicit yes.
 5. Dumping the plan in the chat instead of the cockpit.
 6. Inventing real-world data: mark it as research (`node src/research.js pro "..."`).
-7. Invoking a newly created agent in the same session (it will not load).
+7. Creating `.claude/agents/` files for roles that do not restrict tools; invoking a new fixed agent in the same session (it will not load).
 
 ## References
 

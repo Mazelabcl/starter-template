@@ -71,12 +71,23 @@ check('sin etiquetas cortas igual queda visual: las arma recortando', () => {
   assert(risk.split(/\s+/).length <= 5, risk);
 });
 
-check('cada integrante trae actúa como + por qué + entrega detrás de Ver más; agente nuevo avisa reinicio', () => {
+check('cada integrante trae actúa como + por qué + entrega detrás de Ver más; ficha nueva sin reinicio', () => {
   const team = result.review.items.find(i => i.id === 'equipo');
   for (const m of DRAFT.equipo) assert(team.body_md.includes(m.actua_como) && team.body_md.includes(m.por_que), m.rol);
   assert(/Entrega/.test(team.body_md), 'sin entrega');
-  assert(team.tags.includes('agente-nuevo') && /reiniciar Claude Code/.test(team.body_md), 'sin aviso de reinicio');
-  assert(team.visual.members.some(m => m.badge === 'Nuevo'), 'sin marca de agente nuevo');
+  assert(team.tags.includes('ficha-nueva') && /sin reiniciar Claude Code/.test(team.body_md), 'sin ficha nueva');
+  assert(!team.tags.includes('agente-fijo') && !/Hay que reiniciar/.test(team.body_md), 'una ficha no exige reinicio');
+  assert(team.visual.members.some(m => m.badge === 'Nuevo'), 'sin marca de ficha nueva');
+});
+
+check('herramientas restringidas: agente fijo con aviso de reinicio y /exit + claude -c', () => {
+  const draft = JSON.parse(JSON.stringify(DRAFT));
+  draft.equipo[0].herramientas_restringidas = true;
+  const r = buildPlanReview(draft, { ctx });
+  const team = r.review.items.find(i => i.id === 'equipo');
+  assert(team.tags.includes('agente-fijo') && /Hay que reiniciar Claude Code/.test(team.body_md) && /`\/exit` y luego `claude -c`/.test(team.body_md), team.body_md);
+  assert(team.visual.members[0].badge === 'Agente fijo', 'sin marca');
+  assert(/agente fijo exigen reiniciar/.test(r.review.context_brief), 'guía de voz');
 });
 
 check('brazos: incluye los del equipo, estados y comandos connect de lo que falta', () => {

@@ -64,7 +64,7 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **multimodal-validation** | automático tras generar imágenes | Obliga a mirar el PNG antes de darlo por bueno. |
 | **council** | `/council` | Personas expertas (CTO, devops, PM, usuario novato...) opinan por separado y se fusionan en una propuesta mejorada, con cada aporte atribuido. |
 | **bold-rounds** | `/bold-rounds <objetivo> [N]` | Rediseño audaz por rondas sobre una copia: cada ronda compara una variante ciega (sin memoria) y una con contexto, con screenshots antes/después en el cockpit. Tú eliges; el original no se toca hasta que digas "aplicar". Demo: `examples/cafeteria-90s/`. |
-| **agent-template** | "crea un agente para X" | Scaffold de agente especializado. |
+| **agent-template** | "crea un agente para X" | Especialista como ficha de rol, sin reiniciar; archivo fijo solo si restringe herramientas. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |
 | **cockpit** | `/revisar` (Claude lo abre solo con `node src/cockpit.js open <id>`) | Revisión con roadmap, votos por ítem y conversación por voz; el feedback lo lee Claude al continuar. Ver [`cockpit/README.md`](cockpit/README.md). |

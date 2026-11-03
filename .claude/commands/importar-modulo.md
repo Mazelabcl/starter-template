@@ -1,5 +1,5 @@
 ---
-description: Trae un módulo del starter v6 (cockpit, bold-rounds, council, brazos, video-director) a este proyecto VIEJO sin pisar nada. Uso /importar-modulo <nombre> [ruta-del-starter-v6]
+description: Trae un módulo del starter v6 (cockpit, bold-rounds, council, roles, brazos, video-director) a este proyecto VIEJO sin pisar nada. Uso /importar-modulo <nombre> [ruta-del-starter-v6]
 ---
 
 El usuario quiere traer a ESTE proyecto (uno creado con un starter viejo) un módulo del starter v6: `$ARGUMENTS`.

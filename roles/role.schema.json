@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "role-card",
+  "title": "Ficha de rol (frontmatter de roles/<id>.md)",
+  "description": "Una ficha + el agente general integrado = especialista al instante, sin reiniciar Claude Code. Las instrucciones van en inglés; la salida del agente, en español neutro (la regla la agrega src/roles.js).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "actua_como", "objetivo", "modelo", "contexto", "herramientas_restringidas"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "actua_como": { "type": "string", "minLength": 20, "description": "Persona en inglés: especialidad, años, qué le obsesiona." },
+    "objetivo": { "type": "string", "minLength": 10, "description": "Qué debe lograr este rol en el proyecto, en inglés." },
+    "modelo": { "enum": ["haiku", "sonnet", "opus", ""], "description": "Vacío: hereda el modelo del orquestador." },
+    "contexto": {
+      "type": "array",
+      "description": "Archivos que el agente lee antes de empezar. Rutas relativas a la raíz del proyecto.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "herramientas_restringidas": { "type": "boolean", "description": "true solo si el rol debe tener prohibidas herramientas: entonces además necesita un archivo fijo en .claude/agents/ y reiniciar Claude Code." }
+  }
+}

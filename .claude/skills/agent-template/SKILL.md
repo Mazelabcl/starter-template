@@ -1,9 +1,22 @@
 ---
 name: agent-template
-description: Genera un nuevo agente especializado en ~/.claude/agents/ ya cumpliendo las 6 secciones estructurales que confidence-loop exige (score base ~92/100). Triggers: "crea un agente", "nuevo agente para X", "agentifica X", "/agent-template".
+description: Crea un especialista. Primero decide ficha de rol (roles/, sin reiniciar; opción por defecto) o archivo fijo de agente (solo si hay que restringir herramientas, con las 6 secciones que confidence-loop exige, score base ~92/100). Triggers: "crea un agente", "nuevo agente para X", "agentifica X", "/agent-template".
 ---
 
 # agent-template
+
+## Primero decide: ficha o archivo fijo
+
+**Por defecto, ficha de rol.** Claude Code carga `.claude/agents/*.md` solo al iniciar la sesión; una ficha funciona al instante con el agente general.
+
+| Pregunta | Respuesta | Qué crear |
+|---|---|---|
+| ¿Hay que prohibirle herramientas de verdad (que no pueda escribir, que no use Bash)? | No | **Ficha**: `node src/roles.js crear --id <id> --actua-como "<persona en inglés>" --objetivo "<meta en inglés>" [--modelo sonnet] [--contexto a.md,b.md]`. Se usa con `node src/roles.js prompt <id> "tarea"` y la herramienta Agent (`subagent_type: general-purpose`, ese prompt, `model` de la ficha). Detalle en `roles/README.md`. Aquí termina esta skill. |
+| | Sí | **Ficha** con `--herramientas-restringidas` **y** archivo fijo con el procedimiento de abajo. Avisa: "Reinicia Claude Code para que cargue: escribe /exit y luego claude -c (retoma esta conversación)". |
+
+Sigue con el resto de esta skill solo para el archivo fijo: un agente del proyecto va en `.claude/agents/`; uno para todos los proyectos, en `~/.claude/agents/`.
+
+## Archivo fijo de agente
 
 Genera agentes que **nacen con score ≥92** en confidence-loop. Sin esta skill, los agentes nacen en ~80 y hay que iterarlos. Con ella, solo necesitan refinamiento de dominio.
 

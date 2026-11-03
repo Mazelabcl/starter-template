@@ -1,5 +1,11 @@
 # kickoff — changelog
 
+## v5 — 2026-11-02 (fichas de rol)
+
+- **El equipo son fichas de rol** (`roles/<id>.md`, `src/roles.js`): funcionan al instante con el agente general, sin reiniciar. Solo `herramientas_restringidas: true` crea además un archivo fijo en `.claude/agents/`, con el aviso de reinicio y el truco `/exit` + `claude -c`.
+- `plan.js` completa el equipo desde las fichas (`ficha: <id>`, o todas si el borrador no trae equipo); el diagrama `org` sigue igual.
+- `roles.js crear` registra cada ficha en `active-team.json`; se quita el `addAgent` del paso 8, que además no pasaba `model`.
+
 ## v4 — 2026-10-30 (v6 Sprint 3: plan de batalla + brazos)
 
 - **Plan de batalla en el cockpit.** El kickoff termina en una revisión `kind: "plan"`: TLDR del usuario, TLDR del orquestador, un ítem por integrante del equipo ("actúa como" + por qué + entrega), brazos (conectados / falta auth / no instalados + comando `connect`), proceso (sprints, gates, dónde interviene el usuario), councils sugeridos y riesgos. El chat recibe solo 5 líneas + `npm run cockpit`.
