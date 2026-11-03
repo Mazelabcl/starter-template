@@ -491,16 +491,17 @@
       "para_que": "20 efectos con intención (transiciones, tipografía, cámara, ritmo) listos para HyperFrames; menú del video-director.",
       "cuando_usar": "Siempre que se dirija un video por código: el director elige efectos de effects-index.json.",
       "keywords": ["video", "video corto", "reel", "instagram", "motion", "transiciones", "animacion"],
-      "link": "C:\\Users\\aldot\\.gemini\\antigravity\\scratch\\video-effects-library",
+      "link": "https://github.com/Mazelabcl/video-effects-library",
       "costo": "gratis (propia)",
       "oficial": false,
       "como_conectar": {
-        "pasos": ["Ya existe en el computador de Aldot. Galería: cd a la carpeta y npm run dev → http://localhost:4321.", "Activa la skill video-director: copia .claude/skills/_catalog/video-director a .claude/skills/."]
+        "comando": "git clone --branch master https://github.com/Mazelabcl/video-effects-library.git C:\\Users\\aldot\\.gemini\\antigravity\\scratch\\video-effects-library",
+        "pasos": ["Si ya existe en C:\\Users\\aldot\\.gemini\\antigravity\\scratch\\video-effects-library, no hay que clonar nada. Galería: cd a la carpeta y npm run dev → http://localhost:4321.", "Activa la skill video-director: copia .claude/skills/_catalog/video-director a .claude/skills/."]
       },
       "auth": { "necesita": false, "credencial": "ninguna" },
       "check": [{ "tipo": "file", "valor": "C:\\Users\\aldot\\.gemini\\antigravity\\scratch\\video-effects-library\\effects-index.json" }],
-      "riesgos": "Ruta local: en otro computador no existe hasta clonarla.",
-      "verificado": { "ok": true, "fecha": "2026-10-30", "fuente": "archivo local effects-index.json" }
+      "riesgos": "En otro computador no existe hasta clonarla; el check mira esa ruta local.",
+      "verificado": { "ok": true, "fecha": "2026-11-02", "fuente": "repositorio público en GitHub y archivo local effects-index.json" }
     },
     {
       "id": "remotion",
