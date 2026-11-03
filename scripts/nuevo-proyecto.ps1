@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Crea un proyecto nuevo desde el starter Mazelab (rama v6) con un solo comando.
+  Crea un proyecto nuevo desde el starter Mazelab (rama main) con un solo comando.
 
 .DESCRIPTION
   1. Valida el nombre (sin espacios ni tildes), decide la carpeta y revisa que
@@ -39,7 +39,7 @@ param(
   [switch]$Forzar,
 
   # Rama del starter que se clona.
-  [string]$Rama = 'v6',
+  [string]$Rama = 'main',
 
   # Repo en GitHub (primer intento).
   [string]$Repo = 'https://github.com/Mazelabcl/starter-template.git',

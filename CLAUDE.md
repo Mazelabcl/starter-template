@@ -41,7 +41,6 @@ node --env-file=.env mi-script.js
 |---|---|---|
 | Memoria del proyecto (decisiones, lessons, equipo, sprints) | `memory/` | `src/memory.js` (`summarize()`, `addDecision()`, `addLesson()`). Detalle en `memory/README.md` |
 | Roadmap y backlog | `roadmap/roadmap.md` + `roadmap/current-sprint.json` | `/idea <texto>` y `/roadmap` |
-| Ideas sueltas | backlog del roadmap | `/idea <texto>`: captura y sigue con lo que estabas |
 | Revisión con feedback (canónica) | `cockpit/` | `/revisar` + `node src/cockpit.js open <id>` |
 | Visor de `.md` de agentes | `review-app/` | `npm run review-app` |
 | Resumen visual del proyecto | `RESUMEN.html` | `/resumen` |
@@ -70,6 +69,8 @@ Comandos útiles:
 | Lote de imágenes donde importa el costo / "pídele a Astra" | skill `astra` (Codex con el plan de ChatGPT, sin API key) |
 | Decisión con tradeoffs reales | propón `/council` con su costo |
 | "Mejóralo por rondas" / rediseño audaz | `/bold-rounds <objetivo> [N]` (trabaja sobre copia; Aldot elige en el cockpit) |
+| "Haz un video" | copia `_catalog/video-director` a `.claude/skills/` y úsala (efectos + HyperFrames) |
+| "Haz una web" | skill `ui-ux-pro-max` si está; verifica con Playwright |
 | "Crea un agente para X" | ficha en `roles/`, sin reiniciar: skill `agent-template` y `node src/roles.js` (`roles/README.md`) |
 | Idea al pasar | `/idea X` y sigo con la tarea actual |
 | "Qué tenemos pendiente" | `/roadmap` |

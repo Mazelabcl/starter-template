@@ -45,7 +45,7 @@ check('scripts .ps1 son ASCII puro', () => {
 
 check('nuevo-proyecto.ps1 tiene los pasos clave', () => {
   const s = readFileSync(NP, 'utf8');
-  for (const t of ["$Rama = 'v6'", 'github.com/Mazelabcl/starter-template.git', '$Respaldo', '$Origen', 'remote remove origin',
+  for (const t of ["$Rama = 'main'", 'github.com/Mazelabcl/starter-template.git', '$Respaldo', '$Origen', 'remote remove origin',
     '$EnvOrigen', 'npm install', '-ignore-scripts', 'SinClaude', "claude '/kickoff'", 'Test-Path -LiteralPath $destino']) {
     assert(s.includes(t), `falta "${t}"`);
   }
