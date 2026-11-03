@@ -5,8 +5,8 @@
 // El objetivo original NUNCA se modifica desde este script.
 //
 // Uso (desde la raíz del proyecto):
-//   node scripts/bold_rounds.js init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--out rounds] [--goal "texto"]
-//   node scripts/bold_rounds.js prepare <ronda> [--force]       (copias blind/context + "antes" + prompts)
+//   node scripts/bold_rounds.js init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--out rounds] [--goal "texto"] [--lentes a,b|auto] [--modelo sonnet]
+//   node scripts/bold_rounds.js prepare <ronda> [--force] [--lente-blind X --lente-context Y --modelo M]     (copias blind/context + "antes" + prompts)
 //   node scripts/bold_rounds.js run <ronda> [blind|context|both] [--timeout-min 15]   (headless `claude -p`)
 //   node scripts/bold_rounds.js after <ronda>                   (screenshots "después" + diff + rechazo)
 //   node scripts/bold_rounds.js review <ronda> [--sprint N]     (publica la revisión kind "rounds" en el cockpit, en imágenes)
@@ -45,6 +45,92 @@ const NOTES = 'notes.md';
 export const CORE_PROMPT = 'Look at the site first. Then innovate: think about the user experience and think outside the box. Make one bold change that improves conversions or the look and feel, not a small tweak. Use any tool you have. You must ship a change every time.';
 
 export class BoldError extends Error {}
+
+// ---------------------------------------------------------------------------
+// Lentes (miradas) y modelo
+// ---------------------------------------------------------------------------
+// Una lente es un ángulo concreto (qué mira + qué pregunta responde), no un halago.
+// Fuente: councils/personas/*.json (campo opcional `lente`; si falta se deriva de
+// obsessions y typical_questions). Sin esa carpeta no hay lentes: se pide instalar el módulo council.
+
+export const MODELS = ['sonnet', 'opus', 'haiku'];
+export const DEFAULT_MODEL = 'sonnet';
+const PERSONAS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'councils', 'personas');
+const LENS_BASE_ORDER = ['director-arte', 'growth', 'usuario-novato', 'ux-research', 'contrarian', 'cliente'];
+
+export function listLenses(dir = PERSONAS_DIR) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).sort();
+}
+
+export function loadLens(id, dir = PERSONAS_DIR) {
+  const valid = listLenses(dir);
+  if (!valid.includes(id)) {
+    throw new BoldError(`Lente desconocida: "${id}". ${valid.length ? `Disponibles: ${valid.join(', ')}.` : 'No hay lentes: falta la carpeta councils/personas (módulo council).'}`);
+  }
+  const p = readJSON(join(dir, `${id}.json`));
+  const l = p.lente || {};
+  return {
+    id,
+    etiqueta: l.etiqueta || String(p.name || id).toLowerCase(),
+    mira: l.mira || (p.obsessions || []).slice(0, 3).join('; '),
+    pregunta: l.pregunta || (p.typical_questions || [])[0] || '',
+  };
+}
+
+export const miradaLabel = lens => `Mirada de ${lens.etiqueta}`;
+
+export function checkModel(m) {
+  const v = String(m || '').toLowerCase();
+  if (!MODELS.includes(v)) throw new BoldError(`Modelo desconocido: "${m}". Usa: ${MODELS.join(' | ')}.`);
+  return v;
+}
+
+/** Lista corta de lentes según el objetivo y el tipo de destino (modo auto). */
+export function autoPool(run, dir = PERSONAS_DIR) {
+  const goal = String(run.goal || '').toLowerCase();
+  const web = !!run.web;
+  const score = {
+    'director-arte': (/actual|look|visual|dise|marca|estilo|moderno|identidad|se vea/.test(goal) ? 2 : 0) - (web ? 0 : 3),
+    growth: /pedid|venta|convers|compr|reserv|lead|clic|contact|cliente|suscri/.test(goal) ? 2 : 0,
+    'usuario-novato': /entiend|claro|confus|simple|usabil|nuevo/.test(goal) ? 2 : 0,
+    'ux-research': (web && /celular|mobile|movil|móvil|navega/.test(goal) ? 1 : 0) - (web ? 0 : 3),
+  };
+  const have = listLenses(dir);
+  return LENS_BASE_ORDER.filter(id => have.includes(id))
+    .map((id, i) => ({ id, s: score[id] || 0, i }))
+    .sort((a, b) => b.s - a.s || a.i - b.i).slice(0, 4).map(x => x.id);
+}
+
+/** Elige el par (blind, context) de la ronda n: nunca iguales y sin repetir pares de rondas previas. */
+export function pickLenses(run, n, { blind, context, dir = PERSONAS_DIR } = {}) {
+  const pool = Array.isArray(run.lentes) ? run.lentes : autoPool(run, dir);
+  [blind, context].filter(Boolean).forEach(id => loadLens(id, dir));
+  if (blind && blind === context) throw new BoldError('Las dos variantes no pueden tener la misma lente.');
+  const log = (run.lens_log || []).filter(l => l.round !== Number(n));
+  const key = (a, b) => [a, b].sort().join('+');
+  const usedPairs = new Set(log.map(l => key(l.blind, l.context)));
+  const uses = id => log.reduce((s, l) => s + (l.blind === id) + (l.context === id), 0);
+  const asBlind = id => log.filter(l => l.blind === id).length;
+  let best = null;
+  for (const b of blind ? [blind] : pool) {
+    for (const c of context ? [context] : pool) {
+      if (b === c) continue;
+      const sc = (usedPairs.has(key(b, c)) ? 1000 : 0) + uses(b) + uses(c) + 0.1 * asBlind(b) + 0.01 * (pool.indexOf(b) * 10 + pool.indexOf(c));
+      if (!best || sc < best.sc) best = { sc, blind: b, context: c };
+    }
+  }
+  if (!best) throw new BoldError('Se necesitan al menos 2 lentes distintas. Usa --lentes a,b o deja "auto".');
+  return { blind: best.blind, context: best.context };
+}
+
+/** Modelo de una ronda: el de la ronda si se fijó en prepare, si no el de la corrida (corridas viejas: sonnet). */
+export const roundModel = (run, n) => (run.lens_log || []).find(l => l.round === Number(n))?.model || run.modelo || DEFAULT_MODEL;
+export const roundLens = (run, n, v) => {
+  const id = (run.lens_log || []).find(l => l.round === Number(n))?.[v];
+  if (!id) return null;
+  try { return loadLens(id); } catch { return null; }
+};
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -506,8 +592,15 @@ Objetivo: ${goal}
 `;
 
 /** Crea la copia de trabajo. Nunca escribe en el objetivo original. */
-export async function init(target, { out = 'rounds', rounds = DEFAULTS.rounds, pauseEvery = DEFAULTS.pauseEvery, goal } = {}) {
+export async function init(target, { out = 'rounds', rounds = DEFAULTS.rounds, pauseEvery = DEFAULTS.pauseEvery, goal, lentes = 'auto', modelo = DEFAULT_MODEL } = {}) {
   const p = runPaths(out);
+  modelo = checkModel(modelo);
+  let lentesList = 'auto';
+  if (lentes && lentes !== 'auto') {
+    lentesList = String(lentes).split(',').map(s => s.trim()).filter(Boolean);
+    lentesList.forEach(id => loadLens(id));
+    if (new Set(lentesList).size < 2) throw new BoldError('--lentes necesita al menos 2 lentes distintas (o "auto").');
+  }
   if (existsSync(p.run)) throw new BoldError(`Ya hay una corrida en ${p.dir}. Usa otro --out o borra esa carpeta.`);
   const maxRounds = Math.min(Math.max(1, parseInt(rounds, 10) || DEFAULTS.rounds), DEFAULTS.maxRounds);
   emptyDir(p.working);
@@ -543,6 +636,7 @@ export async function init(target, { out = 'rounds', rounds = DEFAULTS.rounds, p
     created_at: new Date().toISOString(),
     max_rounds: maxRounds, pause_every: Math.max(1, parseInt(pauseEvery, 10) || DEFAULTS.pauseEvery),
     threshold: DEFAULTS.threshold, history: [], note,
+    lentes: lentesList, modelo, lens_log: [],
   };
   saveRun(out, run);
   if (!existsSync(p.design)) writeFileSync(p.design, DESIGN_TEMPLATE(run.goal), 'utf8');
@@ -584,7 +678,7 @@ export function buildHistory(out, run, n, root) {
   return lines.join('\n') || '(no previous rounds)';
 }
 
-export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
+export function buildPrompt(variant, { run, out, n, root, beforeShots = [], lens = null }) {
   const dir = roundPaths(out, n).variant(variant);
   const parts = [
     `You are the ${variant.toUpperCase()} variant of round ${n} of a "bold rounds" improvement loop.`,
@@ -594,6 +688,13 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
     '',
     'Core instruction from the user (follow it literally; if the target is not a website, read "site" as the document or project):',
     `"${CORE_PROMPT}"`,
+    ...(lens ? [
+      '',
+      'Lens for this round (an angle to look from, not a role to play). It decides WHICH problem you attack; the instruction above and the rules below stay unchanged:',
+      `- Lens: ${lens.etiqueta}`,
+      `- You look at: ${lens.mira}`,
+      `- Question your change must answer: ${lens.pregunta}`,
+    ] : []),
     '',
     'Rules:',
     `1. Look first: read the entry file completely${beforeShots.length ? ` and view these screenshots of the current state: ${beforeShots.join(', ')}` : ''}.`,
@@ -607,6 +708,7 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
     `   # Ronda ${n} — variante ${variant}`,
     '   Titular: <the change in at most 8 words; it is the big headline of the slide>',
     `   Categoría: <one of: ${CATEGORIES.join(' | ')}>`,
+    ...(lens ? [`   Mirada: ${lens.etiqueta}`] : []),
     '   Cambio 1: <2 to 5 words naming one visible change>',
     '   Cambio 2: <one line per change, top of the page to the bottom, at most 5; omit extras>',
     '   Por qué: <one line>',
@@ -631,7 +733,7 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
 // Pasos de la ronda
 // ---------------------------------------------------------------------------
 
-export async function prepare(n, { out = 'rounds', force = false, shots = takeShots, root } = {}) {
+export async function prepare(n, { out = 'rounds', force = false, shots = takeShots, root, lenteBlind, lenteContext, modelo } = {}) {
   const run = loadRun(out);
   n = parseInt(n, 10);
   if (!(n >= 1)) throw new BoldError('Ronda inválida');
@@ -648,10 +750,18 @@ export async function prepare(n, { out = 'rounds', force = false, shots = takeSh
   let before = { ok: false, reason: 'no-web' };
   if (run.web) before = await shots(wp, join(rp.shots, 'before'), { entry: run.entry });
   const beforeShots = before.ok ? Object.values(before.files) : [];
+  const pair = pickLenses(run, n, { blind: lenteBlind, context: lenteContext });
+  const model = checkModel(modelo || run.modelo || DEFAULT_MODEL);
+  run.lens_log = [...(run.lens_log || []).filter(l => l.round !== n), { round: n, ...pair, model }].sort((a, b) => a.round - b.round);
+  saveRun(out, run);
   for (const v of ['blind', 'context']) {
-    writeFileSync(rp.prompt(v), buildPrompt(v, { run, out, n, root, beforeShots }), 'utf8');
+    writeFileSync(rp.prompt(v), buildPrompt(v, { run, out, n, root, beforeShots, lens: loadLens(pair[v]) }), 'utf8');
   }
-  return { round: n, dir: rp.dir, before, prompts: { blind: rp.prompt('blind'), context: rp.prompt('context') } };
+  return {
+    round: n, dir: rp.dir, before, model, lenses: pair,
+    agent_model: `Método A: pasa model: "${model}" en AMBAS llamadas a Agent. Método B (run) lo usa solo.`,
+    prompts: { blind: rp.prompt('blind'), context: rp.prompt('context') },
+  };
 }
 
 /** Screenshots "después", diff contra "antes" y rechazo si no hay cambio visible. */
@@ -664,6 +774,11 @@ export async function after(n, { out = 'rounds', shots = takeShots } = {}) {
     const vd = rp.variant(v);
     if (!existsSync(vd)) continue;
     const files = changedFiles(wp, vd);
+    const lens = roundLens(run, n, v);
+    const notesFile = join(vd, NOTES);
+    if (lens && existsSync(notesFile) && !/^Mirada:/im.test(readFileSync(notesFile, 'utf8'))) {
+      writeFileSync(notesFile, `${readFileSync(notesFile, 'utf8').trimEnd()}\nMirada: ${lens.etiqueta}\n`, 'utf8');
+    }
     const r = { files_changed: files, has_notes: existsSync(join(vd, NOTES)), ratios: {}, visible: files.length > 0 };
     if (run.web && files.length) {
       const s = await shots(vd, join(rp.shots, v), { entry: run.entry });
@@ -769,6 +884,8 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
     const notesP = join(rp.variant(v), NOTES);
     const notes = existsSync(notesP) ? readFileSync(notesP, 'utf8').trim() : '(la variante no dejó notes.md)';
     const parsed = parseNotes(notes);
+    const lens = roundLens(run, n, v);
+    const mirada = lens ? miradaLabel(lens) : '';
     const ratios = Object.entries(c.ratios).map(([k, x]) => `${k} ${(x * 100).toFixed(1)}%`).join(', ');
     const media = [...shot('before-desktop'), ...shot(`${v}-desktop`), ...shot('before-mobile'), ...shot(`${v}-mobile`)];
     if (run.web && run.entry && existsSync(join(rp.variant(v), run.entry)) && /\.html?$/i.test(run.entry)) media.push(mediaPath(join(rp.variant(v), run.entry), root));
@@ -786,7 +903,7 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
       id: v,
       title: `Ronda ${n} · Variante ${LABEL[v]}${c.rejected ? ' · RECHAZADA' : ''}`,
       headline: c.rejected ? `${SHORT_LABEL[v]}: sin cambio visible` : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
-      kicker: `Ronda ${n} · ${SHORT_LABEL[v]}`,
+      kicker: `Ronda ${n} · ${SHORT_LABEL[v]}${mirada ? ` · ${mirada}` : ''}`,
       ask: c.rejected ? 'Descartada sola' : '¿Te gusta?',
       body_md: [
         notes, '',
@@ -805,7 +922,7 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
   if (pictured.length >= 2) {
     const options = pictured.slice(0, 3).map(v => ({
       id: v,
-      label: CHOICE_LABEL[v],
+      label: `${CHOICE_LABEL[v]}${roundLens(run, n, v) ? ` · ${miradaLabel(roundLens(run, n, v))}` : ''}`,
       item: v,
       image: shot(`${v}-desktop`)[0],
       ...(shot(`${v}-mobile`).length ? { image_mobile: shot(`${v}-mobile`)[0] } : {}),
@@ -889,11 +1006,12 @@ export function apply(n, variant, { out = 'rounds', auto = false, force = false 
 export function runHeadless(n, which = 'both', { out = 'rounds', timeoutMin = DEFAULTS.timeoutMin, bin = 'claude' } = {}) {
   const rp = roundPaths(out, n);
   const list = which === 'both' ? ['blind', 'context'] : [which];
+  const model = roundModel(loadRun(out), n);
   return Promise.all(list.map(v => new Promise(res => {
     const prompt = readFileSync(rp.prompt(v), 'utf8');
     // El prompt va por stdin (evita el límite y las comillas de la línea de comandos de Windows).
     // Un solo string con shell: en Windows `claude` es un .cmd y no se puede lanzar sin shell.
-    const cmd = [bin, '-p', '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write,Glob,Grep',
+    const cmd = [bin, '-p', '--model', model, '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write,Glob,Grep',
       '--add-dir', `"${rp.shots}"`, '--max-turns', '40', '--output-format', 'text'].join(' ');
     const t0 = Date.now();
     const child = spawn(cmd, { cwd: rp.variant(v), shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -929,8 +1047,8 @@ function parseArgs(argv) {
 }
 
 const USAGE = `Uso: node scripts/bold_rounds.js <comando>
-  init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--goal "..."]   crea la copia de trabajo
-  prepare <ronda>          copias blind/ y context/, screenshots "antes" y prompts
+  init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--goal "..."] [--lentes a,b,c|auto] [--modelo sonnet|opus|haiku]   crea la copia de trabajo
+  prepare <ronda> [--lente-blind X] [--lente-context Y] [--modelo M]   copias blind/ y context/, screenshots "antes", prompts, lentes y modelo
   run <ronda> [both]       variantes con claude -p (desatendido)
   after <ronda>            screenshots "después" + diff + rechazo de cambios invisibles
   review <ronda> [--sprint N]   publica la ronda en el cockpit: antes/después con zonas marcadas y elegir con un clic
@@ -948,14 +1066,14 @@ async function cli(argv) {
   switch (cmd) {
     case 'init': {
       if (!a) throw new BoldError('Falta el objetivo: init <carpeta|archivo|url>');
-      const run = await init(a, { out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal });
-      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Rondas máx: ${run.max_rounds}, pausa cada ${run.pause_every}.${run.note ? `\n${run.note}` : ''}`);
+      const run = await init(a, { out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal, lentes: flags.lentes || 'auto', modelo: flags.modelo || DEFAULT_MODEL });
+      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Rondas máx: ${run.max_rounds}, pausa cada ${run.pause_every}. Lentes: ${Array.isArray(run.lentes) ? run.lentes.join(', ') : 'auto'}. Modelo: ${run.modelo}.${run.note ? `\n${run.note}` : ''}`);
       return 0;
     }
     case 'prepare': {
-      const r = await prepare(a, { out, force: !!flags.force });
+      const r = await prepare(a, { out, force: !!flags.force, lenteBlind: flags['lente-blind'], lenteContext: flags['lente-context'], modelo: flags.modelo });
       if (!r.before.ok && r.before.hint) print(r.before.hint);
-      print({ round: r.round, before: r.before.ok ? r.before.files : r.before.reason, prompts: r.prompts });
+      print({ round: r.round, MODELO_PARA_AGENT: r.model, lentes: r.lenses, agent_model: r.agent_model, before: r.before.ok ? r.before.files : r.before.reason, prompts: r.prompts });
       return 0;
     }
     case 'run': print(await runHeadless(a, b || 'both', { out, timeoutMin: Number(flags['timeout-min']) || DEFAULTS.timeoutMin })); return 0;

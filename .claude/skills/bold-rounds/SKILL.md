@@ -14,6 +14,13 @@ Helper: `scripts/bold_rounds.js` (run `node scripts/bold_rounds.js` for usage). 
 
 The helper embeds it in `rounds/NNN/prompt-<variant>.md` together with the guardrails: one change in ONE category (composición, tipografía, color, imágenes, interacción, jerarquía, mobile), visible at first glance, anti-slop (no default gradients, no pills everywhere, no card soup, 3-4 colors + neutrals, 1-2 named references), truthful facts, self-contained, user-facing text in Spanish neutro, and a `notes.md` with one-line fields only (see "Variant report").
 
+## Who innovates
+
+The two variants (blind, context) are the ones that innovate: two subagents, each with its own LENS and a cheap MODEL (default `sonnet`). The orchestrator (you) only prepares, checks and publishes; you never design the change yourself.
+
+- **Lens** = a concrete angle from `councils/personas/*.json` (field `lente`: what it looks at + the question it must answer), e.g. `director-arte`, `growth`, `usuario-novato`. It is a short section added to the prompt; the user's core instruction and guardrails stay literal. Blind gets its lens but no history. `init --lentes a,b,c` sets the rotation, default `auto` (picked from target and goal, never the same lens for both variants, no repeated pair across rounds). One-off override: `prepare N --lente-blind X --lente-context Y`. Unknown ids print the valid list. The lens lands in `notes.md` (`Mirada:`) and as a label on the slides.
+- **Model**: `init --modelo sonnet|opus|haiku` (default sonnet), override per round with `prepare N --modelo M`. `prepare` prints `MODELO_PARA_AGENT`: in method A pass exactly that value as the Agent tool's `model` parameter on BOTH calls (never leave it empty: the subagent would inherit the session's Opus). Method B (`run`) passes `--model` to `claude -p` by itself.
+
 ## Hard rules
 
 1. Work ONLY on the copy in `rounds/`. Never edit the real target until the user says "aplicar" (step 9).
@@ -33,6 +40,7 @@ Categoría: <category>
 Cambio 1: <2-5 words, one visible change, top of the page first>
 Cambio 2: <one line per change, at most 5>
 Por qué: <one line>
+Mirada: <lens label; the helper adds it if missing>
 Referencias: <1-2 names>
 Riesgo: <one line>
 ```
@@ -54,7 +62,7 @@ node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<obj
 
 1. **Prepare** (snapshot "before" + two copies + prompts):
    `node scripts/bold_rounds.js prepare N`
-2. **Run both variants in parallel.** Default (method A, inside this session): send ONE message with two Agent calls (`general-purpose`), each with the exact content of `rounds/NNN/prompt-blind.md` and `rounds/NNN/prompt-context.md` as the whole prompt. Do not add anything to the blind prompt.
+2. **Run both variants in parallel.** Default (method A, inside this session): send ONE message with two Agent calls (`general-purpose`, `model` = the `MODELO_PARA_AGENT` value from `prepare`), each with the exact content of `rounds/NNN/prompt-blind.md` and `rounds/NNN/prompt-context.md` as the whole prompt. Do not add anything to the blind prompt.
    Unattended long runs (method B, headless): `node scripts/bold_rounds.js run N` (runs `claude -p` per variant inside its folder, both at once; logs in `rounds/NNN/log-*.txt`).
 3. Each variant writes `rounds/NNN/<variant>/notes.md`. If one is missing, note it in the review; do not write it yourself.
 4. **After + diff check:** `node scripts/bold_rounds.js after N` (screenshots "after", pixel diff vs before, rejects variants without visible change).

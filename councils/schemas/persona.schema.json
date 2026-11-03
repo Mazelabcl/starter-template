@@ -14,6 +14,16 @@
     "ignores": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
     "blind_spots": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 3 } },
     "typical_questions": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 3 } },
+    "lente": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["etiqueta", "mira", "pregunta"],
+      "properties": {
+        "etiqueta": { "type": "string", "minLength": 3 },
+        "mira": { "type": "string", "minLength": 10 },
+        "pregunta": { "type": "string", "minLength": 10 }
+      }
+    },
     "model_preference": { "enum": ["anthropic", "openai", "google", "deepseek", "x-ai"] }
   }
 }

@@ -15,8 +15,8 @@
           { "label": "Aplicar", "icon": "check" }
         ]
       },
-      "phrase": "Mejora esta página con 3 rondas de /bold-rounds",
-      "more": "Claude trabaja sobre una **copia**: tu original no se toca hasta que digas \"aplicar\".\n\n- **Ciega**: no sabe nada de rondas anteriores, para innovar sin sesgo.\n- **Con contexto**: conoce tus votos y rondas previas.\n- Cada ronda llega al cockpit con un antes y después, y las zonas que cambiaron marcadas con números.\n- Si un cambio no se nota en pantalla, se descarta solo."
+      "phrase": "Mejora esta página con 3 rondas de /bold-rounds, mirada de crecimiento y director de arte",
+      "more": "Claude trabaja sobre una **copia**: tu original no se toca hasta que digas \"aplicar\".\n\n- **Ciega**: no sabe nada de rondas anteriores, para innovar sin sesgo.\n- **Con contexto**: conoce tus votos y rondas previas.\n- Cada versión mira desde un ángulo distinto (crecimiento, director de arte, usuario novato...) y usa un modelo económico (Sonnet por defecto).\n- Cada ronda llega al cockpit con un antes y después, y las zonas que cambiaron marcadas con números.\n- Si un cambio no se nota en pantalla, se descarta solo."
     },
     {
       "id": "council",
