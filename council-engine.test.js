@@ -18,6 +18,8 @@ import {
   buildProjectContext, anonymize, CouncilError, parseCrear, buildAdhocPersona, withAdhocPersonas,
   savePersona, loadPersonas, validatePersona, resolveCouncilPlan, capWords, MODEL_CATALOG,
 } from './src/council.js';
+import { validateReview, reviewWarnings, publishReview } from './src/cockpit.js';
+import { renderDiagram, svgString } from './cockpit/public/diagrams.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 let passed = 0;
@@ -62,10 +64,11 @@ function makeMock(opts = {}) {
     }
     if (user.includes('Patch the integrated proposal')) {
       return reply({
+        titular: 'Lanza con chat de texto y tope de gasto',
         integrated_proposal_md: 'Propuesta parchada: empezar con chat de texto [A] y medir antes de agregar voz [B]. Se agrega límite de gasto [R].',
         contributions: [
-          { text: 'Empezar con chat de texto', voice: 'A', type: 'idea', adopted: true, why: 'Menor costo' },
-          { text: 'Poner tope de gasto mensual a la voz', voice: 'R', type: 'threat', adopted: true, why: 'El red team mostró riesgo de costo' },
+          { titular: 'Empieza con chat de texto', text: 'Empezar con chat de texto', voice: 'A', type: 'idea', adopted: true, why: 'Menor costo' },
+          { titular: 'Sin tope, la voz dispara el gasto', text: 'Poner tope de gasto mensual a la voz', voice: 'R', type: 'threat', adopted: true, why: 'El red team mostró riesgo de costo' },
         ],
         tensions: [],
         recommendation: 'Lanzar con chat de texto y tope de gasto antes de probar voz.',
@@ -76,9 +79,18 @@ function makeMock(opts = {}) {
     if (system.startsWith('You are the integrator')) {
       const voices = [...user.matchAll(/## Voz ([A-Z])/g)].map(m => m[1]);
       const base = {
+        titular: 'Empieza con chat de texto y prueba voz después',
+        pasos: ['Lanzar chat de texto', 'Probar voz con 5 usuarios', 'Medir y decidir'],
         integrated_proposal_md: `Propuesta integrada: chat de texto primero [${voices[0]}], voz como experimento medido [${voices[1]}].`,
-        contributions: voices.map((v, i) => ({ text: `Aporte de la voz ${v}`, voice: i === 0 && voices.length > 2 ? `${v},${voices[2]}` : v, type: ['threat', 'opportunity', 'idea'][i % 3], adopted: i % 2 === 0, why: 'Razón concreta' })),
-        tensions: [{ between: [voices[0], voices[1]], issue: `Voz ${voices[0]} quiere voz ahora y Voz ${voices[1]} prefiere esperar`, suggested_resolution: 'Experimento acotado' }],
+        contributions: voices.map((v, i) => ({ titular: `Punto concreto número ${i + 1} sobre la voz`, text: `Aporte de la voz ${v}`, voice: i === 0 && voices.length > 2 ? `${v},${voices[2]}` : v, type: ['threat', 'opportunity', 'idea'][i % 3], adopted: i % 2 === 0, why: 'Razón concreta' })),
+        tensions: [{
+          titular: '¿Voz desde el primer día o esperar datos?',
+          between: [voices[0], voices[1]],
+          posturas: [{ voice: voices[0], postura: 'Voz desde el primer día' }, { voice: voices[1], postura: 'Esperar datos reales' }],
+          issue: `Voz ${voices[0]} quiere voz ahora y Voz ${voices[1]} prefiere esperar`,
+          suggested_resolution: 'Experimento acotado',
+          resolucion_corta: 'Experimento con 5 usuarios',
+        }],
         recommendation: 'Empezar con chat de texto y probar voz con 5 usuarios.',
         confidence: 'media',
         what_would_change_it: 'Que los usuarios novatos prefieran hablar.',
@@ -105,8 +117,9 @@ const Q = '¿Voz con OpenAI Realtime o chat de texto para un usuario novato?';
 async function main() {
   await check('validateMerge: rechaza recommendation null, vacía o evasiva; acepta una válida', () => {
     const ok = {
+      titular: 'Haz chat de texto primero',
       integrated_proposal_md: 'x'.repeat(50),
-      contributions: [{ text: 'abc', voice: 'A', type: 'idea', adopted: true, why: 'porque sí' }],
+      contributions: [{ titular: 'Texto primero', text: 'abc', voice: 'A', type: 'idea', adopted: true, why: 'porque sí' }],
       tensions: [],
       recommendation: 'Hacer chat de texto primero.',
       confidence: 'alta',
@@ -117,7 +130,7 @@ async function main() {
     assert(!validateMerge({ ...ok, recommendation: '   ' }).ok, 'vacía pasó');
     assert(!validateMerge({ ...ok, recommendation: 'Requiere decisión humana' }).ok, 'evasiva pasó');
     assert(!validateMerge({ ...ok, confidence: 'muy alta' }).ok, 'confidence inválida pasó');
-    assert(!validateMerge({ ...ok, contributions: [{ text: 'abc', voice: 'A', type: 'riesgo', adopted: true, why: 'x' }] }).ok, 'type inválido pasó');
+    assert(!validateMerge({ ...ok, contributions: [{ titular: 'abc', text: 'abc', voice: 'A', type: 'riesgo', adopted: true, why: 'x' }] }).ok, 'type inválido pasó');
   });
 
   const root = tempRoot();
@@ -238,25 +251,70 @@ async function main() {
     assert(r.redteam !== null, 'la plantilla pide red team');
   });
 
-  await check('toCockpitReview cumple el contrato exacto del cockpit', () => {
+  await check('toCockpitReview cumple el contrato visual del cockpit', () => {
     const rv = toCockpitReview(result);
     assert(JSON.stringify(Object.keys(rv)) === JSON.stringify(['id', 'title', 'kind', 'created_at', 'connects_to', 'context_brief', 'items']), Object.keys(rv).join(','));
     assert(rv.kind === 'council' && rv.id === result.id, 'kind/id');
     assert(!Number.isNaN(Date.parse(rv.created_at)), 'created_at no es ISO');
     assert(Array.isArray(rv.connects_to) && rv.connects_to.every(s => typeof s === 'string'), 'connects_to');
     assert(rv.context_brief.length > 100 && rv.context_brief.includes(result.merge.recommendation), 'context_brief pobre');
-    const expectedItems = 1 + result.merge.contributions.length + result.merge.tensions.length;
+    const expectedItems = 2 + result.merge.contributions.length + result.merge.tensions.length;
     assert(rv.items.length === expectedItems, `items ${rv.items.length} != ${expectedItems}`);
     for (const it of rv.items) {
-      assert(JSON.stringify(Object.keys(it)) === JSON.stringify(['id', 'title', 'body_md', 'media', 'tags']), `item ${it.id}: ${Object.keys(it)}`);
-      assert(typeof it.title === 'string' && typeof it.body_md === 'string' && Array.isArray(it.media) && it.tags.every(t => typeof t === 'string'), `tipos de ${it.id}`);
+      assert(typeof it.title === 'string' && typeof it.headline === 'string' && it.visual && typeof it.body_md === 'string' && it.body_md.length > 0 && Array.isArray(it.media) && it.tags.every(t => typeof t === 'string'), `tipos de ${it.id}`);
+      assert(!/: (amenaza|oportunidad|idea)$/i.test(it.headline), `titular sin contenido: ${it.headline}`);
     }
     assert(new Set(rv.items.map(i => i.id)).size === rv.items.length, 'ids repetidos');
-    assert(rv.items[0].id === 'propuesta', 'el primer item debe ser la propuesta');
+    assert(rv.items[0].id === 'propuesta' && rv.items[1].id === 'participantes', 'orden: propuesta, participantes');
     const c = rv.items.find(i => i.id === 'c1');
     const contrib = result.merge.contributions[0];
     assert(c.tags[0] === contrib.persona && c.tags[1] === contrib.type, `tags ${c.tags}`);
+    assert(c.headline === contrib.titular && c.body_md.includes(contrib.text) && c.body_md.includes(contrib.why), 'aporte: titular arriba, detalle en body_md');
     assert(rv.items.some(i => i.tags[0] === 'tension'), 'falta item de tensión');
+  });
+
+  await check('revisión visual: TLDR, org de participantes, tensión para elegir, sin avisos al publicar', () => {
+    const rv = validateReview(toCockpitReview(result));
+    const [tldr, who] = rv.items;
+    assert(tldr.headline === result.merge.titular && tldr.visual.steps.map(s => s.label).join() === result.merge.pasos.join(), 'TLDR');
+    assert(tldr.body_md.includes(result.merge.recommendation) && tldr.stats.length === 3, 'TLDR: detalle y números');
+    assert(who.visual.kind === 'org' && who.visual.members.length === result.personas.length, 'org');
+    for (const p of result.personas) assert(who.visual.members.some(m => m.label === p.name), `falta ${p.name}`);
+    for (const layout of ['wide', 'tall']) assert(svgString(renderDiagram(who.visual, { layout })).includes(result.personas[0].name), layout);
+    const t = rv.items.find(i => i.tags[0] === 'tension');
+    assert(t.visual.type === 'compare' && t.visual.options.length === 3 && t.visual.options[2].id === 'propuesta', 'tensión: elegir un lado o la propuesta');
+    assert(result.personas.some(p => t.visual.options[0].label.startsWith(`${p.name}: `)), t.visual.options[0].label);
+    assert(reviewWarnings(rv).length === 0, reviewWarnings(rv).join(' | '));
+    const orig = console.warn;
+    const warned = [];
+    console.warn = (...a) => warned.push(a.join(' '));
+    try { assert(publishReview(toCockpitReview(result), root, { estricto: true }).warnings.length === 0, 'avisos'); } finally { console.warn = orig; }
+    assert(!warned.length, warned.join(' | '));
+    const adoptedFirst = rv.items.filter(i => /^c\d+$/.test(i.id)).map(i => i.tags[2]);
+    assert(adoptedFirst.join() === [...adoptedFirst].sort().join(), `adoptados primero: ${adoptedFirst}`);
+  });
+
+  await check('revisión visual: resultados sin titular (guardados antes) también quedan visuales', () => {
+    const old = JSON.parse(JSON.stringify(result));
+    delete old.merge.titular; delete old.merge.pasos;
+    for (const c of old.merge.contributions) { delete c.titular; c.text = 'Una frase bastante larga que no cabe en el titular porque tiene muchas más de diez palabras. Otra frase.'; }
+    for (const t of old.merge.tensions) { delete t.titular; delete t.posturas; delete t.resolucion_corta; }
+    const rv = validateReview(toCockpitReview(old));
+    assert(reviewWarnings(rv).length === 0, reviewWarnings(rv).join(' | '));
+    const t = rv.items.find(i => i.tags[0] === 'tension');
+    assert(t.visual.kind === 'flow', 'tensión sin posturas: diagrama');
+    assert(rv.items.find(i => i.id === 'c1').body_md.includes('Otra frase.'), 'detalle perdido');
+  });
+
+  await check('anonimización: los titulares los escribe el integrador sin nombres y las voces se re-atribuyen', () => {
+    const m = makeMock();
+    return invoke({ question: Q, personas: ['cto', 'pm'], root, chatFn: m.chatFn }).then(r => {
+      const merge = m.calls.find(c => c.system.startsWith('You are the integrator'));
+      assert(!/\bCTO\b|Product manager/.test(merge.user.split('# Your output')[0]), 'nombres visibles para el integrador');
+      assert(/titular/.test(merge.user), 'el prompt no pide titular');
+      const t = r.merge.tensions[0];
+      assert(t.posturas.length === 2 && t.posturas.every(p => ['cto', 'pm'].includes(p.persona)), JSON.stringify(t.posturas));
+    });
   });
 
   await check('saveResult escribe en councils/results y cockpit/reviews del root dado', () => {

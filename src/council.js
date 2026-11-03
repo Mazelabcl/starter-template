@@ -95,7 +95,6 @@ const LIMITS = {
 
 const CONTEXT_CAPS = { principles: 4000, decisions: 3000, per_file: 5000, total: 14000 };
 const COST_CONFIRM_THRESHOLD_USD = 0.5;
-const TYPE_LABEL = { threat: 'amenaza', opportunity: 'oportunidad', idea: 'idea' };
 
 // =============================================================================
 // Errores
@@ -572,14 +571,17 @@ function mergeUser({ question, contextText, voices }) {
     '# Your output',
     'Return exactly this JSON shape:',
     '{',
+    '  "titular": "the recommendation as a slide headline: what to do, MAX 10 words",',
+    '  "pasos": ["2-5 steps of the proposal for a diagram, MAX 5 words each"],',
     '  "integrated_proposal_md": "markdown, 150-350 words: the improved proposal with concrete steps. Tag each step with the voices that inspired it, e.g. [A] or [B,C].",',
-    '  "contributions": [{"text": "one distinct point", "voice": "A" (or "A,C" if several voices saw it), "type": "threat|opportunity|idea", "adopted": true, "why": "why it was adopted or not"}],',
-    '  "tensions": [{"between": ["A", "B"], "issue": "what they disagree on", "suggested_resolution": "how the proposal resolves it"}],',
+    '  "contributions": [{"titular": "the point itself, MAX 10 words", "text": "one distinct point", "voice": "A" (or "A,C" if several voices saw it), "type": "threat|opportunity|idea", "adopted": true, "why": "why it was adopted or not"}],',
+    '  "tensions": [{"titular": "the decision at stake, MAX 10 words", "between": ["A", "B"], "posturas": [{"voice": "A", "postura": "what this side wants, MAX 6 words"}, {"voice": "B", "postura": "..."}], "issue": "what they disagree on", "suggested_resolution": "how the proposal resolves it", "resolucion_corta": "that resolution, MAX 6 words"}],',
     '  "recommendation": "1-3 sentences, concrete, never null",',
     '  "confidence": "alta|media|baja",',
     '  "what_would_change_it": "what new fact would change the recommendation"',
     '}',
-    'Rules: deduplicate similar points into one contribution (list all voices that saw it). 6-16 contributions. Include every voice at least once.',
+    'Rules: deduplicate similar points into one contribution (list all voices that saw it). 6-10 contributions, only the ones that matter. Include every voice at least once.',
+    'Every "titular" is read alone on a big slide by a novice: it must state the actual content in plain words, not its category. Wrong: "Amenaza de costos". Right: "La voz puede triplicar el costo mensual". Never mention voices or roles inside a "titular", "pasos" or "postura".',
     '"adopted" must be honest: false when the proposal does not act on the point (deferred, rejected, out of scope). Do not adopt everything by default; explain in "why".',
     'Tensions: only real disagreements (can be empty). "between" lists only the voices on opposite sides, usually 2.',
     'Inside any free-text field, refer to a voice ONLY as "Voz A", "Voz B"... (never a bare letter like "A propone").',
@@ -673,6 +675,7 @@ export function reattribute(merge, map, personas) {
     const persona = ids[0] || 'desconocida';
     return {
       id: `c${i + 1}`,
+      titular: named(c.titular),
       text: named(c.text),
       persona,
       persona_name: nameOf(persona),
@@ -685,9 +688,24 @@ export function reattribute(merge, map, personas) {
   });
   const tensions = merge.tensions.map((t, i) => {
     const between = t.between.flatMap(splitVoices).map(resolveVoice).filter(Boolean);
-    return { id: `t${i + 1}`, between, between_names: between.map(nameOf), issue: named(t.issue), suggested_resolution: named(t.suggested_resolution) };
+    const posturas = (t.posturas || []).flatMap(p => {
+      const persona = splitVoices(p.voice).map(resolveVoice).find(Boolean);
+      return persona ? [{ persona, persona_name: nameOf(persona), postura: named(p.postura) }] : [];
+    });
+    return {
+      id: `t${i + 1}`,
+      titular: named(t.titular),
+      between,
+      between_names: between.map(nameOf),
+      posturas,
+      issue: named(t.issue),
+      suggested_resolution: named(t.suggested_resolution),
+      resolucion_corta: named(t.resolucion_corta),
+    };
   });
   return {
+    titular: named(merge.titular),
+    pasos: (merge.pasos || []).map(named),
     integrated_proposal_md: named(merge.integrated_proposal_md),
     recommendation: named(merge.recommendation).trim(),
     confidence: merge.confidence,
@@ -942,41 +960,162 @@ export function buildTldr(result) {
   ].join('\n');
 }
 
-// Contrato fijo del cockpit (Sprint 2): saveResult() lo publica con
-// publishReview() de src/cockpit.js, que lo valida y lo escribe de forma atómica.
-export function toCockpitReview(result) {
+// Titular de lámina: el del integrador o, en resultados viejos que no lo traen, la
+// primera frase del texto largo. Nunca pasa de 10 palabras; el resto queda en body_md.
+function titularOf(short, long) {
+  if (typeof short === 'string' && short.trim()) return capWords(short);
+  const clean = String(long || '').replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim();
+  return capWords(clean.split(/(?<=[.!?:;])\s/)[0]);
+}
+
+const CONTRIBUTION_LOOK = {
+  threat: { label: 'Amenaza', icon: 'alert' },
+  opportunity: { label: 'Oportunidad', icon: 'rocket' },
+  idea: { label: 'Idea', icon: 'sparkles' },
+};
+
+function tldrSlide(result) {
   const m = result.merge;
-  const items = [{
+  const adopted = m.contributions.filter(c => c.adopted).length;
+  const pasos = (m.pasos || []).filter(Boolean).slice(0, 5).map(p => ({ label: capWords(p, 6) }));
+  const steps = pasos.length >= 2 ? pasos : [
+    { label: 'Tu pregunta', icon: 'chat', tone: 'you' },
+    { label: `${result.metadata.personas_alive} expertos`, icon: 'users' },
+    { label: 'Propuesta integrada', icon: 'merge' },
+    { label: 'Tú decides', icon: 'up', tone: 'you' },
+  ];
+  return {
     id: 'propuesta',
-    title: 'Propuesta integrada',
+    title: 'Recomendación del council',
+    kicker: 'Recomendación del council',
+    headline: titularOf(m.titular, m.recommendation),
+    ask: '¿La aplicamos?',
+    visual: { type: 'diagram', kind: 'flow', steps },
+    stats: [
+      { value: m.confidence.charAt(0).toUpperCase() + m.confidence.slice(1), label: 'confianza' },
+      { value: `${adopted}/${m.contributions.length}`, label: 'aportes adoptados' },
+      { value: m.tensions.length, label: m.tensions.length === 1 ? 'tensión' : 'tensiones' },
+    ],
     body_md: `**Pregunta:** ${result.question}\n\n${m.integrated_proposal_md}\n\n**Recomendación:** ${m.recommendation}\n\n**Confianza:** ${m.confidence}. **Cambiaría si:** ${m.what_would_change_it}`,
     media: [],
     tags: ['propuesta', `confianza-${m.confidence}`],
-  }];
-  for (const c of m.contributions) {
-    const seen = c.also_seen_by.length ? ` (también lo vio: ${c.also_seen_by.join(', ')})` : '';
-    items.push({
-      id: c.id,
-      title: `${capWords(c.persona_name, TITLE_MAX_WORDS - 1)}: ${TYPE_LABEL[c.type]}`,
-      body_md: `${c.text}\n\n${c.adopted ? 'Adoptado' : 'No adoptado'} en la propuesta: ${c.why}${seen}`,
-      media: [],
-      tags: [c.persona, c.type, c.adopted ? 'adoptado' : 'no-adoptado', ...(c.source === 'redteam' ? ['redteam'] : [])],
-    });
+  };
+}
+
+function participantsSlide(result) {
+  const m = result.merge;
+  const failed = new Set((result.metadata.failed || []).map(f => f.persona));
+  const members = result.personas.map(p => {
+    const mine = m.contributions.filter(c => c.persona === p.id || c.also_seen_by.includes(p.id));
+    const used = mine.filter(c => c.adopted).length;
+    return failed.has(p.id)
+      ? { label: p.name, note: 'Sin respuesta', icon: 'user', tone: 'missing' }
+      : { label: p.name, note: `${mine.length} ${mine.length === 1 ? 'aporte' : 'aportes'}, ${used} ${used === 1 ? 'adoptado' : 'adoptados'}`, icon: 'user' };
+  });
+  if (result.redteam && !result.personas.some(p => p.id === 'contrarian')) {
+    members.push({ label: 'Contrarian', note: 'Atacó la propuesta', icon: 'shield' });
   }
-  for (const t of m.tensions) {
-    items.push({
-      id: t.id,
-      title: capWords(`Tensión: ${t.between_names.map(n => capWords(n, 4)).join(' vs ')}`),
-      body_md: `**Entre:** ${t.between_names.join(' y ')}\n\n${t.issue}\n\n**Resolución sugerida:** ${t.suggested_resolution}`,
-      media: [],
-      tags: ['tension', ...t.between],
-    });
-  }
+  const alive = result.metadata.personas_alive;
+  return {
+    id: 'participantes',
+    title: 'Quién participó',
+    kicker: 'Quién participó',
+    headline: `${alive} expertos opinaron cada uno por separado`,
+    ask: '¿Faltó alguien?',
+    visual: { type: 'diagram', kind: 'org', lead: { label: 'Integrador', note: 'Fusiona lo mejor de cada uno', icon: 'merge' }, members },
+    stats: [
+      { value: `$${result.metadata.cost_usd.toFixed(3)}`, label: 'costo en USD' },
+      { value: `${Math.round(result.metadata.duration_seconds)} s`, label: 'duración' },
+    ],
+    body_md: [
+      'El integrador recibió las respuestas sin nombres, para juzgar cada punto por lo que dice y no por quién lo dijo.',
+      '',
+      ...result.personas.map(p => `- **${p.name}** (\`${p.model}\`)${failed.has(p.id) ? ': no respondió' : ''}`),
+      '',
+      `**Integrador:** \`${result.metadata.synth_model}\``,
+    ].join('\n'),
+    media: [],
+    tags: ['participantes'],
+  };
+}
+
+function tensionSlide(t) {
+  const sides = (t.posturas || []).slice(0, 2);
+  const shortFix = titularOf(t.resolucion_corta, t.suggested_resolution);
+  const visual = sides.length === 2
+    ? {
+      type: 'compare',
+      options: [
+        ...sides.map((s, i) => ({ id: i === 0 ? 'a' : 'b', label: `${s.persona_name}: ${s.postura}`, icon: 'user' })),
+        { id: 'propuesta', label: `Propuesta: ${shortFix}`, icon: 'merge' },
+      ],
+    }
+    : {
+      type: 'diagram',
+      kind: 'flow',
+      steps: [
+        { label: t.between_names[0] || 'Un lado', icon: 'user' },
+        { label: shortFix, note: 'Propuesta', icon: 'merge', tone: 'you' },
+        { label: t.between_names[1] || 'Otro lado', icon: 'user' },
+      ],
+    };
+  return {
+    id: t.id,
+    title: titularOf(t.titular, t.issue),
+    kicker: capWords(`Tensión: ${t.between_names.map(n => capWords(n, 4)).join(' vs ')}`),
+    headline: titularOf(t.titular, t.issue),
+    ask: sides.length === 2 ? '¿Con cuál te quedas?' : '¿Te sirve esta resolución?',
+    visual,
+    body_md: `**Entre:** ${t.between_names.join(' y ')}\n\n${t.issue}\n\n**Resolución sugerida:** ${t.suggested_resolution}`,
+    media: [],
+    tags: ['tension', ...t.between],
+  };
+}
+
+function contributionSlide(c, nameOf) {
+  const look = CONTRIBUTION_LOOK[c.type];
+  const also = c.also_seen_by.map(nameOf);
+  const seen = also.length ? ` (también lo vio: ${also.join(', ')})` : '';
+  return {
+    id: c.id,
+    title: titularOf(c.titular, c.text),
+    kicker: `${capWords(c.persona_name, 5)} · ${look.label}`,
+    headline: titularOf(c.titular, c.text),
+    ask: c.adopted ? '¿Te convence?' : '¿Lo sumamos igual?',
+    visual: {
+      type: 'diagram',
+      kind: 'flow',
+      steps: [
+        { label: c.persona_name, ...(also.length ? { note: `También: ${also.join(', ')}` } : {}), icon: 'user' },
+        { label: look.label, icon: look.icon },
+        c.adopted ? { label: 'Adoptado', icon: 'check', tone: 'ok' } : { label: 'No adoptado', icon: 'close', tone: 'missing' },
+      ],
+    },
+    body_md: `${c.text}\n\n${c.adopted ? 'Adoptado' : 'No adoptado'} en la propuesta: ${c.why}${seen}`,
+    media: [],
+    tags: [c.persona, c.type, c.adopted ? 'adoptado' : 'no-adoptado', ...(c.source === 'redteam' ? ['redteam'] : [])],
+  };
+}
+
+// Revisión visual para el cockpit (cockpit/README.md): recomendación, quién participó,
+// una lámina por tensión y un aporte por lámina, los adoptados primero. saveResult() la
+// publica con publishReview() de src/cockpit.js, que la valida y la escribe de forma atómica.
+export function toCockpitReview(result) {
+  const m = result.merge;
+  const names = new Map(result.personas.map(p => [p.id, p.name]));
+  const nameOf = id => names.get(id) || id;
+  const contributions = [...m.contributions.filter(c => c.adopted), ...m.contributions.filter(c => !c.adopted)];
+  const items = [
+    tldrSlide(result),
+    participantsSlide(result),
+    ...m.tensions.map(tensionSlide),
+    ...contributions.map(c => contributionSlide(c, nameOf)),
+  ];
   const who = result.personas.map(p => p.name).join(', ');
   const topTension = m.tensions[0] ? ` La tensión principal es entre ${m.tensions[0].between_names.join(' y ')}: ${m.tensions[0].issue}` : '';
   return {
     id: result.id,
-    title: `Council: ${capWords(result.question, TITLE_MAX_WORDS - 1)}`,
+    title: `Council: ${titularOf(m.titular, result.question).split(' ').slice(0, TITLE_MAX_WORDS - 1).join(' ')}`,
     kind: 'council',
     created_at: result.created_at,
     connects_to: [`councils/results/${result.id}.json`, ...(result.template ? [`councils/templates/${result.template}.json`] : [])],
@@ -984,7 +1123,7 @@ export function toCockpitReview(result) {
       `Council de expertos (${result.mode}) sobre: "${result.question}". Participaron ${who}. ` +
       `Cada persona opinó por separado y luego se fusionó lo mejor de cada una. ` +
       `Recomendación: ${m.recommendation} (confianza ${m.confidence}).${topTension} ` +
-      `Hay ${m.contributions.length} aportes atribuidos para votar con pulgar arriba o abajo; ` +
+      `Aldot ve cada ítem como una lámina con un titular y un diagrama: nombra lo que está viendo. Hay ${m.contributions.length} aportes atribuidos para votar con pulgar arriba o abajo; ` +
       'guía al usuario aporte por aporte, explicando en palabras simples qué vio cada persona y por qué se adoptó o no.',
     items,
   };

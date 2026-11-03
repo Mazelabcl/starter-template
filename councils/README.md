@@ -54,7 +54,7 @@ Personas base (16; `steve-jobs` es un alias de `visionario`): `cto`, `sre`, `seg
 ## Dónde queda el resultado
 
 - `councils/results/<id>.json`: todo (respuestas de cada persona, fusión, red team, costo real).
-- `cockpit/reviews/<id>.json`: la revisión para el cockpit, con un item por propuesta, aporte y tensión, para votar con pulgar arriba o abajo. Cada título tiene como máximo 10 palabras; el detalle está dentro del item.
+- `cockpit/reviews/<id>.json`: la revisión para el cockpit, en láminas: la recomendación con sus pasos, quién participó (diagrama), una lámina por tensión para elegir un lado con un clic y un aporte por lámina, los adoptados primero. Cada titular dice el contenido en máximo 10 palabras (lo escribe el integrador en el campo `titular`); el detalle queda detrás de "Ver más".
 
 El council **nunca** escribe en `memory/`. Si decides algo a partir de él, Claude lo registra con `addDecision()` solo cuando tú lo confirmas.
 

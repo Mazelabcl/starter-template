@@ -3,16 +3,19 @@
   "$id": "council-merge",
   "title": "Síntesis integrada (fase 2). Las voces vienen anonimizadas (A, B, C...).",
   "type": "object",
-  "required": ["integrated_proposal_md", "contributions", "tensions", "recommendation", "confidence", "what_would_change_it"],
+  "required": ["titular", "integrated_proposal_md", "contributions", "tensions", "recommendation", "confidence", "what_would_change_it"],
   "properties": {
+    "titular": { "type": "string", "minLength": 3, "description": "La recomendación como titular de lámina: máximo 10 palabras." },
+    "pasos": { "type": "array", "items": { "type": "string", "minLength": 2 }, "description": "Pasos de la propuesta para el diagrama: máximo 5 palabras cada uno." },
     "integrated_proposal_md": { "type": "string", "minLength": 40 },
     "contributions": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["text", "voice", "type", "adopted", "why"],
+        "required": ["titular", "text", "voice", "type", "adopted", "why"],
         "properties": {
+          "titular": { "type": "string", "minLength": 3, "description": "El contenido del aporte en máximo 10 palabras." },
           "text": { "type": "string", "minLength": 3 },
           "voice": { "type": "string", "minLength": 1 },
           "type": { "enum": ["threat", "opportunity", "idea"] },
@@ -25,9 +28,20 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["between", "issue", "suggested_resolution"],
+        "required": ["titular", "between", "issue", "suggested_resolution"],
         "properties": {
+          "titular": { "type": "string", "minLength": 3, "description": "La decisión en juego en máximo 10 palabras." },
           "between": { "type": "array", "minItems": 2, "items": { "type": "string" } },
+          "posturas": {
+            "type": "array",
+            "description": "Qué quiere cada lado, máximo 6 palabras, para elegir con un clic.",
+            "items": {
+              "type": "object",
+              "required": ["voice", "postura"],
+              "properties": { "voice": { "type": "string", "minLength": 1 }, "postura": { "type": "string", "minLength": 2 } }
+            }
+          },
+          "resolucion_corta": { "type": "string", "minLength": 2, "description": "La resolución sugerida en máximo 6 palabras." },
           "issue": { "type": "string", "minLength": 3 },
           "suggested_resolution": { "type": "string", "minLength": 3 }
         }
