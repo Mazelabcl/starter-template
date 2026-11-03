@@ -209,6 +209,9 @@ body.talk-open .deck { right: min(420px, 100vw); }
 .hs { position: absolute; border: 3px solid var(--hs, #ff3d00); border-radius: 6px; box-shadow: 0 0 0 2px rgba(255, 255, 255, .75); }
 .hs-n { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #ff3d00; color: #fff; font-size: 14px; font-weight: 800; flex: none; }
 .hs > .hs-n { position: absolute; top: -13px; left: -13px; box-shadow: 0 0 0 2px #fff; }
+.ba-pins { position: relative; pointer-events: none; }
+.ba-pins .ba-img { visibility: hidden; }
+.hs-pin { position: absolute; margin: -13px 0 0 -13px; box-shadow: 0 0 0 2px #fff; }
 .hs-pulse { animation: hsPulse 1s ease-out 2; }
 @keyframes hsPulse { 50% { box-shadow: 0 0 0 10px rgba(255, 61, 0, .4); } }
 .hs-chips { flex: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 100%; }

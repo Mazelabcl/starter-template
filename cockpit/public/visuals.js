@@ -51,11 +51,11 @@ export function diagramNode(visual, { layout, density } = {}) {
 // ---------------------------------------------------------------------------
 
 // El nombre de cada zona va en las pastillas de abajo: sobre la imagen solo el número.
-function hotspotLayer(hotspots) {
+function hotspotLayer(hotspots, { numbers = true } = {}) {
   const layer = el('div', { class: 'hs-layer', 'aria-hidden': 'true' });
   (hotspots || []).forEach((s, i) => {
     const box = el('div', { class: 'hs', 'data-n': i + 1 },
-      el('span', { class: 'hs-n', text: String(i + 1) }));
+      numbers ? el('span', { class: 'hs-n', text: String(i + 1) }) : null);
     box.style.left = `${s.x * 100}%`;
     box.style.top = `${s.y * 100}%`;
     box.style.width = `${s.w * 100}%`;
@@ -63,6 +63,20 @@ function hotspotLayer(hotspots) {
     layer.appendChild(box);
   });
   return layer;
+}
+
+// Números fuera del recorte del deslizador: se ven aunque la zona quede del lado "antes".
+// La copia invisible de la imagen da la misma altura que "después", a la que se refieren las zonas.
+function hotspotPins(hotspots, afterSrc) {
+  const layer = el('div', { class: 'hs-layer', 'aria-hidden': 'true' });
+  (hotspots || []).forEach((s, i) => {
+    const pin = el('span', { class: 'hs-n hs-pin', text: String(i + 1) });
+    pin.style.left = `${s.x * 100}%`;
+    pin.style.top = `${s.y * 100}%`;
+    layer.appendChild(pin);
+  });
+  return el('div', { class: 'ba-pins' },
+    el('img', { class: 'ba-img', src: afterSrc, alt: '', draggable: 'false' }), layer);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,8 +88,9 @@ const START_POS = 30; // parte mostrando sobre todo el "después", que es lo nue
 function beforeAfterFrame(view) {
   const before = el('img', { class: 'ba-img ba-before', src: mediaUrl(view.before), alt: 'Antes', draggable: 'false' });
   const after = el('img', { class: 'ba-img', src: mediaUrl(view.after), alt: 'Después', draggable: 'false' });
-  const afterWrap = el('div', { class: 'ba-after' }, after, hotspotLayer(view.hotspots));
-  const scroll = el('div', { class: 'ba-scroll' }, el('div', { class: 'ba-inner' }, afterWrap, before));
+  const afterWrap = el('div', { class: 'ba-after' }, after, hotspotLayer(view.hotspots, { numbers: false }));
+  const pins = hotspotPins(view.hotspots, mediaUrl(view.after));
+  const scroll = el('div', { class: 'ba-scroll' }, el('div', { class: 'ba-inner' }, afterWrap, before, pins));
   const handle = el('button', {
     class: 'ba-handle', type: 'button', role: 'slider', 'aria-label': 'Mover la línea entre antes y después',
     'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(START_POS),
