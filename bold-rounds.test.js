@@ -357,6 +357,14 @@ try {
     assert(/misma lente/.test(msg), msg);
   });
 
+  await check('modelo: la línea de comandos exige --modelo al configurar', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const dir = `${OUT2}-sin-modelo`;
+    const r = spawnSync(process.execPath, ['scripts/bold_rounds.js', 'init', SITE, '--out', dir], { encoding: 'utf8' });
+    assert(r.status !== 0 && /Falta --modelo/.test(r.stdout + r.stderr), r.stdout + r.stderr);
+    assert(!existsSync(dir), 'no debe crear la corrida');
+  });
+
   await check('lentes: after escribe "Mirada" en notes.md y la revisión la muestra', async () => {
     writeFileSync(join(OUT2, '001', 'blind', 'index.html'), '<h1 style="font-size:90px">Café</h1><a href="#">Pide ahora</a>');
     writeFileSync(join(OUT2, '001', 'blind', 'notes.md'), '# Ronda 1\nTitular: Pedir primero\n');

@@ -16,10 +16,10 @@ The helper embeds it in `rounds/NNN/prompt-<variant>.md` together with the guard
 
 ## Who innovates
 
-The two variants (blind, context) are the ones that innovate: two subagents, each with its own LENS and a cheap MODEL (default `sonnet`). The orchestrator (you) only prepares, checks and publishes; you never design the change yourself.
+The two variants (blind, context) are the ones that innovate: two subagents, each with its own LENS and the MODEL the user chose at setup. The orchestrator (you) only prepares, checks and publishes; you never design the change yourself.
 
 - **Lens** = a concrete angle from `councils/personas/*.json` (field `lente`: what it looks at + the question it must answer), e.g. `director-arte`, `growth`, `usuario-novato`. It is a short section added to the prompt; the user's core instruction and guardrails stay literal. Blind gets its lens but no history. `init --lentes a,b,c` sets the rotation, default `auto` (picked from target and goal, never the same lens for both variants, no repeated pair across rounds). One-off override: `prepare N --lente-blind X --lente-context Y`. Unknown ids print the valid list. The lens lands in `notes.md` (`Mirada:`) and as a label on the slides.
-- **Model**: `init --modelo sonnet|opus|haiku` (default sonnet), override per round with `prepare N --modelo M`. `prepare` prints `MODELO_PARA_AGENT`: in method A pass exactly that value as the Agent tool's `model` parameter on BOTH calls (never leave it empty: the subagent would inherit the session's Opus). Method B (`run`) passes `--model` to `claude -p` by itself.
+- **Model**: never assume one. Ask at setup (below) and pass `init --modelo sonnet|opus|haiku` (required by the CLI), override per round with `prepare N --modelo M`. `prepare` prints `MODELO_PARA_AGENT`: in method A pass exactly that value as the Agent tool's `model` parameter on BOTH calls (never leave it empty: the subagent would inherit the session's Opus). Method B (`run`) passes `--model` to `claude -p` by itself.
 
 ## Hard rules
 
@@ -50,10 +50,11 @@ Notes only show behind "Ver más". `review` computes numbered hotspots from the 
 ## Setup (once per run)
 
 ```bash
-node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<objetivo en una frase>"
+node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<objetivo en una frase>" --modelo <modelo>
 ```
 (esto copia el objetivo a `rounds/working/` sin tocar el original y crea `rounds/DESIGN.md`)
 
+- Unless the user already named a model for this run, ask before `init`: `¿Qué modelo uso en cada variante? Sonnet (equilibrado), Opus (más potente, gasta más) o Haiku (más barato).` Do not pick for them.
 - If `/bold-rounds` came without N, use 3. Without a clear goal, ask once: `¿Qué quieres lograr con el rediseño? (por ejemplo: más pedidos, que se vea actual, que se entienda mejor)`.
 - If `rounds/run.json` already exists, ask whether to continue that run or start another one with `--out rounds-<nombre>` (all later commands then need the same `--out`).
 - Screenshots need Playwright. If the helper prints the install hint, show it to the user as copy-paste steps and wait. Documents (`.md`, `.txt`) are rendered as a simple page; other files skip screenshots and are judged by text diff.

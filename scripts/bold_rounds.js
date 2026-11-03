@@ -1066,7 +1066,9 @@ async function cli(argv) {
   switch (cmd) {
     case 'init': {
       if (!a) throw new BoldError('Falta el objetivo: init <carpeta|archivo|url>');
-      const run = await init(a, { out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal, lentes: flags.lentes || 'auto', modelo: flags.modelo || DEFAULT_MODEL });
+      // El modelo lo elige el usuario al configurar: la línea de comandos no asume ninguno.
+      if (!flags.modelo) throw new BoldError(`Falta --modelo: pregúntale al usuario qué modelo quiere para esta corrida (${MODELS.join(' | ')}).`);
+      const run = await init(a, { out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal, lentes: flags.lentes || 'auto', modelo: flags.modelo });
       print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Rondas máx: ${run.max_rounds}, pausa cada ${run.pause_every}. Lentes: ${Array.isArray(run.lentes) ? run.lentes.join(', ') : 'auto'}. Modelo: ${run.modelo}.${run.note ? `\n${run.note}` : ''}`);
       return 0;
     }
