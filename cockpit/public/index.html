@@ -2,58 +2,66 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Cockpit</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#/">Cockpit</a>
-    <div class="topbar-pills">
-      <span id="live-pill" class="pill pill-muted">conectando…</span>
-      <span id="voice-pill" class="pill pill-muted">voz: …</span>
+    <a id="brand" class="brand" href="#/" aria-label="Ir al inicio del cockpit">Cockpit</a>
+    <span id="top-title" class="top-title"></span>
+    <div class="topbar-right">
+      <span id="live-pill" class="pill pill-warn" hidden>reconectando…</span>
+      <button id="btn-talk" class="btn btn-ghost btn-top" type="button" aria-label="Conversar sobre esta revisión" title="Conversar sobre esta revisión" hidden></button>
+      <a id="btn-help" class="btn btn-help btn-top" href="#/ayuda">Qué puedo pedir</a>
     </div>
   </header>
 
-  <main class="wrap">
-    <section class="roadmap" aria-label="Roadmap">
-      <div class="col">
-        <h2 class="col-title"><span class="dot dot-done"></span>Hecho</h2>
-        <div id="rm-done" class="col-body"></div>
-      </div>
-      <div class="col col-now">
-        <h2 class="col-title"><span class="dot dot-now"></span>Ahora</h2>
-        <div id="rm-now" class="col-body"></div>
-      </div>
-      <div class="col">
-        <h2 class="col-title"><span class="dot dot-next"></span>Sigue</h2>
-        <div id="rm-next" class="col-body"></div>
-      </div>
-    </section>
-
-    <section id="view-home">
-      <h2 class="section-title">Revisiones</h2>
-      <div id="review-list" class="review-list"></div>
-    </section>
-
-    <section id="view-review" hidden>
-      <a class="back" href="#/">&larr; Todas las revisiones</a>
-      <div id="focus" class="focus"></div>
-      <div id="changed-banner" class="banner" hidden>
-        Esta revisión cambió en disco. <button id="reload-review" class="btn btn-small" type="button">Recargar</button>
-      </div>
-      <div id="summary-box" class="summary-box" hidden></div>
-      <div id="items" class="items"></div>
-    </section>
+  <main id="view-home" class="home">
+    <h1 id="home-title" class="home-title"></h1>
+    <section id="timeline" class="tl" aria-label="Línea de tiempo de sprints"></section>
   </main>
 
-  <div id="savebar" class="savebar" hidden>
-    <span id="save-status" class="save-status"></span>
-    <div class="savebar-actions">
-      <button id="btn-talk" class="btn btn-ghost" type="button">Conversar sobre esta revisión</button>
-      <button id="btn-save" class="btn btn-primary" type="button">Guardar feedback</button>
+  <main id="view-help" class="help" hidden>
+    <h1 class="home-title">Qué puedo pedir</h1>
+    <div id="help-cards" class="help-cards"></div>
+  </main>
+
+  <section id="view-deck" class="deck" hidden aria-label="Presentación de la revisión">
+    <div id="changed-banner" class="banner" hidden>
+      Esta revisión cambió. <button id="reload-review" class="btn btn-small" type="button">Recargar</button>
     </div>
-  </div>
+    <div id="deck-stage" class="deck-stage"></div>
+    <div id="comment-pop" class="comment-pop" hidden>
+      <textarea id="comment-input" rows="3" placeholder="Tu comentario…" aria-label="Comentario"></textarea>
+    </div>
+    <footer class="deck-bar">
+      <div id="deck-actions" class="deck-actions">
+        <span id="slide-ask" class="slide-ask"></span>
+        <button id="vote-up" class="vote vote-up" type="button" aria-label="Me gusta" title="Me gusta"></button>
+        <button id="vote-down" class="vote vote-down" type="button" aria-label="No me gusta" title="No me gusta"></button>
+        <button id="btn-comment" class="vote vote-comment" type="button" aria-label="Comentar" title="Comentar"></button>
+        <button id="btn-more" class="btn btn-more" type="button">Ver más</button>
+      </div>
+      <div class="deck-nav">
+        <button id="deck-prev" class="nav-btn" type="button" aria-label="Lámina anterior"></button>
+        <div id="deck-dots" class="deck-dots" role="tablist" aria-label="Láminas"></div>
+        <button id="deck-next" class="nav-btn" type="button" aria-label="Lámina siguiente"></button>
+      </div>
+      <div class="deck-save">
+        <span id="save-status" class="save-status" aria-live="polite"></span>
+        <button id="btn-save" class="btn btn-small" type="button" aria-label="Guardar feedback" hidden>Guardar</button>
+      </div>
+    </footer>
+    <aside id="more-sheet" class="more-sheet" hidden aria-label="Más detalle">
+      <div class="more-head">
+        <strong id="more-title"></strong>
+        <button id="more-close" class="btn btn-small" type="button">Cerrar</button>
+      </div>
+      <div id="more-body" class="more-body"></div>
+    </aside>
+  </section>
 
   <aside id="talk" class="talk" hidden aria-label="Conversación">
     <div class="talk-head">

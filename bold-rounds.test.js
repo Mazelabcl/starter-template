@@ -13,8 +13,9 @@ import { createHash } from 'node:crypto';
 import {
   init, prepare, after, apply, buildRoundReview, review, choiceFromFeedback, pixelDiff,
   encodePNG, decodePNG, takeShots, autoStreak, loadRun, buildPrompt, CORE_PROMPT, BoldError,
+  changedRegions, labelRegion, parseNotes, realChangeRatio,
 } from './scripts/bold_rounds.js';
-import { validateReview, getReview } from './src/cockpit.js';
+import { validateReview, getReview, reviewWarnings, saveFeedback } from './src/cockpit.js';
 
 let passed = 0;
 let failed = 0;
@@ -30,6 +31,7 @@ async function check(label, fn) {
   }
 }
 function assert(c, msg) { if (!c) throw new Error(msg); }
+const firstLabelWords = s => String(s).trim().split(/\s+/).length;
 
 const sha = p => createHash('sha1').update(readFileSync(p)).digest('hex');
 
@@ -96,6 +98,93 @@ try {
     assert(pixelDiff(a, encodePNG(10, 20, solid(10, 20, [0, 0, 0]))).ratio === 0.5, 'alto distinto cuenta como cambio');
   });
 
+  // Lienzo de prueba: rectángulos de color sobre un fondo.
+  function canvas(w, h, bg, rects = []) {
+    const buf = solid(w, h, bg);
+    for (const { x, y, w: rw, h: rh, c } of rects) {
+      for (let py = y; py < y + rh; py++) {
+        for (let px = x; px < x + rw; px++) {
+          const i = (py * w + px) * 4;
+          buf[i] = c[0]; buf[i + 1] = c[1]; buf[i + 2] = c[2];
+        }
+      }
+    }
+    return { width: w, height: h, data: buf };
+  }
+  const WHITE = [255, 255, 255];
+  const RED = [220, 30, 30];
+  const BLUE = [20, 40, 200];
+
+  await check('hotspots: imágenes iguales no marcan ninguna zona', () => {
+    const a = canvas(300, 300, WHITE, [{ x: 10, y: 10, w: 50, h: 50, c: RED }]);
+    assert(changedRegions(a, a).length === 0, 'debió ser vacío');
+  });
+
+  await check('hotspots: un bloque nuevo da una zona con su caja, en coordenadas 0..1', () => {
+    const a = canvas(600, 600, WHITE);
+    const b = canvas(600, 600, WHITE, [{ x: 120, y: 240, w: 240, h: 120, c: RED }]);
+    const r = changedRegions(a, b);
+    assert(r.length === 1, `zonas: ${r.length}`);
+    const near = (v, e) => Math.abs(v - e) < 0.03;
+    assert(near(r[0].x, 0.2) && near(r[0].y, 0.4) && near(r[0].w, 0.4) && near(r[0].h, 0.2), JSON.stringify(r[0]));
+  });
+
+  await check('hotspots: dos cambios lejanos son dos zonas, en orden de lectura', () => {
+    const a = canvas(600, 600, WHITE);
+    const b = canvas(600, 600, WHITE, [{ x: 300, y: 450, w: 200, h: 100, c: BLUE }, { x: 40, y: 40, w: 200, h: 100, c: RED }]);
+    const r = changedRegions(a, b);
+    assert(r.length === 2 && r[0].y < r[1].y, JSON.stringify(r));
+  });
+
+  await check('hotspots: respeta el máximo y descarta líneas finas', () => {
+    const a = canvas(600, 900, WHITE);
+    const rects = [0, 1, 2, 3, 4, 5, 6].map(i => ({ x: 40, y: 20 + i * 120, w: 200, h: 80, c: RED }));
+    assert(changedRegions(a, canvas(600, 900, WHITE, rects), { maxRegions: 3 }).length === 3, 'máximo');
+    assert(changedRegions(a, canvas(600, 900, WHITE, [{ x: 0, y: 300, w: 600, h: 2, c: RED }])).length === 0, 'una línea no es zona');
+  });
+
+  await check('hotspots: lo que solo se corrió hacia abajo no cuenta como cambio', () => {
+    const rows = [0, 1, 2, 3].map(i => ({ x: 40, y: 100 + i * 100, w: 200, h: 40, c: BLUE }));
+    const a = canvas(400, 600, WHITE, rows);
+    const moved = rows.map(r => ({ ...r, y: r.y + 80 }));
+    const b = canvas(400, 680, WHITE, [{ x: 20, y: 10, w: 300, h: 50, c: RED }, ...moved]);
+    const r = changedRegions(a, b);
+    assert(r.length === 1 && r[0].y < 0.1, JSON.stringify(r));
+    assert(realChangeRatio(a, b) < 0.1, `ratio ${realChangeRatio(a, b)}`);
+  });
+
+  await check('hotspots: un rediseño total se divide en bloques en vez de una caja gigante', () => {
+    const a = canvas(600, 900, [250, 240, 200]);
+    // Mismo fondo nuevo en toda la página, con contenido solo en tres bloques.
+    const blocks = [{ x: 40, y: 40, w: 300, h: 90 }, { x: 40, y: 380, w: 300, h: 90 }, { x: 40, y: 720, w: 300, h: 90 }].map(r => ({ ...r, c: WHITE }));
+    const r = changedRegions(a, canvas(600, 900, [30, 20, 15], blocks));
+    assert(r.length === 3, `zonas: ${JSON.stringify(r)}`);
+    for (const z of r) assert(z.w * z.h < 0.2, 'zona demasiado grande');
+  });
+
+  await check('hotspots: el nombre sale del texto más grande, sin precios ni palabras colgando', () => {
+    const region = { x: 0, y: 0, w: 1, h: 0.5 };
+    const blocks = [
+      { tag: 'td', text: '$2.800', x: 10, y: 10, w: 50, h: 20, fs: 40 },
+      { tag: 'p', text: 'texto chico', x: 10, y: 60, w: 50, h: 20, fs: 12 },
+      { tag: 'h1', text: 'Pide tu café para llevar hoy mismo', x: 10, y: 100, w: 400, h: 60, fs: 36 },
+    ];
+    assert(labelRegion(region, blocks, 800, 1000) === 'Pide tu café para llevar', labelRegion(region, blocks, 800, 1000));
+    const hanging = labelRegion(region, [{ tag: 'p', text: 'Café de grano tostado en casa', x: 10, y: 10, w: 100, h: 20, fs: 16 }], 800, 1000);
+    assert(hanging === 'Café de grano tostado', hanging);
+    const label = labelRegion({ x: 0, y: 0.8, w: 1, h: 0.1 }, [], 800, 1000);
+    assert(label === 'Zona inferior', label);
+    assert(labelRegion(region, [{ tag: 'img', text: '', x: 10, y: 10, w: 100, h: 100, fs: 0 }], 800, 1000) === 'Imagen nueva', 'imagen');
+    for (const b of blocks) assert(firstLabelWords(labelRegion(region, [b], 800, 1000)) <= 5, 'máximo 5 palabras');
+  });
+
+  await check('notes.md: lee titular, categoría y una línea por cambio', () => {
+    const n = parseNotes('# Ronda 1\nTitular: Pedir es lo primero\nCategoría: jerarquía\nCambio 1: Botón grande\nCambio 2: Menos texto\nPor qué: vende más');
+    assert(n.titular === 'Pedir es lo primero' && n.categoria === 'jerarquía', JSON.stringify(n));
+    assert(n.cambios.join('|') === 'Botón grande|Menos texto', n.cambios.join('|'));
+    assert(parseNotes('solo texto').titular === '', 'sin titular');
+  });
+
   await check('init: copia sin node_modules y no toca el original', async () => {
     const run = await init(SITE, { out: OUT, rounds: 3, pauseEvery: 2, goal: 'más pedidos' });
     assert(run.kind === 'folder' && run.entry === 'index.html' && run.web, 'run.json incorrecto');
@@ -130,7 +219,7 @@ try {
     assert(r.variants.context.rejected && r.variants.context.files_changed.length === 0, 'context debió rechazarse');
   });
 
-  await check('review: JSON kind "rounds" válido, media relativa, sin "integrar" si una falla', () => {
+  await check('review: JSON kind "rounds" válido, media relativa, sin "elegir" si una falla', () => {
     const rv = buildRoundReview(1, { out: OUT, root: ROOT });
     validateReview(JSON.parse(JSON.stringify(rv)));
     assert(rv.kind === 'rounds', 'kind');
@@ -142,11 +231,35 @@ try {
     assert(getReview(pub.review.id, ROOT), 'no quedó publicada en cockpit/reviews');
   });
 
-  await check('review: con ambas válidas agrega "integrar"', async () => {
+  await check('review: cada variante es un antes/después con hotspots, en escritorio y celular', () => {
+    const blind = buildRoundReview(1, { out: OUT, root: ROOT }).items[0];
+    const v = blind.visual;
+    assert(v.type === 'before_after' && v.before === 'rounds/001/shots/before-desktop.png' && v.after === 'rounds/001/shots/blind-desktop.png', JSON.stringify(v));
+    assert(v.views.map(x => x.device).join(',') === 'desktop,mobile', 'vistas');
+    assert(v.hotspots.length >= 1 && v.hotspots.every(h => h.label && h.label.split(/\s+/).length <= 5), JSON.stringify(v.hotspots));
+    assert(blind.headline && blind.headline.split(/\s+/).length <= 10, blind.headline);
+    assert(blind.stats.length >= 1, 'sin números');
+  });
+
+  await check('review: con ambas válidas agrega "elegir" (compare) y no avisa nada', async () => {
     writeFileSync(join(OUT, '001', 'context', 'index.html'), '<h1>Café</h1><a href="#" style="background:#000">pedidos</a>');
     await after(1, { out: OUT, shots });
-    const ids = buildRoundReview(1, { out: OUT, root: ROOT }).items.map(i => i.id);
-    assert(ids.join(',') === 'blind,context,integrar', `ítems: ${ids}`);
+    const rv = buildRoundReview(1, { out: OUT, root: ROOT });
+    assert(rv.items.map(i => i.id).join(',') === 'blind,context,elegir', `ítems: ${rv.items.map(i => i.id)}`);
+    const cmp = rv.items[2].visual;
+    assert(cmp.type === 'compare' && cmp.options.map(o => o.item).join(',') === 'blind,context,integrar', JSON.stringify(cmp.options));
+    assert(cmp.options[0].image === 'rounds/001/shots/blind-desktop.png' && cmp.options[0].image_mobile === 'rounds/001/shots/blind-mobile.png', 'imágenes');
+    assert(cmp.options[2].images.length === 2, 'integrar muestra ambas');
+    assert(reviewWarnings(validateReview(JSON.parse(JSON.stringify(rv)))).length === 0, 'la revisión de rondas debe ser visual');
+    review(1, { out: OUT, root: ROOT });
+  });
+
+  await check('elegir "integrar" se guarda aunque no sea un ítem, y choice lo lee', () => {
+    const id = buildRoundReview(1, { out: OUT, root: ROOT }).id;
+    const { feedback } = saveFeedback(id, { items: { integrar: { vote: 'up', comment: '' }, inventado: { vote: 'up' } } }, ROOT);
+    assert(feedback.items.integrar.vote === 'up' && !feedback.items.inventado, JSON.stringify(feedback.items));
+    assert(choiceFromFeedback(feedback) === 'integrar', 'choice');
+    rmSync(join(ROOT, 'cockpit', 'feedback', `${id}.json`));
   });
 
   await check('choice: lee el voto', () => {

@@ -1,0 +1,38 @@
+{
+  "_nota": "Borrador de cierre de sprint: node src/cockpit.js sprint-deck cockpit/ejemplo-sprint-deck.json. Cada 'imagen' es una ruta relativa a la raíz del proyecto. Lámina 1: titular + 3 números. Luego una lámina por cada cosa entregada, lo que sigue y la decisión.",
+  "id": "ejemplo-sprint-deck",
+  "sprint": 2,
+  "titular": "Los pedidos ya funcionan de punta a punta",
+  "entregado_corto": "Pedidos online",
+  "antes": ["Datos y estilo"],
+  "numeros": [
+    { "value": "60 s", "label": "para hacer un pedido" },
+    { "value": 3, "label": "pantallas nuevas" },
+    { "value": 0, "label": "pagos reales todavía" }
+  ],
+  "entregado": [
+    {
+      "titular": "El menú ya se puede pedir desde el celular",
+      "visual": {
+        "type": "diagram",
+        "kind": "flow",
+        "steps": [
+          { "label": "Menú", "icon": "image" },
+          { "label": "Carrito", "icon": "box" },
+          { "label": "Pago de prueba", "icon": "coin" },
+          { "label": "El local lo ve", "icon": "check" }
+        ]
+      },
+      "detalle": "Aquí va el detalle que solo se abre con **Ver más**. Si tienes capturas, usa \"imagen\" o \"antes\" + \"despues\" en vez de \"visual\"."
+    }
+  ],
+  "sigue": ["Fotos finales", "Reel de 15 s", "Salida a producción"],
+  "decision": {
+    "titular": "¿Cuándo activamos pagos reales?",
+    "opciones": [
+      { "label": "Esta semana", "icon": "rocket" },
+      { "label": "Después del reel", "icon": "film" }
+    ],
+    "detalle": "Recomendación: después del reel, para lanzar todo junto."
+  }
+}

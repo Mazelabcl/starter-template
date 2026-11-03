@@ -1,10 +1,14 @@
 // cockpit/public/app.js
-// Frontend del cockpit. Reglas:
+// Frontend del cockpit: inicio como línea de tiempo de sprints, revisiones como
+// presentación a pantalla completa (una idea por lámina) y ayuda "Qué puedo pedir".
+// Reglas:
 //  - XSS-safe: TODO dato del backend entra por textContent / atributos seguros.
 //    Nunca innerHTML con datos. El markdown se convierte a nodos DOM a mano.
 //  - La key de OpenAI nunca llega aquí: el server entrega un client secret
 //    efímero (ek_...) por conversación.
 // Idioma: español neutro.
+
+import { el, icon, renderVisual, miniVisual, mediaNode, mediaUrl, diagramNode, isTallScreen } from './visuals.js';
 
 const $ = id => document.getElementById(id);
 
@@ -17,27 +21,13 @@ const state = {
   dirty: false,
   savedAt: null,
   talk: null,         // sesión de conversación activa
+  index: 0,           // lámina actual
+  slides: [],         // [{ item, node } | { closing: true, node }]
 };
 
 // ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
-
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === 'class') node.className = v;
-    else if (k === 'text') node.textContent = v;
-    else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
-    else node.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const c of children.flat()) {
-    if (c === null || c === undefined || c === false) continue;
-    node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  }
-  return node;
-}
 
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
@@ -60,20 +50,6 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
 }
-
-function fmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-const KIND_LABEL = { plan: 'plan', council: 'council', rounds: 'rondas', deliverable: 'entregable', other: 'otro' };
-const STATUS_PILL = {
-  'sin-feedback': ['sin feedback', 'pill-muted'],
-  pendiente: ['feedback pendiente', 'pill-warn'],
-  procesado: ['procesado', 'pill-ok'],
-};
 
 // ---------------------------------------------------------------------------
 // Markdown mínimo → DOM (seguro)
@@ -102,6 +78,8 @@ function inline(text) {
   return frag;
 }
 
+const tableCells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+
 function renderMarkdown(md) {
   const root = el('div', { class: 'md' });
   const lines = String(md || '').split(/\r?\n/);
@@ -124,6 +102,18 @@ function renderMarkdown(md) {
     }
     const h = /^(#{1,4})\s+(.+)$/.exec(t);
     if (h) { flush(); root.appendChild(el(`h${Math.min(4, h[1].length + 1)}`, {}, inline(h[2]))); i += 1; continue; }
+    if (/^\|.*\|$/.test(t) && /^\|[\s:|-]+\|$/.test((lines[i + 1] || '').trim())) {
+      flush();
+      const head = el('tr', {}, tableCells(t).map(c => el('th', {}, inline(c))));
+      const body = el('tbody');
+      i += 2;
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        body.appendChild(el('tr', {}, tableCells(lines[i]).map(c => el('td', {}, inline(c)))));
+        i += 1;
+      }
+      root.appendChild(el('div', { class: 'md-table' }, el('table', {}, el('thead', {}, head), body)));
+      continue;
+    }
     if (/^[-*]\s+/.test(t) || /^\d+[.)]\s+/.test(t)) {
       flush();
       const ordered = /^\d+[.)]\s+/.test(t);
@@ -146,114 +136,234 @@ function renderMarkdown(md) {
   return root;
 }
 
-function renderMedia(paths) {
-  if (!paths || !paths.length) return null;
-  const box = el('div', { class: 'media' });
-  for (const p of paths) {
-    const src = `/media?path=${encodeURIComponent(p)}`;
-    const ext = (p.split('.').pop() || '').toLowerCase();
-    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext)) {
-      box.appendChild(el('a', { href: src, target: '_blank', rel: 'noopener' }, el('img', { src, alt: p, loading: 'lazy' })));
-    } else if (['mp4', 'webm', 'mov'].includes(ext)) {
-      box.appendChild(el('video', { src, controls: true, preload: 'metadata' }));
-    } else if (['mp3', 'wav'].includes(ext)) {
-      box.appendChild(el('audio', { src, controls: true }));
-    } else if (ext === 'html') {
-      box.appendChild(el('iframe', { src, sandbox: '', title: p, loading: 'lazy' }));
-    } else {
-      box.appendChild(el('a', { href: src, target: '_blank', rel: 'noopener', text: p }));
-    }
-  }
-  return box;
+// ---------------------------------------------------------------------------
+// Inicio: línea de tiempo de sprints con una miniatura por revisión
+// ---------------------------------------------------------------------------
+
+function thumbCard(r) {
+  const pic = el('div', { class: 'thumb-pic' });
+  if (r.cover && r.cover.type === 'image') pic.appendChild(el('img', { src: mediaUrl(r.cover.path), alt: '', loading: 'lazy' }));
+  else if (r.cover && r.cover.type === 'diagram') pic.appendChild(diagramNode(r.cover.visual, { layout: 'wide' }));
+  else pic.appendChild(el('div', { class: 'thumb-empty' }, icon('image', 40)));
+  const total = r.item_count || 1;
+  if (r.feedback_status === 'sin-feedback') pic.appendChild(el('span', { class: 'thumb-flag', text: 'Te espera' }));
+  else if (r.feedback_status === 'pendiente') pic.appendChild(el('span', { class: 'thumb-flag thumb-flag-wait', text: 'Votada' }));
+  else pic.appendChild(el('span', { class: 'thumb-flag thumb-flag-ok', text: 'Aplicada' }));
+  const bar = el('div', { class: 'thumb-progress' }, el('span'));
+  bar.firstChild.style.width = `${Math.min(100, Math.round(((r.voted_count || 0) / total) * 100))}%`;
+  return el('a', { class: 'thumb', href: `#/r/${encodeURIComponent(r.id)}`, title: r.title },
+    pic,
+    el('div', { class: 'thumb-body' }, el('div', { class: 'thumb-title', text: r.title }), bar));
 }
 
-// ---------------------------------------------------------------------------
-// Roadmap
-// ---------------------------------------------------------------------------
-
-async function loadRoadmap() {
-  let rm;
-  try { rm = await api('/api/roadmap'); } catch { return; }
-  const done = $('rm-done');
-  const now = $('rm-now');
-  const next = $('rm-next');
-  clear(done); clear(now); clear(next);
-
-  const past = (rm.done || []).slice().reverse();
-  if (!past.length) done.appendChild(el('p', { class: 'rm-empty', text: 'Todavía no hay sprints cerrados.' }));
-  for (const s of past) {
-    const card = el('div', { class: 'rm-card' }, el('strong', { text: `Sprint ${s.number} · ${s.title}` }));
-    if (s.dates) card.appendChild(el('span', { class: 'review-meta', text: s.dates }));
-    const items = (s.deliverables || []).slice(0, 3);
-    if (items.length) card.appendChild(el('ul', {}, items.map(d => el('li', { text: d }))));
-    done.appendChild(card);
-  }
-
-  if (rm.now && rm.now.objective) {
-    const card = el('div', { class: 'rm-card' }, el('strong', { text: `Sprint ${rm.now.number} · ${rm.now.objective}` }));
-    if (rm.now.target_close) card.appendChild(el('span', { class: 'review-meta', text: `Meta: ${rm.now.target_close}` }));
-    now.appendChild(card);
-    for (const t of rm.now.tasks || []) {
-      const mark = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '●' : '○';
-      now.appendChild(el('div', { class: `task${t.status === 'completed' ? ' task-done' : ''}` }, el('span', { text: mark }), el('span', { text: t.title })));
-    }
-  } else {
-    now.appendChild(el('p', { class: 'rm-empty', text: 'Sin sprint activo. Se define con /kickoff o /roadmap.' }));
-  }
-
-  const upcoming = [...(rm.next?.preview || []), ...(rm.next?.high_priority || [])];
-  if (!upcoming.length) next.appendChild(el('p', { class: 'rm-empty', text: 'Nada priorizado todavía.' }));
-  for (const n of upcoming.slice(0, 8)) next.appendChild(el('div', { class: 'rm-card', text: n }));
+/** Agrupa revisiones por sprint: pasado, actual y lo que sigue. */
+function timelineColumns(rm, reviews) {
+  const done = new Map((rm.done || []).map(s => [s.number, s]));
+  const active = rm.now && rm.now.objective ? rm.now : null;
+  const numbers = new Set([...done.keys(), ...reviews.filter(r => r.sprint !== null && r.sprint !== undefined).map(r => r.sprint)]);
+  if (active) numbers.add(active.number);
+  const open = [...numbers].filter(n => !done.has(n));
+  const current = active ? active.number : (open.length ? Math.max(...open) : null);
+  const columns = [...numbers].sort((a, b) => a - b).map(n => ({
+    number: n,
+    state: n === current ? 'now' : n > (current ?? Infinity) ? 'next' : 'past',
+    name: done.get(n)?.title || (n === active?.number ? active.objective : ''),
+    reviews: reviews.filter(r => r.sprint === n),
+  }));
+  const loose = reviews.filter(r => r.sprint === null || r.sprint === undefined);
+  const nowCol = columns.find(c => c.state === 'now');
+  if (nowCol) nowCol.reviews.push(...loose);
+  else if (loose.length || !columns.length) columns.push({ number: null, state: 'now', name: '', reviews: loose });
+  return columns;
 }
 
-// ---------------------------------------------------------------------------
-// Lista de revisiones
-// ---------------------------------------------------------------------------
+function timelineLabel(c) {
+  if (c.number === 0) return 'Arranque';
+  return c.number === null ? 'Ahora' : `Sprint ${c.number}`;
+}
 
-async function loadList() {
-  const box = $('review-list');
-  let list = [];
-  try { list = await api('/api/reviews'); } catch (e) { box.textContent = `Error: ${e.message}`; return; }
+async function loadHome() {
+  const [rm, reviews] = await Promise.all([
+    api('/api/roadmap').catch(() => ({ done: [], now: null, next: {} })),
+    api('/api/reviews').catch(() => []),
+  ]);
+  const waiting = reviews.filter(r => r.feedback_status === 'sin-feedback').length;
+  const title = $('home-title');
+  clear(title);
+  if (!reviews.length) title.textContent = 'Todavía no hay revisiones';
+  else if (waiting) title.append(el('em', { text: String(waiting) }), waiting === 1 ? ' revisión te espera' : ' revisiones te esperan');
+  else title.textContent = 'Todo votado';
+
+  const box = $('timeline');
   clear(box);
-  if (!list.length) {
-    box.appendChild(el('div', { class: 'empty-state' },
-      'Todavía no hay revisiones. El orquestador las publica con ',
-      el('code', { text: '/revisar' }),
-      ' o con ',
-      el('code', { text: 'node src/cockpit.js publish <archivo>' }),
-      '.'));
-    return;
+  for (const c of timelineColumns(rm, reviews)) {
+    const col = el('section', { class: `tl-col tl-col-${c.state}${c.reviews.length > 1 ? ' tl-col-wide' : ''}` },
+      el('div', { class: 'tl-head' },
+        el('span', { class: 'tl-dot' }),
+        el('span', { class: 'tl-kicker', text: timelineLabel(c) }),
+        c.state === 'now' && c.number !== null ? el('span', { class: 'pill pill-ok', text: 'Ahora' }) : null,
+        c.name ? el('span', { class: 'tl-name', text: c.name }) : null),
+      el('div', { class: 'tl-cards' }, c.reviews.map(thumbCard)));
+    box.appendChild(col);
   }
-  for (const r of list) {
-    const [label, cls] = STATUS_PILL[r.feedback_status] || STATUS_PILL['sin-feedback'];
-    box.appendChild(el('a', { class: 'review-card', href: `#/r/${encodeURIComponent(r.id)}` },
-      el('div', { class: 'review-meta' },
-        el('span', { class: 'pill pill-accent', text: KIND_LABEL[r.kind] || r.kind }),
-        el('span', { class: `pill ${cls}`, text: label })),
-      el('h3', { text: r.title }),
-      el('div', { class: 'review-meta', text: `${r.item_count} ítems · ${fmtDate(r.created_at)}` })));
+  const upcoming = [...(rm.next?.preview || []), ...(rm.next?.high_priority || [])].slice(0, 3);
+  box.appendChild(el('section', { class: 'tl-col tl-col-next' },
+    el('div', { class: 'tl-head' }, el('span', { class: 'tl-dot' }), el('span', { class: 'tl-kicker', text: 'Sigue' })),
+    el('div', { class: 'tl-cards' }, upcoming.length
+      ? upcoming.map(n => el('div', { class: 'next-chip', text: n }))
+      : [el('div', { class: 'next-chip', text: 'Nada priorizado todavía' })])));
+  // Con muchos sprints la línea se desborda: parte mostrando el actual.
+  const now = box.querySelector('.tl-col-now');
+  if (now && box.scrollWidth > box.clientWidth) box.scrollLeft = Math.max(0, now.offsetLeft - box.offsetLeft - 24);
+}
+
+// ---------------------------------------------------------------------------
+// Qué puedo pedir
+// ---------------------------------------------------------------------------
+
+function sayRow(phrase, label) {
+  const copy = el('button', {
+    class: 'say-copy', type: 'button', 'aria-label': 'Copiar la frase', title: 'Copiar la frase',
+    onclick: async () => {
+      try { await navigator.clipboard.writeText(phrase); toast('Frase copiada. Pégala en tu chat con Claude.'); }
+      catch { toast(`Dile a Claude: ${phrase}`); }
+    },
+  }, icon('copy', 18));
+  return el('div', { class: 'say' },
+    el('div', { class: 'say-text' }, el('span', { class: 'say-label', text: label || 'Dile a Claude' }), phrase),
+    copy);
+}
+
+let capabilities = null;
+async function loadHelp() {
+  const box = $('help-cards');
+  if (!capabilities) {
+    try { capabilities = await api('/capacidades.json'); }
+    catch (e) { box.textContent = `No pude cargar la ayuda: ${e.message}`; return; }
+  }
+  clear(box);
+  for (const c of capabilities.cards || []) {
+    const card = el('article', { class: 'help-card', id: `cap-${c.id}` },
+      el('h2', { text: c.title }),
+      c.tag ? el('p', { class: 'help-tag', text: c.tag }) : null,
+      c.diagram ? diagramNode(c.diagram, { layout: isTallScreen() ? 'tall' : 'wide', density: 'compact' }) : null);
+    if (Array.isArray(c.modes)) card.appendChild(el('div', { class: 'help-modes' }, c.modes.map(m => sayRow(m.phrase, m.label))));
+    else if (c.phrase) card.appendChild(sayRow(c.phrase));
+    if (c.more) card.appendChild(el('details', { class: 'help-more' }, el('summary', { text: 'Ver más' }), renderMarkdown(c.more)));
+    box.appendChild(card);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Vista de revisión
+// Feedback: se guarda solo
 // ---------------------------------------------------------------------------
+
+const fbOf = id => state.items[id] || (state.items[id] = { vote: null, comment: '' });
+
+/** Opción elegida de un `compare`: la dicen los votos, así el feedback no cambia de forma. */
+function pickedOption(item) {
+  for (const o of item.visual?.options || []) {
+    if (o.item) { if (state.items[o.item]?.vote === 'up') return o.id; }
+    else if (state.items[item.id]?.vote === 'up' && (state.items[item.id].comment || '').startsWith(`Elegida: ${o.label}`)) return o.id;
+  }
+  return null;
+}
+
+function pickOption(item, option) {
+  const already = pickedOption(item) === option.id;
+  const options = item.visual.options;
+  for (const o of options) if (o.item) fbOf(o.item).vote = null;
+  const own = fbOf(item.id);
+  const rest = (own.comment || '').replace(/^Elegida: .*\n?/, '');
+  if (options.some(o => !o.item)) { own.vote = null; own.comment = rest; }
+  if (!already) {
+    if (option.item) fbOf(option.item).vote = 'up';
+    else { own.vote = 'up'; own.comment = `Elegida: ${option.label}${rest ? `\n${rest}` : ''}`; }
+  }
+  markDirty();
+  paintBar();
+}
+
+function slideVote(item) {
+  if (item.visual?.type === 'compare') return pickedOption(item) ? 'up' : null;
+  return state.items[item.id]?.vote || null;
+}
+
+function votedCount() {
+  return state.slides.filter(s => s.item && slideVote(s.item)).length;
+}
 
 function updateSaveStatus() {
-  const total = state.review ? state.review.items.length : 0;
-  const voted = Object.values(state.items).filter(v => v.vote).length;
-  const parts = [`${voted} de ${total} votados`];
-  if (state.conversation.length) parts.push(`${state.conversation.length} turnos de conversación`);
-  if (state.dirty) parts.push('cambios sin guardar');
-  else if (state.savedAt) parts.push(`guardado ${fmtDate(state.savedAt)}`);
+  const total = state.slides.filter(s => s.item).length;
+  const parts = [`${votedCount()} de ${total}`];
+  if (state.dirty) parts.push('guardando…');
+  else if (state.savedAt) parts.push('guardado');
   $('save-status').textContent = parts.join(' · ');
-  $('btn-save').disabled = !state.dirty;
 }
 
-function markDirty() { state.dirty = true; updateSaveStatus(); }
+let saveTimer = null;
+function markDirty() {
+  state.dirty = true;
+  updateSaveStatus();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveFeedback(true), 500);
+}
+
+function feedbackBody() {
+  return JSON.stringify({ items: state.items, conversation: state.conversation, summary: state.summary });
+}
+
+async function saveFeedback(silent = false) {
+  if (!state.review) return;
+  clearTimeout(saveTimer);
+  try {
+    const fb = await api(`/api/feedback/${encodeURIComponent(state.review.id)}`, { method: 'POST', body: feedbackBody() });
+    state.dirty = false;
+    state.savedAt = fb.saved_at;
+    $('btn-save').hidden = true;
+    updateSaveStatus();
+    if (!silent) toast('Feedback guardado. El orquestador lo leerá al continuar.');
+  } catch (e) {
+    $('btn-save').hidden = false;
+    toast(`No se pudo guardar: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Presentación
+// ---------------------------------------------------------------------------
+
+function slideHeadline(item) { return item.headline || item.title; }
+
+function slideAsk(item) {
+  if (item.ask) return item.ask;
+  if (item.visual?.type === 'compare') return 'Elige una';
+  return state.review.kind === 'rounds' ? '¿Te gusta?' : '¿Lo apruebas?';
+}
+
+function buildItemSlide(item) {
+  const text = slideHeadline(item);
+  const long = text.split(/\s+/).length > 12;
+  const main = el('div', { class: 'slide-main' },
+    el('div', { class: 'slide-visual' }, renderVisual(item, {
+      pick: option => pickOption(item, option),
+      pickedOption: () => pickedOption(item),
+    })));
+  if (Array.isArray(item.stats) && item.stats.length) {
+    main.appendChild(el('div', { class: 'stats' }, item.stats.slice(0, 3).map(s => el('div', { class: 'stat' },
+      el('span', { class: 'stat-value', text: String(s.value) }),
+      el('span', { class: 'stat-label', text: s.label })))));
+  }
+  return el('article', { class: 'slide', hidden: true },
+    el('div', { class: 'slide-head' },
+      item.kicker ? el('p', { class: 'kicker', text: item.kicker }) : null,
+      el('h1', { class: `headline${long ? ' headline-long' : ''}`, text })),
+    main);
+}
 
 function renderSummary() {
   const box = $('summary-box');
+  if (!box) return;
   clear(box);
   const s = state.summary;
   if (!s) { box.hidden = true; return; }
@@ -270,64 +380,211 @@ function renderSummary() {
   if (!s.decisions.length && !s.open_questions.length && !s.requests.length) box.appendChild(el('p', { text: 'Sin decisiones registradas.' }));
 }
 
-function renderReview() {
+function buildClosing() {
+  const node = el('article', { class: 'slide closing', hidden: true });
+  const paint = () => {
+    clear(node);
+    const items = state.slides.filter(s => s.item);
+    const voted = votedCount();
+    node.appendChild(el('div', { class: 'slide-head' },
+      el('p', { class: 'kicker', text: 'Listo' }),
+      el('h1', { class: 'headline', text: `${voted} de ${items.length} votadas` })));
+    node.appendChild(el('div', { class: 'closing-grid' }, items.map((s, i) => {
+      const vote = slideVote(s.item);
+      return el('button', {
+        class: `closing-tile${vote ? ` closing-${vote}` : ''}`, type: 'button',
+        onclick: () => goTo(i),
+      },
+      el('span', { class: 'closing-pic' }, miniVisual(s.item)),
+      el('span', { class: 'closing-foot' },
+        el('span', { class: 'closing-mark' }, vote ? icon(vote, 16) : String(i + 1)),
+        el('span', { class: 'closing-name', text: slideHeadline(s.item) })));
+    })));
+    node.appendChild(el('div', { class: 'closing-actions' },
+      el('a', { class: 'btn btn-primary btn-top', href: '#/' }, 'Volver al inicio'),
+      el('button', { class: 'btn', type: 'button', onclick: openTalkPanel }, 'Conversar por voz')));
+    node.appendChild(el('div', { id: 'summary-box', class: 'summary-box', hidden: true }));
+    renderSummary();
+  };
+  return { node, paint };
+}
+
+function renderDeck(keepIndex = 0) {
   const r = state.review;
-  const focus = $('focus');
-  clear(focus);
-  focus.appendChild(el('h1', { text: r.title }));
-  const connects = r.connects_to && r.connects_to.length ? r.connects_to : [];
-  focus.appendChild(el('p', {}, 'Ahora revisas ', el('strong', { text: r.title }),
-    connects.length ? `, que conecta con ${connects.join(', ')}.` : '.'));
-  const meta = el('div', { class: 'connects' },
-    el('span', { class: 'pill pill-accent', text: KIND_LABEL[r.kind] || r.kind }),
-    el('span', { class: 'pill', text: `${r.items.length} ítems` }),
-    el('span', { class: 'pill', text: fmtDate(r.created_at) }));
-  focus.appendChild(meta);
+  const stage = $('deck-stage');
+  clear(stage);
+  const closing = buildClosing();
+  state.slides = r.items.map(item => ({ item, node: buildItemSlide(item) }));
+  state.slides.push({ closing: true, node: closing.node, paint: closing.paint });
+  for (const s of state.slides) stage.appendChild(s.node);
 
-  const box = $('items');
-  clear(box);
-  r.items.forEach((it, idx) => {
-    const fb = state.items[it.id] || (state.items[it.id] = { vote: null, comment: '' });
-    const card = el('article', { class: 'item', id: `item-${it.id}` });
-    const paint = () => {
-      card.classList.toggle('voted-up', fb.vote === 'up');
-      card.classList.toggle('voted-down', fb.vote === 'down');
-      up.setAttribute('aria-pressed', String(fb.vote === 'up'));
-      down.setAttribute('aria-pressed', String(fb.vote === 'down'));
-    };
-    const up = el('button', { class: 'vote vote-up', type: 'button', title: 'Me gusta / aprobar', 'aria-label': 'Aprobar' }, '👍');
-    const down = el('button', { class: 'vote vote-down', type: 'button', title: 'No me gusta / cambiar', 'aria-label': 'Rechazar' }, '👎');
-    up.addEventListener('click', () => { fb.vote = fb.vote === 'up' ? null : 'up'; paint(); markDirty(); });
-    down.addEventListener('click', () => { fb.vote = fb.vote === 'down' ? null : 'down'; paint(); markDirty(); });
-    const comment = el('textarea', { class: 'comment', placeholder: 'Comentario (opcional)', rows: 1 });
-    comment.value = fb.comment || '';
-    comment.addEventListener('input', () => { fb.comment = comment.value; markDirty(); });
+  const dots = $('deck-dots');
+  clear(dots);
+  state.slides.forEach((s, i) => dots.appendChild(el('button', {
+    class: 'dot-btn', type: 'button', role: 'tab', 'aria-label': s.item ? `Lámina ${i + 1}` : 'Resumen final',
+    onclick: () => goTo(i),
+  })));
+  state.index = Math.min(Math.max(0, keepIndex), state.slides.length - 1);
+  showSlide(false);
+}
 
-    card.appendChild(el('div', { class: 'item-head' },
-      el('h3', {}, el('span', { class: 'item-num', text: `${idx + 1}.` }), it.title)));
-    if (it.tags && it.tags.length) card.appendChild(el('div', { class: 'tags' }, it.tags.map(t => el('span', { class: 'pill', text: t }))));
-    if (it.body_md) card.appendChild(renderMarkdown(it.body_md));
-    const media = renderMedia(it.media);
-    if (media) card.appendChild(media);
-    card.appendChild(el('div', { class: 'item-actions' }, up, down, comment));
-    paint();
-    box.appendChild(card);
+function paintBar() {
+  const slide = state.slides[state.index];
+  const item = slide && slide.item;
+  $('deck-actions').classList.toggle('is-empty', !item);
+  if (item) {
+    const isCompare = item.visual?.type === 'compare';
+    const fb = fbOf(item.id);
+    $('slide-ask').textContent = slideAsk(item);
+    $('vote-up').hidden = isCompare;
+    $('vote-down').hidden = isCompare;
+    $('vote-up').setAttribute('aria-pressed', String(fb.vote === 'up'));
+    $('vote-down').setAttribute('aria-pressed', String(fb.vote === 'down'));
+    $('btn-comment').classList.toggle('has-comment', Boolean((fb.comment || '').trim()));
+    const hasMore = Boolean(item.body_md && item.body_md.trim()) || extraMedia(item).length > 0 || (item.tags || []).length > 0;
+    $('btn-more').hidden = !hasMore;
+  }
+  [...$('deck-dots').children].forEach((d, i) => {
+    const s = state.slides[i];
+    const v = s.item ? slideVote(s.item) : null;
+    d.className = `dot-btn${v ? ` dot-${v}` : ''}${i === state.index ? ' dot-now' : ''}`;
+    d.setAttribute('aria-selected', String(i === state.index));
   });
-  renderSummary();
+  $('deck-prev').disabled = state.index === 0;
+  $('deck-next').disabled = state.index === state.slides.length - 1;
   updateSaveStatus();
 }
 
-async function openReview(id) {
-  $('view-home').hidden = true;
-  $('view-review').hidden = false;
-  $('savebar').hidden = false;
+function closeOverlays() {
+  $('comment-pop').hidden = true;
+  $('more-sheet').hidden = true;
+  $('btn-more').setAttribute('aria-expanded', 'false');
+}
+
+function showSlide(animate = true) {
+  state.slides.forEach((s, i) => {
+    s.node.hidden = i !== state.index;
+    s.node.classList.toggle('slide-enter', animate && i === state.index);
+  });
+  const s = state.slides[state.index];
+  if (s.paint) s.paint();
+  const cmp = s.node.querySelector('.cmp');
+  if (cmp && cmp.repaint) cmp.repaint();
+  closeOverlays();
+  paintBar();
+}
+
+function goTo(i) {
+  const next = Math.min(Math.max(0, i), state.slides.length - 1);
+  if (next === state.index) return;
+  state.index = next;
+  showSlide();
+  if (state.review) history.replaceState(null, '', `#/r/${encodeURIComponent(state.review.id)}/${next + 1}`);
+}
+
+// Media que no se ve en la lámina (video, html interactivo) o de ítems sin visual.
+function extraMedia(item) {
+  const media = item.media || [];
+  if (!item.visual) return media.length > 1 ? media : [];
+  return media.filter(p => !/\.(png|jpe?g|webp|gif|svg)$/i.test(p));
+}
+
+function toggleMore() {
+  const sheet = $('more-sheet');
+  if (!sheet.hidden) { closeOverlays(); return; }
+  const item = state.slides[state.index].item;
+  if (!item) return;
+  $('comment-pop').hidden = true;
+  $('more-title').textContent = slideHeadline(item);
+  const body = $('more-body');
+  clear(body);
+  if (item.headline && item.title !== item.headline) body.appendChild(el('p', { text: item.title }));
+  if (item.body_md) body.appendChild(renderMarkdown(item.body_md));
+  const extra = extraMedia(item);
+  if (extra.length) body.appendChild(el('div', { class: 'media' }, extra.map(mediaNode)));
+  if (item.tags && item.tags.length) body.appendChild(el('div', { class: 'tags' }, item.tags.map(t => el('span', { class: 'pill', text: t }))));
+  sheet.hidden = false;
+  $('btn-more').setAttribute('aria-expanded', 'true');
+}
+
+function toggleComment() {
+  const pop = $('comment-pop');
+  if (!pop.hidden) { pop.hidden = true; return; }
+  const item = state.slides[state.index].item;
+  if (!item) return;
+  $('more-sheet').hidden = true;
+  const input = $('comment-input');
+  input.value = fbOf(item.id).comment || '';
+  pop.hidden = false;
+  input.focus();
+}
+
+function vote(kind) {
+  const item = state.slides[state.index].item;
+  if (!item) return;
+  const fb = fbOf(item.id);
+  fb.vote = fb.vote === kind ? null : kind;
+  markDirty();
+  paintBar();
+}
+
+function wireDeckControls() {
+  $('vote-up').appendChild(icon('up', 22));
+  $('vote-down').appendChild(icon('down', 22));
+  $('btn-comment').appendChild(icon('chat', 22));
+  $('deck-prev').appendChild(icon('left', 22));
+  $('deck-next').appendChild(icon('right', 22));
+  $('vote-up').addEventListener('click', () => vote('up'));
+  $('vote-down').addEventListener('click', () => vote('down'));
+  $('btn-comment').addEventListener('click', toggleComment);
+  $('btn-more').addEventListener('click', toggleMore);
+  $('more-close').addEventListener('click', closeOverlays);
+  $('deck-prev').addEventListener('click', () => goTo(state.index - 1));
+  $('deck-next').addEventListener('click', () => goTo(state.index + 1));
+  $('comment-input').addEventListener('input', e => {
+    const item = state.slides[state.index].item;
+    if (!item) return;
+    fbOf(item.id).comment = e.target.value;
+    $('btn-comment').classList.toggle('has-comment', Boolean(e.target.value.trim()));
+    markDirty();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!state.review) return;
+    if (e.key === 'Escape') { closeOverlays(); return; }
+    const tag = e.target && e.target.tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return;
+    if (!$('more-sheet').hidden) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && tag !== 'BUTTON' && tag !== 'A')) { e.preventDefault(); goTo(state.index + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); goTo(state.index - 1); }
+    else if (e.key === 'Home') goTo(0);
+    else if (e.key === 'End') goTo(state.slides.length - 1);
+  });
+
+  // Swipe táctil: el slider y las listas con scroll horizontal se marcan .no-swipe.
+  const stage = $('deck-stage');
+  let start = null;
+  stage.addEventListener('pointerdown', e => {
+    start = e.pointerType !== 'mouse' && !e.target.closest('.no-swipe') ? { x: e.clientX, y: e.clientY } : null;
+  });
+  stage.addEventListener('pointercancel', () => { start = null; });
+  stage.addEventListener('pointerup', e => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) goTo(state.index + (dx < 0 ? 1 : -1));
+  });
+}
+
+async function openReview(id, index = 0) {
   $('changed-banner').hidden = true;
   let data;
   try { data = await api(`/api/reviews/${encodeURIComponent(id)}`); } catch (e) {
-    clear($('items'));
-    clear($('focus'));
-    $('focus').appendChild(el('p', { text: `No pude abrir la revisión: ${e.message}` }));
-    $('savebar').hidden = true;
+    setView('home');
+    toast(`No pude abrir la revisión: ${e.message}`);
+    history.replaceState(null, '', '#/');
+    loadHome();
     return;
   }
   state.review = data.review;
@@ -342,22 +599,9 @@ async function openReview(id) {
     state.summary = data.feedback.summary || null;
     state.savedAt = data.feedback.saved_at;
   }
-  renderReview();
-  window.scrollTo(0, 0);
-}
-
-async function saveFeedback(silent = false) {
-  if (!state.review) return;
-  const body = { items: state.items, conversation: state.conversation, summary: state.summary };
-  try {
-    const fb = await api(`/api/feedback/${encodeURIComponent(state.review.id)}`, { method: 'POST', body: JSON.stringify(body) });
-    state.dirty = false;
-    state.savedAt = fb.saved_at;
-    updateSaveStatus();
-    if (!silent) toast('Feedback guardado. El orquestador lo leerá al continuar.');
-  } catch (e) {
-    toast(`No se pudo guardar: ${e.message}`);
-  }
+  setView('deck');
+  $('top-title').textContent = state.review.title;
+  renderDeck(index);
 }
 
 // ---------------------------------------------------------------------------
@@ -641,42 +885,60 @@ async function endTalk() {
 // Routing, eventos en vivo y arranque
 // ---------------------------------------------------------------------------
 
-function currentRoute() {
-  const m = /^#\/r\/(.+)$/.exec(location.hash);
-  return m ? decodeURIComponent(m[1]) : null;
+function setView(name) {
+  $('view-home').hidden = name !== 'home';
+  $('view-help').hidden = name !== 'help';
+  $('view-deck').hidden = name !== 'deck';
+  $('btn-talk').hidden = name !== 'deck';
+  document.body.classList.toggle('deck-open', name === 'deck');
+  if (name !== 'deck') $('top-title').textContent = '';
+}
+
+function parseRoute() {
+  if (location.hash === '#/ayuda') return { view: 'help' };
+  const m = /^#\/r\/([^/]+)(?:\/(\d+))?$/.exec(location.hash);
+  if (m) return { view: 'deck', id: decodeURIComponent(m[1]), slide: m[2] ? Number(m[2]) - 1 : 0 };
+  return { view: 'home' };
+}
+
+async function leaveReview() {
+  if (!state.review) return;
+  if (state.dirty) await saveFeedback(true);
+  stopTalkSession();
+  setTalkPanel(false);
+  closeOverlays();
+  state.review = null;
+  state.dirty = false;
 }
 
 async function route() {
-  const id = currentRoute();
-  if (id) return openReview(id);
-  if (state.dirty && state.review && !confirm('Tienes feedback sin guardar. ¿Salir igual?')) {
-    history.replaceState(null, '', `#/r/${encodeURIComponent(state.review.id)}`);
+  const r = parseRoute();
+  if (r.view === 'deck') {
+    if (state.review && state.review.id === r.id) { goTo(r.slide); return; }
+    await leaveReview();
+    await openReview(r.id, r.slide);
     return;
   }
-  stopTalkSession();
-  setTalkPanel(false);
-  state.review = null;
-  state.dirty = false;
-  $('view-home').hidden = false;
-  $('view-review').hidden = true;
-  $('savebar').hidden = true;
-  loadList();
+  await leaveReview();
+  setView(r.view);
+  window.scrollTo(0, 0);
+  if (r.view === 'help') loadHelp();
+  else loadHome();
 }
 
 function connectEvents() {
   const pill = $('live-pill');
   const es = new EventSource('/api/events');
-  es.addEventListener('open', () => { pill.textContent = 'en vivo'; pill.className = 'pill pill-ok'; });
-  es.addEventListener('error', () => { pill.textContent = 'reconectando…'; pill.className = 'pill pill-warn'; });
+  es.addEventListener('open', () => { pill.hidden = true; });
+  es.addEventListener('error', () => { pill.hidden = false; });
   es.addEventListener('change', async () => {
-    loadRoadmap();
-    if (!state.review) { loadList(); return; }
+    if (!state.review) { if (!$('view-home').hidden) loadHome(); return; }
     // Si cambió la revisión abierta y no hay nada sin guardar, recarga sola.
     try {
       const data = await api(`/api/reviews/${encodeURIComponent(state.review.id)}`);
       if (JSON.stringify(data.review) !== JSON.stringify(state.review)) {
         if (state.dirty || state.talk) $('changed-banner').hidden = false;
-        else openReview(state.review.id);
+        else openReview(state.review.id, state.index);
       }
     } catch { /* la revisión pudo borrarse */ }
   });
@@ -684,12 +946,13 @@ function connectEvents() {
 
 async function boot() {
   try { state.status = await api('/api/status'); } catch { state.status = { voice: false, chat: false }; }
-  const vp = $('voice-pill');
-  vp.textContent = state.status.voice ? 'voz lista' : state.status.chat ? 'solo texto' : 'sin conversación';
-  vp.className = `pill ${state.status.voice ? 'pill-ok' : 'pill-muted'}`;
+  if (state.status.project) document.title = `Cockpit · ${state.status.project}`;
 
+  const talkBtn = $('btn-talk');
+  talkBtn.append(icon('mic', 18), el('span', { class: 'btn-top-text', text: 'Conversar' }));
+  $('btn-help').prepend(icon('help', 18));
   $('btn-save').addEventListener('click', () => saveFeedback(false));
-  $('btn-talk').addEventListener('click', openTalkPanel);
+  talkBtn.addEventListener('click', openTalkPanel);
   $('talk-close').addEventListener('click', () => {
     if (state.talk && !confirm('¿Cerrar sin guardar la conversación? (usa "Terminar y guardar" para conservarla)')) return;
     stopTalkSession();
@@ -698,7 +961,7 @@ async function boot() {
   $('talk-voice').addEventListener('click', startVoice);
   $('talk-text').addEventListener('click', startText);
   $('talk-end').addEventListener('click', endTalk);
-  $('reload-review').addEventListener('click', () => state.review && openReview(state.review.id));
+  $('reload-review').addEventListener('click', () => state.review && openReview(state.review.id, state.index));
   $('talk-form').addEventListener('submit', async e => {
     e.preventDefault();
     const input = $('talk-input');
@@ -708,10 +971,24 @@ async function boot() {
     addTurn('usuario', text);
     await askGuide();
   });
+  wireDeckControls();
   window.addEventListener('hashchange', route);
-  window.addEventListener('beforeunload', e => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  // Si se cierra la pestaña con un cambio en vuelo, igual se guarda.
+  window.addEventListener('pagehide', () => {
+    if (state.dirty && state.review) {
+      fetch(`/api/feedback/${encodeURIComponent(state.review.id)}`, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: feedbackBody() }).catch(() => {});
+    }
+  });
+  // Al rotar el celular o angostar la ventana, los diagramas cambian de layout.
+  let wasTall = isTallScreen();
+  window.addEventListener('resize', () => {
+    const tall = isTallScreen();
+    if (tall === wasTall) return;
+    wasTall = tall;
+    if (state.review) renderDeck(state.index);
+    else if (!$('view-help').hidden) loadHelp();
+  });
 
-  loadRoadmap();
   connectEvents();
   route();
 }

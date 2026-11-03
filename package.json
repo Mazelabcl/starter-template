@@ -12,6 +12,7 @@
     "cockpit": "node cockpit/server.js",
     "cockpit:open": "node src/cockpit.js open",
     "cockpit:stop": "node src/cockpit.js stop",
+    "cockpit:check": "node scripts/cockpit_visual_check.js",
     "test:cockpit": "node cockpit.test.js",
     "test:brazos": "node brazos.test.js",
     "test:kickoff-plan": "node kickoff-plan.test.js",

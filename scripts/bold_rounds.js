@@ -9,7 +9,7 @@
 //   node scripts/bold_rounds.js prepare <ronda> [--force]       (copias blind/context + "antes" + prompts)
 //   node scripts/bold_rounds.js run <ronda> [blind|context|both] [--timeout-min 15]   (headless `claude -p`)
 //   node scripts/bold_rounds.js after <ronda>                   (screenshots "después" + diff + rechazo)
-//   node scripts/bold_rounds.js review <ronda>                  (publica la revisión kind "rounds" en el cockpit)
+//   node scripts/bold_rounds.js review <ronda> [--sprint N]     (publica la revisión kind "rounds" en el cockpit, en imágenes)
 //   node scripts/bold_rounds.js choice <ronda>                  (lee los votos del cockpit)
 //   node scripts/bold_rounds.js apply <ronda> <blind|context|integrada> [--auto]
 //   node scripts/bold_rounds.js status | changes
@@ -207,6 +207,168 @@ export function pixelDiff(a, b, { tolerance = 16 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Hotspots: de la diferencia de píxeles a zonas numeradas sobre el "después"
+// ---------------------------------------------------------------------------
+
+// Celdas marcadas → grupos, uniendo celdas a menos de gx/gy celdas de distancia.
+function groupCells(mask, gw, gh, gx, gy, within = null) {
+  const seen = new Uint8Array(gw * gh);
+  const out = [];
+  const x0 = within ? within.x0 : 0, x1 = within ? within.x1 : gw - 1;
+  const y0 = within ? within.y0 : 0, y1 = within ? within.y1 : gh - 1;
+  for (let sy = y0; sy <= y1; sy++) {
+    for (let sx = x0; sx <= x1; sx++) {
+      const start = sy * gw + sx;
+      if (!mask[start] || seen[start]) continue;
+      const box = { x0: sx, x1: sx, y0: sy, y1: sy, cells: 0 };
+      const stack = [start];
+      seen[start] = 1;
+      while (stack.length) {
+        const cur = stack.pop();
+        const cx = cur % gw, cy = (cur - cx) / gw;
+        box.cells++;
+        if (cx < box.x0) box.x0 = cx;
+        if (cx > box.x1) box.x1 = cx;
+        if (cy < box.y0) box.y0 = cy;
+        if (cy > box.y1) box.y1 = cy;
+        for (let ny = Math.max(y0, cy - gy); ny <= Math.min(y1, cy + gy); ny++) {
+          for (let nx = Math.max(x0, cx - gx); nx <= Math.min(x1, cx + gx); nx++) {
+            const k = ny * gw + nx;
+            if (mask[k] && !seen[k]) { seen[k] = 1; stack.push(k); }
+          }
+        }
+      }
+      out.push(box);
+    }
+  }
+  return out;
+}
+
+// Huella de cada fila de píxeles (FNV-1a). Sirve para ver contenido que solo se movió.
+function rowHashes({ width, height, data }) {
+  const out = new Uint32Array(height);
+  const stride = width * 4;
+  for (let y = 0; y < height; y++) {
+    let h = 2166136261;
+    const end = (y + 1) * stride;
+    for (let i = y * stride; i < end; i++) h = Math.imul(h ^ data[i], 16777619);
+    out[y] = h >>> 0;
+  }
+  return out;
+}
+
+// Mapa de cambios en celdas. Una fila idéntica a alguna del "antes" no cuenta: si se
+// agrega un bloque arriba, lo de abajo solo se corrió y marcarlo sería mentir.
+function changeMap(A, B, { tolerance = 16, cell = 12, minCellRatio = 0.12 } = {}) {
+  const W = B.width, H = B.height;
+  const gw = Math.ceil(W / cell), gh = Math.ceil(H / cell);
+  const changedCount = new Uint32Array(gw * gh);
+  const totalCount = new Uint32Array(gw * gh);
+  const lumMin = new Uint8Array(gw * gh).fill(255);
+  const lumMax = new Uint8Array(gw * gh);
+  const known = A.width === W ? new Set(rowHashes(A)) : new Set();
+  const hashes = known.size ? rowHashes(B) : null;
+  let changedPixels = 0;
+  for (let y = 0; y < H; y++) {
+    const gy = Math.floor(y / cell);
+    const moved = hashes && known.has(hashes[y]);
+    for (let x = 0; x < W; x++) {
+      const k = gy * gw + Math.floor(x / cell);
+      const j = (y * W + x) * 4;
+      totalCount[k]++;
+      const lum = (B.data[j] * 3 + B.data[j + 1] * 6 + B.data[j + 2]) / 10;
+      if (lum < lumMin[k]) lumMin[k] = lum;
+      if (lum > lumMax[k]) lumMax[k] = lum;
+      if (moved) continue;
+      const inA = x < A.width && y < A.height;
+      const i = (y * A.width + x) * 4;
+      if (!inA || Math.abs(A.data[i] - B.data[j]) > tolerance || Math.abs(A.data[i + 1] - B.data[j + 1]) > tolerance
+        || Math.abs(A.data[i + 2] - B.data[j + 2]) > tolerance) { changedCount[k]++; changedPixels++; }
+    }
+  }
+  const changed = new Uint8Array(gw * gh);
+  const content = new Uint8Array(gw * gh);
+  for (let k = 0; k < gw * gh; k++) {
+    if (totalCount[k] && changedCount[k] / totalCount[k] >= minCellRatio) {
+      changed[k] = 1;
+      if (lumMax[k] - lumMin[k] > 40) content[k] = 1;
+    }
+  }
+  return { gw, gh, cell, W, H, changed, content, ratio: W * H ? changedPixels / (W * H) : 0 };
+}
+
+/** Proporción del "después" que de verdad es nueva (lo que solo se movió no cuenta). */
+export function realChangeRatio(a, b, opts) {
+  const A = Buffer.isBuffer(a) ? decodePNG(a) : a;
+  const B = Buffer.isBuffer(b) ? decodePNG(b) : b;
+  return changeMap(A, B, opts).ratio;
+}
+
+/**
+ * Zonas que cambiaron, en coordenadas 0..1 de la imagen "después" y en orden de lectura.
+ * En un rediseño total todo cambia y saldría una sola caja gigante: esa caja se vuelve
+ * a dividir usando solo las celdas con contenido (texto, bordes, imágenes) del "después".
+ */
+export function changedRegions(a, b, { gap = 2, maxRegions = 5, minArea = 0.0015, giantArea = 0.35, ...mapOpts } = {}) {
+  const A = Buffer.isBuffer(a) ? decodePNG(a) : a;
+  const B = Buffer.isBuffer(b) ? decodePNG(b) : b;
+  const { gw, gh, cell, W, H, changed, content } = changeMap(A, B, mapOpts);
+  const pageCells = gw * gh;
+  const boxCells = c => (c.x1 - c.x0 + 1) * (c.y1 - c.y0 + 1);
+  let groups = [];
+  for (const g of groupCells(changed, gw, gh, gap, gap)) {
+    if (boxCells(g) / pageCells < giantArea) { groups.push(g); continue; }
+    const parts = groupCells(content, gw, gh, 4, 3, g).filter(p => boxCells(p) / pageCells >= minArea);
+    if (parts.length >= 2) groups.push(...parts);
+    else groups.push(g);
+  }
+  // Una línea separadora de 1 celda de alto no es una "zona que cambió".
+  const boxes = groups
+    .filter(g => boxCells(g) / pageCells >= minArea && g.x1 > g.x0 && g.y1 > g.y0)
+    .sort((p, q) => boxCells(q) - boxCells(p))
+    .slice(0, maxRegions)
+    .sort((p, q) => p.y0 - q.y0 || p.x0 - q.x0);
+  const num = n => Number(n.toFixed(4));
+  return boxes.map(g => {
+    const px0 = g.x0 * cell, py0 = g.y0 * cell;
+    const px1 = Math.min(W, (g.x1 + 1) * cell), py1 = Math.min(H, (g.y1 + 1) * cell);
+    return { x: num(px0 / W), y: num(py0 / H), w: num((px1 - px0) / W), h: num((py1 - py0) / H) };
+  });
+}
+
+const TRAILING_WORD = /^(en|de|del|y|o|con|la|el|los|las|un|una|para|por|tu|tus|a|al|que)$/i;
+
+// Hasta n palabras, sin dejar colgando un "de" o un "y" al final.
+function firstWords(text, n = 5) {
+  const words = String(text).replace(/\s+/g, ' ').trim().split(' ').slice(0, n);
+  while (words.length > 1 && TRAILING_WORD.test(words[words.length - 1])) words.pop();
+  return words.join(' ').replace(/[.,;:¿?¡!«»"—–-]+$/u, '');
+}
+
+// Un nombre útil tiene palabras: un precio o un teléfono no dice qué cambió.
+const hasWords = s => /\p{L}{3}/u.test(s);
+
+/**
+ * Nombre de 2-5 palabras para una zona: el texto más grande que quedó dentro (según los
+ * bloques que `takeShots` guarda), "Imagen nueva" si solo hay imagen, o su posición.
+ */
+export function labelRegion(region, blocks, width, height, used = new Set()) {
+  const px = { x0: region.x * width, x1: (region.x + region.w) * width, y0: region.y * height, y1: (region.y + region.h) * height };
+  const inside = (Array.isArray(blocks) ? blocks : []).filter(b => {
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    return cx >= px.x0 && cx <= px.x1 && cy >= px.y0 && cy <= px.y1;
+  });
+  const texts = inside.filter(b => b.text && hasWords(firstWords(b.text))).sort((p, q) => (q.fs || 0) - (p.fs || 0));
+  for (const b of texts) {
+    const label = firstWords(b.text);
+    if (!used.has(label)) { used.add(label); return label; }
+  }
+  if (inside.some(b => b.tag === 'img')) return 'Imagen nueva';
+  const mid = region.y + region.h / 2;
+  return mid < 0.34 ? 'Zona superior' : mid < 0.67 ? 'Zona media' : 'Zona inferior';
+}
+
+// ---------------------------------------------------------------------------
 // Screenshots (Playwright opcional)
 // ---------------------------------------------------------------------------
 
@@ -219,7 +381,7 @@ export const INSTALL_HINT = [
   '  (esto descarga un Chromium solo para Playwright, ~150 MB)',
 ].join('\n');
 
-async function defaultLauncher() {
+export async function defaultLauncher() {
   for (const mod of ['playwright', 'playwright-core']) {
     let pw;
     try { pw = await import(mod); } catch { continue; }
@@ -240,8 +402,28 @@ function textPageURL(file, outDir) {
   return { url: pathToFileURL(tmp).href, tmp };
 }
 
+// Corre dentro de la página: qué texto o imagen hay y dónde, para nombrar los hotspots.
+function collectBlocks() {
+  const out = [];
+  for (const node of document.querySelectorAll('h1,h2,h3,h4,button,a,[role=button],img,p,li,td,strong,span')) {
+    const r = node.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8 || out.length >= 400) continue;
+    const tag = node.tagName.toLowerCase();
+    const text = tag === 'img' ? '' : (node.innerText || '').trim().slice(0, 80);
+    if (tag !== 'img' && !text) continue;
+    out.push({
+      tag, text,
+      x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY),
+      w: Math.round(r.width), h: Math.round(r.height),
+      fs: Math.round(parseFloat(getComputedStyle(node).fontSize) || 0),
+    });
+  }
+  return out;
+}
+
 /**
- * Saca <prefix>-desktop.png y <prefix>-mobile.png. `target` = carpeta, archivo o URL.
+ * Saca <prefix>-desktop.png y <prefix>-mobile.png, más <prefix>-<vista>.blocks.json con
+ * los textos de la página. `target` = carpeta, archivo o URL.
  * Devuelve { ok, files } u { ok:false, reason } si no hay Playwright.
  */
 export async function takeShots(target, prefix, { launcher = defaultLauncher, entry } = {}) {
@@ -270,6 +452,10 @@ export async function takeShots(target, prefix, { launcher = defaultLauncher, en
       const out = `${resolve(prefix)}-${name}.png`;
       await page.screenshot({ path: out, fullPage: true, animations: 'disabled' });
       files[name] = out;
+      if (typeof page.evaluate === 'function') {
+        try { writeFileSync(`${resolve(prefix)}-${name}.blocks.json`, JSON.stringify(await page.evaluate(collectBlocks)), 'utf8'); }
+        catch { /* sin bloques, los hotspots se nombran por posición */ }
+      }
       await ctx.close();
     }
   } finally {
@@ -417,13 +603,15 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
     '5. Self-contained: no external network assets and no paid APIs. Inline CSS/SVG or local files only.',
     '6. Never write outside the working folder. No git commands.',
     '7. All user-facing text (page copy and notes.md) in neutral Spanish with "tú". Never voseo ("vos", "tenés", "podés", "decime").',
-    `8. When done, write ${NOTES} in the working folder, in Spanish, with exactly these lines:`,
+    `8. When done, write ${NOTES} in the working folder, in Spanish. The user reads pictures, not reports, so keep it to these one-line fields:`,
     `   # Ronda ${n} — variante ${variant}`,
+    '   Titular: <the change in at most 8 words; it is the big headline of the slide>',
     `   Categoría: <one of: ${CATEGORIES.join(' | ')}>`,
-    '   Qué cambió: <1-3 sentences>',
-    '   Por qué: <how it improves conversion or look and feel>',
+    '   Cambio 1: <2 to 5 words naming one visible change>',
+    '   Cambio 2: <one line per change, top of the page to the bottom, at most 5; omit extras>',
+    '   Por qué: <one line>',
     '   Referencias: <1-2 named references>',
-    '   Riesgo: <what could go wrong>',
+    '   Riesgo: <one line>',
     '9. Reply with one line: the category and a one-sentence summary.',
   ];
   if (variant === 'blind') {
@@ -497,6 +685,8 @@ export async function after(n, { out = 'rounds', shots = takeShots } = {}) {
 
 export const reviewId = (run, n) => `rounds-${run.slug}-${pad(n)}`;
 const LABEL = { blind: 'ciega (sin memoria)', context: 'con contexto', integrada: 'integrada' };
+const SHORT_LABEL = { blind: 'Ciega', context: 'Con contexto', integrada: 'Integrada' };
+const CHOICE_LABEL = { blind: 'Ciega: sin memoria', context: 'Con contexto: conoce tus votos', integrada: 'Integrada', integrar: 'Integrar ambas' };
 
 function mediaPath(abs, root) {
   const rel = toPosix(relative(resolveRoot(root), abs));
@@ -504,8 +694,68 @@ function mediaPath(abs, root) {
   return rel;
 }
 
-/** Arma el JSON de la revisión (kind "rounds"). Puro: no publica. */
-export function buildRoundReview(n, { out = 'rounds', root } = {}) {
+/** Lee las líneas de notes.md: Titular, Categoría y "Cambio N" (formato corto). */
+export function parseNotes(md) {
+  const field = name => {
+    const m = new RegExp(`^${name}:\\s*(.+)$`, 'im').exec(String(md || ''));
+    return m ? m[1].trim() : '';
+  };
+  const cambios = [...String(md || '').matchAll(/^Cambio\s*\d*:\s*(.+)$/gim)].map(m => m[1].trim());
+  return { titular: field('Titular'), categoria: field('Categoría'), cambios };
+}
+
+function readBlocks(rp, name) {
+  const p = join(rp.shots, `${name}.blocks.json`);
+  if (!existsSync(p)) return [];
+  try { return readJSON(p); } catch { return []; }
+}
+
+// Hotspots de una vista: zonas por píxeles, nombres según la página o notes.md.
+function hotspotsFor(rp, v, vp, cambios) {
+  const a = join(rp.shots, `before-${vp}.png`);
+  const b = join(rp.shots, `${v}-${vp}.png`);
+  if (!existsSync(a) || !existsSync(b)) return [];
+  let regions, img;
+  try {
+    img = decodePNG(readFileSync(b));
+    regions = changedRegions(decodePNG(readFileSync(a)), img);
+  } catch { return []; }
+  const blocks = readBlocks(rp, `${v}-${vp}`);
+  const used = new Set();
+  // Las líneas "Cambio N" solo se usan si calzan con las zonas: mejor un nombre
+  // sacado de la propia página que uno bonito sobre la zona equivocada.
+  const useNotes = cambios.length === regions.length;
+  return regions.map((r, i) => ({ ...r, label: useNotes ? cambios[i] : labelRegion(r, blocks, img.width, img.height, used) }));
+}
+
+function realRatio(rp, v) {
+  const a = join(rp.shots, 'before-desktop.png');
+  const b = join(rp.shots, `${v}-desktop.png`);
+  if (!existsSync(a) || !existsSync(b)) return 0;
+  try { return realChangeRatio(readFileSync(a), readFileSync(b)); } catch { return 0; }
+}
+
+function variantVisual(rp, v, cambios, root) {
+  const view = vp => {
+    const before = join(rp.shots, `before-${vp}.png`);
+    const after = join(rp.shots, `${v}-${vp}.png`);
+    if (!existsSync(before) || !existsSync(after)) return null;
+    return {
+      label: vp === 'desktop' ? 'Escritorio' : 'Celular',
+      device: vp,
+      before: mediaPath(before, root),
+      after: mediaPath(after, root),
+      hotspots: hotspotsFor(rp, v, vp, cambios),
+    };
+  };
+  const views = Object.keys(VIEWPORTS).map(view).filter(Boolean);
+  if (!views.length) return null;
+  const [first] = views;
+  return { type: 'before_after', before: first.before, after: first.after, device: first.device, hotspots: first.hotspots, ...(views.length > 1 ? { views } : {}) };
+}
+
+/** Arma el JSON de la revisión (kind "rounds"), en imágenes. Puro: no publica. */
+export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
   const run = loadRun(out);
   const rp = roundPaths(out, n);
   if (!existsSync(rp.check)) throw new BoldError(`Falta ${rp.check}. Corre primero: after ${n}`);
@@ -518,37 +768,68 @@ export function buildRoundReview(n, { out = 'rounds', root } = {}) {
     if (!c) continue;
     const notesP = join(rp.variant(v), NOTES);
     const notes = existsSync(notesP) ? readFileSync(notesP, 'utf8').trim() : '(la variante no dejó notes.md)';
+    const parsed = parseNotes(notes);
     const ratios = Object.entries(c.ratios).map(([k, x]) => `${k} ${(x * 100).toFixed(1)}%`).join(', ');
     const media = [...shot('before-desktop'), ...shot(`${v}-desktop`), ...shot('before-mobile'), ...shot(`${v}-mobile`)];
     if (run.web && run.entry && existsSync(join(rp.variant(v), run.entry)) && /\.html?$/i.test(run.entry)) media.push(mediaPath(join(rp.variant(v), run.entry), root));
     if (!c.rejected) ok.push(v);
+    const visual = variantVisual(rp, v, parsed.cambios, root) || (c.files_changed.length
+      ? { type: 'diagram', kind: 'connects', center: `Variante ${SHORT_LABEL[v]}`, links: c.files_changed.slice(0, 8).map(f => ({ label: f, icon: 'pencil' })) }
+      : shot('before-desktop').length ? { type: 'image', path: shot('before-desktop')[0], alt: 'La página sigue igual que antes' } : null);
+    const pct = realRatio(rp, v);
+    const zones = visual?.hotspots?.length || 0;
+    const stats = c.rejected ? [] : [
+      ...(pct ? [{ value: `${Math.round(pct * 100)}%`, label: 'de la página es nueva' }] : []),
+      ...(zones ? [{ value: zones, label: zones === 1 ? 'zona marcada' : 'zonas marcadas' }] : []),
+    ];
     items.push({
       id: v,
       title: `Ronda ${n} · Variante ${LABEL[v]}${c.rejected ? ' · RECHAZADA' : ''}`,
+      headline: c.rejected ? `${SHORT_LABEL[v]}: sin cambio visible` : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
+      kicker: `Ronda ${n} · ${SHORT_LABEL[v]}`,
+      ask: c.rejected ? 'Descartada sola' : '¿Te gusta?',
       body_md: [
         notes, '',
         `**Archivos cambiados:** ${c.files_changed.length ? c.files_changed.join(', ') : 'ninguno'}`,
         ratios ? `**Diferencia visual vs. antes:** ${ratios}` : '',
         c.rejected ? `**Rechazada automáticamente:** ${c.reason}.` : '',
-        'Imágenes: antes y después en escritorio, luego antes y después en celular.',
       ].filter(Boolean).join('\n'),
       media,
       tags: [v, c.rejected ? 'rechazada' : 'candidata'],
+      ...(visual ? { visual } : {}),
+      ...(stats.length ? { stats } : {}),
     });
   }
-  if (ok.includes('blind') && ok.includes('context') && !check.variants.integrada) {
+  // Elegir con un clic: cada opción vota el ítem de su variante, así `choice` sigue igual.
+  const pictured = ok.filter(v => shot(`${v}-desktop`).length);
+  if (pictured.length >= 2) {
+    const options = pictured.slice(0, 3).map(v => ({
+      id: v,
+      label: CHOICE_LABEL[v],
+      item: v,
+      image: shot(`${v}-desktop`)[0],
+      ...(shot(`${v}-mobile`).length ? { image_mobile: shot(`${v}-mobile`)[0] } : {}),
+    }));
+    if (!check.variants.integrada) {
+      options.push({ id: 'integrar', label: CHOICE_LABEL.integrar, item: 'integrar', icon: 'merge', images: [shot('blind-desktop')[0], shot('context-desktop')[0]] });
+    }
     items.push({
-      id: 'integrar',
-      title: `Ronda ${n} · Integrar ambas`,
-      body_md: 'Propuesta: combinar lo mejor de la variante ciega y la de contexto en una sola versión. Si votas a favor, dime en el comentario qué tomar de cada una; Claude arma la versión integrada y te la muestra antes de seguir.',
-      media: [...shot('blind-desktop'), ...shot('context-desktop')],
-      tags: ['integrar'],
+      id: 'elegir',
+      title: `Ronda ${n} · Elegir la base de la siguiente ronda`,
+      headline: '¿Con cuál seguimos?',
+      kicker: `Ronda ${n} · tu decisión`,
+      ask: 'Elige una',
+      body_md: check.variants.integrada ? '' : 'Si eliges "Integrar ambas", dime en el comentario qué tomar de cada una; Claude arma la versión integrada y te la muestra antes de seguir.',
+      media: [],
+      tags: ['elegir'],
+      visual: { type: 'compare', options: options.slice(0, 3) },
     });
   }
   return {
     id: reviewId(run, n),
     title: `Bold rounds · ${run.slug} · ronda ${n} de ${run.max_rounds}`,
     kind: 'rounds',
+    ...(sprint !== undefined ? { sprint } : {}),
     connects_to: n > 1 ? [reviewId(run, n - 1)] : [],
     context_brief: [
       `Objetivo: ${run.goal}. Se trabaja sobre una COPIA; el original no se toca hasta que el usuario diga "aplicar".`,
@@ -559,10 +840,10 @@ export function buildRoundReview(n, { out = 'rounds', root } = {}) {
   };
 }
 
-export function review(n, { out = 'rounds', root } = {}) {
-  const r = buildRoundReview(n, { out, root });
+export function review(n, { out = 'rounds', root, sprint } = {}) {
+  const r = buildRoundReview(n, { out, root, sprint });
   const res = publishReview(r, root);
-  return { ...res, candidates: r.items.filter(i => !i.tags.includes('rechazada')).map(i => i.id) };
+  return { ...res, candidates: r.items.filter(i => !i.tags.includes('rechazada') && i.id !== 'elegir').map(i => i.id) };
 }
 
 /** Lee los votos del cockpit: devuelve blind | context | integrar | null. */
@@ -652,7 +933,7 @@ const USAGE = `Uso: node scripts/bold_rounds.js <comando>
   prepare <ronda>          copias blind/ y context/, screenshots "antes" y prompts
   run <ronda> [both]       variantes con claude -p (desatendido)
   after <ronda>            screenshots "después" + diff + rechazo de cambios invisibles
-  review <ronda>           publica la comparación en el cockpit
+  review <ronda> [--sprint N]   publica la ronda en el cockpit: antes/después con zonas marcadas y elegir con un clic
   choice <ronda>           lee el voto del usuario
   apply <ronda> <blind|context|integrada> [--auto]   promueve la variante a la copia de trabajo
   status | changes         estado de la corrida | archivos que difieren del original
@@ -685,7 +966,7 @@ async function cli(argv) {
       return 0;
     }
     case 'review': {
-      const r = review(a, { out });
+      const r = review(a, { out, sprint: flags.sprint !== undefined ? Number(flags.sprint) : undefined });
       print(`Publicada "${r.review.title}" (${r.review.items.length} ítems; candidatas: ${r.candidates.join(', ') || 'ninguna'}). Ábrela con: node src/cockpit.js open ${r.review.id}`);
       return 0;
     }

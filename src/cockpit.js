@@ -11,7 +11,10 @@
 // CLI:
 //   node src/cockpit.js pending            (feedback sin procesar, legible)
 //   node src/cockpit.js pending --json     (lo mismo en JSON)
-//   node src/cockpit.js publish <archivo>  (valida y publica una revisión)
+//   node src/cockpit.js publish <archivo> [--estricto]  (valida y publica; con
+//                                           --estricto rechaza ítems sin visual o con titular largo)
+//   node src/cockpit.js sprint-deck <borrador.json> [--estricto]  (cierre de sprint
+//                                           como presentación para directorio)
 //   node src/cockpit.js done <review_id>   (marca el feedback como procesado)
 //   node src/cockpit.js list               (revisiones publicadas)
 //   node src/cockpit.js open [review_id]   (levanta el server en segundo plano si
@@ -129,6 +132,161 @@ function isStringArray(v) {
   return Array.isArray(v) && v.every(x => typeof x === 'string');
 }
 
+// --- Visuales: una revisión se mira, no se lee. Ver cockpit/README.md ---------
+
+export const VISUAL_TYPES = ['image', 'before_after', 'compare', 'diagram'];
+export const DIAGRAM_KINDS = ['flow', 'org', 'timeline', 'connects'];
+export const HEADLINE_MAX_WORDS = 10;
+export const MAX_STATS = 3;
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
+const isText = v => typeof v === 'string' && v.trim().length > 0;
+const isUnit = v => typeof v === 'number' && v >= 0 && v <= 1;
+
+function checkImage(p, where, errors) {
+  if (!isSafeMediaPath(p) || !IMAGE_EXT.test(String(p))) errors.push(`${where}: imagen con ruta relativa a la raíz, sin ".." ni carpetas ocultas (${p})`);
+}
+
+function checkHotspots(list, where, errors) {
+  if (list === undefined) return;
+  if (!Array.isArray(list)) { errors.push(`${where}: array`); return; }
+  list.forEach((s, i) => {
+    if (!s || !isUnit(s.x) || !isUnit(s.y) || !isUnit(s.w) || !isUnit(s.h)) errors.push(`${where}[${i}]: x, y, w, h entre 0 y 1`);
+    if (s && s.label !== undefined && typeof s.label !== 'string') errors.push(`${where}[${i}].label: string`);
+  });
+}
+
+function checkBeforeAfter(v, where, errors) {
+  checkImage(v.before, `${where}.before`, errors);
+  checkImage(v.after, `${where}.after`, errors);
+  checkHotspots(v.hotspots, `${where}.hotspots`, errors);
+}
+
+function checkDiagram(v, where, errors) {
+  if (!DIAGRAM_KINDS.includes(v.kind)) { errors.push(`${where}.kind: uno de ${DIAGRAM_KINDS.join('|')}`); return; }
+  const labels = (list, name, min = 1) => {
+    if (!Array.isArray(list) || list.length < min) { errors.push(`${where}.${name}: al menos ${min}`); return false; }
+    return true;
+  };
+  if (v.kind === 'flow' && labels(v.steps, 'steps', 2)) {
+    v.steps.forEach((s, i) => {
+      const parallel = s && Array.isArray(s.parallel) && s.parallel.length && s.parallel.every(p => p && isText(p.label));
+      if (!s || (!isText(s.label) && !parallel)) errors.push(`${where}.steps[${i}]: label o parallel[{label}]`);
+    });
+  }
+  if (v.kind === 'org' && labels(v.members, 'members')) {
+    v.members.forEach((m, i) => { if (!m || !isText(m.label)) errors.push(`${where}.members[${i}].label: texto`); });
+    if (v.lead !== undefined && (!v.lead || !isText(v.lead.label))) errors.push(`${where}.lead.label: texto`);
+  }
+  if (v.kind === 'timeline' && labels(v.items, 'items')) {
+    v.items.forEach((t, i) => {
+      if (!t || !isText(t.label)) errors.push(`${where}.items[${i}].label: texto`);
+      if (!t || !['past', 'current', 'next'].includes(t.state)) errors.push(`${where}.items[${i}].state: past|current|next`);
+    });
+  }
+  if (v.kind === 'connects') {
+    if (!isText(v.center)) errors.push(`${where}.center: texto`);
+    if (labels(v.links, 'links')) v.links.forEach((l, i) => { if (!l || !isText(l.label)) errors.push(`${where}.links[${i}].label: texto`); });
+  }
+}
+
+function checkVisual(v, where, errors) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) { errors.push(`${where}: objeto`); return; }
+  if (!VISUAL_TYPES.includes(v.type)) { errors.push(`${where}.type: uno de ${VISUAL_TYPES.join('|')}`); return; }
+  if (v.type === 'image') {
+    checkImage(v.path, `${where}.path`, errors);
+    if (v.path_mobile !== undefined) checkImage(v.path_mobile, `${where}.path_mobile`, errors);
+    checkHotspots(v.hotspots, `${where}.hotspots`, errors);
+  }
+  if (v.type === 'before_after') {
+    checkBeforeAfter(v, where, errors);
+    if (v.views !== undefined) {
+      if (!Array.isArray(v.views)) errors.push(`${where}.views: array`);
+      else v.views.forEach((x, i) => { if (x && typeof x === 'object') checkBeforeAfter(x, `${where}.views[${i}]`, errors); else errors.push(`${where}.views[${i}]: objeto`); });
+    }
+  }
+  if (v.type === 'compare') {
+    if (!Array.isArray(v.options) || v.options.length < 2 || v.options.length > 3) errors.push(`${where}.options: de 2 a 3 opciones`);
+    else {
+      const ids = new Set();
+      v.options.forEach((o, i) => {
+        const w = `${where}.options[${i}]`;
+        if (!o || typeof o !== 'object') { errors.push(`${w}: objeto`); return; }
+        if (typeof o.id !== 'string' || !ID_RE.test(o.id)) errors.push(`${w}.id: string sin espacios`);
+        else if (ids.has(o.id)) errors.push(`${w}.id duplicado: ${o.id}`);
+        else ids.add(o.id);
+        if (!isText(o.label)) errors.push(`${w}.label: texto`);
+        if (o.image !== undefined) checkImage(o.image, `${w}.image`, errors);
+        if (o.image_mobile !== undefined) checkImage(o.image_mobile, `${w}.image_mobile`, errors);
+        if (o.images !== undefined) {
+          if (!isStringArray(o.images)) errors.push(`${w}.images: array de rutas`);
+          else o.images.forEach((m, j) => checkImage(m, `${w}.images[${j}]`, errors));
+        }
+        if (o.item !== undefined && (typeof o.item !== 'string' || !ID_RE.test(o.item))) errors.push(`${w}.item: id sin espacios`);
+      });
+    }
+  }
+  if (v.type === 'diagram') checkDiagram(v, where, errors);
+}
+
+function checkStats(stats, where, errors) {
+  if (stats === undefined) return;
+  if (!Array.isArray(stats) || stats.length > MAX_STATS) { errors.push(`${where}: hasta ${MAX_STATS} números grandes`); return; }
+  stats.forEach((s, i) => {
+    const okValue = s && (typeof s.value === 'number' || isText(s.value));
+    if (!okValue || !isText(s.label)) errors.push(`${where}[${i}]: { value, label }`);
+  });
+}
+
+/** Todas las imágenes que usa un visual (el server solo sirve media declarada). */
+export function visualPaths(v) {
+  if (!v || typeof v !== 'object') return [];
+  const out = [];
+  const add = p => { if (typeof p === 'string') out.push(p); };
+  if (v.type === 'image') { add(v.path); add(v.path_mobile); }
+  if (v.type === 'before_after') {
+    add(v.before); add(v.after);
+    for (const x of Array.isArray(v.views) ? v.views : []) { add(x?.before); add(x?.after); }
+  }
+  if (v.type === 'compare') {
+    for (const o of Array.isArray(v.options) ? v.options : []) {
+      add(o?.image); add(o?.image_mobile);
+      for (const m of Array.isArray(o?.images) ? o.images : []) add(m);
+    }
+  }
+  return out;
+}
+
+/** Rutas que un ítem declara: su `media` más las del visual. */
+export function itemMediaPaths(item) {
+  return [...(Array.isArray(item?.media) ? item.media : []), ...visualPaths(item?.visual)];
+}
+
+/** Ítems que reciben votos además de los de la revisión (opciones de un `compare`). */
+function compareTargets(review) {
+  const out = {};
+  for (const it of Array.isArray(review?.items) ? review.items : []) {
+    if (it?.visual?.type !== 'compare' || !Array.isArray(it.visual.options)) continue;
+    for (const o of it.visual.options) if (o && typeof o.item === 'string') out[o.item] = o.label;
+  }
+  return out;
+}
+
+const countWords = s => String(s || '').trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * Lo que aleja a una revisión del formato visual. No invalida el JSON: se avisa al
+ * publicar y solo se rechaza con --estricto.
+ */
+export function reviewWarnings(review) {
+  const out = [];
+  for (const it of review.items || []) {
+    if (!it.visual) out.push(`${it.id}: sin visual (agrega image, before_after, compare o diagram)`);
+    if (!isText(it.headline)) out.push(`${it.id}: sin headline (titular de máximo ${HEADLINE_MAX_WORDS} palabras)`);
+    else if (countWords(it.headline) > HEADLINE_MAX_WORDS) out.push(`${it.id}: headline de ${countWords(it.headline)} palabras (máximo ${HEADLINE_MAX_WORDS})`);
+  }
+  return out;
+}
+
 // Media: rutas relativas a la raíz del proyecto. Sin "..", sin absolutas, sin
 // segmentos ocultos (.env, .git). El server vuelve a validar al servirlas.
 export function isSafeMediaPath(p) {
@@ -155,6 +313,7 @@ export function validateReview(review) {
   }
   if (review.connects_to !== undefined && !isStringArray(review.connects_to)) errors.push('connects_to: array de strings');
   if (review.context_brief !== undefined && typeof review.context_brief !== 'string') errors.push('context_brief: string');
+  if (review.sprint !== undefined && !(Number.isInteger(review.sprint) && review.sprint >= 0)) errors.push('sprint: entero desde 0 (0 = arranque)');
   if (!Array.isArray(review.items) || review.items.length === 0) {
     errors.push('items: array con al menos 1 ítem');
   } else {
@@ -172,6 +331,9 @@ export function validateReview(review) {
         else it.media.forEach((m, j) => { if (!isSafeMediaPath(m)) errors.push(`${where}.media[${j}]: ruta relativa a la raíz, sin ".." ni carpetas ocultas (${m})`); });
       }
       if (it.tags !== undefined && !isStringArray(it.tags)) errors.push(`${where}.tags: array de strings`);
+      for (const k of ['headline', 'ask', 'kicker']) if (it[k] !== undefined && typeof it[k] !== 'string') errors.push(`${where}.${k}: string`);
+      if (it.visual !== undefined) checkVisual(it.visual, `${where}.visual`, errors);
+      checkStats(it.stats, `${where}.stats`, errors);
     });
   }
   if (errors.length) throw new CockpitError(`Revisión inválida:\n- ${errors.join('\n- ')}`);
@@ -183,12 +345,19 @@ export function validateReview(review) {
     created_at: review.created_at || new Date().toISOString(),
     connects_to: review.connects_to || [],
     context_brief: review.context_brief || '',
+    ...(review.sprint !== undefined ? { sprint: review.sprint } : {}),
     items: review.items.map(it => ({
       id: it.id,
       title: it.title.trim(),
       body_md: it.body_md || '',
       media: it.media || [],
       tags: it.tags || [],
+      // Campos visuales: solo si vienen, para que el contrato viejo quede intacto.
+      ...(it.headline !== undefined ? { headline: it.headline.trim() } : {}),
+      ...(it.kicker !== undefined ? { kicker: it.kicker.trim() } : {}),
+      ...(it.ask !== undefined ? { ask: it.ask.trim() } : {}),
+      ...(it.visual !== undefined ? { visual: it.visual } : {}),
+      ...(it.stats !== undefined ? { stats: it.stats } : {}),
     })),
   };
 }
@@ -197,12 +366,124 @@ export function validateReview(review) {
 // API de revisiones
 // ---------------------------------------------------------------------------
 
-export function publishReview(review, root) {
+/**
+ * Publica una revisión. `opts.estricto` rechaza lo que no sea visual primero; sin él
+ * solo avisa por consola. Si no trae `sprint`, toma el sprint activo del roadmap.
+ */
+export function publishReview(review, root, opts = {}) {
   const normalized = validateReview(review);
+  const warnings = reviewWarnings(normalized);
+  if (warnings.length && opts.estricto) {
+    throw new CockpitError(`Revisión rechazada por --estricto (no es visual primero):\n- ${warnings.join('\n- ')}`);
+  }
+  if (warnings.length && !opts.silencioso) {
+    console.warn(`[cockpit] Aviso: esta revisión no es visual primero. Aldot no lee muros de texto.\n- ${warnings.join('\n- ')}`);
+  }
+  if (normalized.sprint === undefined) {
+    const now = roadmapSnapshot(root).now;
+    if (now && now.objective) normalized.sprint = now.number;
+  }
   const { reviews } = cockpitPaths(root);
   const path = join(reviews, `${normalized.id}.json`);
   atomicWrite(path, JSON.stringify(normalized, null, 2) + '\n');
-  return { path, review: normalized };
+  return { path, review: normalized, warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Cierre de sprint: presentación para directorio
+// ---------------------------------------------------------------------------
+
+/**
+ * Borrador → revisión: resumen con 3 números, lo entregado en imágenes, lo que sigue
+ * y la decisión que se necesita. Lista TODOS los problemas del borrador de una vez.
+ * Formato: cockpit/ejemplo-sprint-deck.json.
+ */
+export function buildSprintDeck(d) {
+  const errors = [];
+  if (!d || typeof d !== 'object' || Array.isArray(d)) throw new CockpitError('El borrador debe ser un objeto JSON.');
+  if (!Number.isInteger(d.sprint) || d.sprint < 0) errors.push('sprint: número de sprint');
+  if (!isText(d.titular)) errors.push('titular: una idea en máximo 10 palabras');
+  if (!Array.isArray(d.numeros) || !d.numeros.length || d.numeros.length > MAX_STATS) errors.push(`numeros: de 1 a ${MAX_STATS} { value, label }`);
+  if (!Array.isArray(d.entregado) || !d.entregado.length) errors.push('entregado: al menos 1 { titular, imagen | antes + despues | visual }');
+  else d.entregado.forEach((e, i) => {
+    if (!e || !isText(e.titular)) errors.push(`entregado[${i}].titular: texto`);
+    if (e && !e.imagen && !e.visual && !(e.antes && e.despues)) errors.push(`entregado[${i}]: imagen, antes + despues, o visual`);
+  });
+  if (!Array.isArray(d.sigue) || !d.sigue.length) errors.push('sigue: al menos 1 texto');
+  if (!d.decision || !isText(d.decision.titular) || !Array.isArray(d.decision.opciones) || d.decision.opciones.length < 2) errors.push('decision: { titular, opciones: [2 o 3 { label, imagen? }] }');
+  if (errors.length) throw new CockpitError(`Borrador de sprint inválido:\n- ${errors.join('\n- ')}`);
+
+  const label = x => (typeof x === 'string' ? x : x.label);
+  const items = [{
+    id: 'resumen',
+    title: d.titular,
+    headline: d.titular,
+    kicker: `Sprint ${d.sprint}`,
+    ask: '¿Vamos bien?',
+    body_md: d.detalle || '',
+    visual: {
+      type: 'diagram',
+      kind: 'timeline',
+      items: [
+        ...(d.antes || []).slice(-2).map(x => ({ label: label(x), state: 'past' })),
+        { label: d.entregado_corto || `Sprint ${d.sprint}`, state: 'current' },
+        ...d.sigue.slice(0, 2).map(x => ({ label: label(x), state: 'next' })),
+      ],
+    },
+    stats: d.numeros,
+  }];
+  d.entregado.forEach((e, i) => {
+    const visual = e.visual || (e.imagen
+      ? { type: 'image', path: e.imagen, ...(e.imagen_mobile ? { path_mobile: e.imagen_mobile } : {}) }
+      : { type: 'before_after', before: e.antes, after: e.despues, ...(e.hotspots ? { hotspots: e.hotspots } : {}) });
+    items.push({
+      id: e.id || `entregado-${i + 1}`,
+      title: e.titular,
+      headline: e.titular,
+      kicker: 'Entregado',
+      ask: e.pregunta || '¿Te convence?',
+      body_md: e.detalle || '',
+      visual,
+      ...(e.numeros ? { stats: e.numeros } : {}),
+    });
+  });
+  items.push({
+    id: 'sigue',
+    title: 'Lo que sigue',
+    headline: d.sigue_titular || 'Lo que sigue',
+    kicker: 'Sigue',
+    ask: '¿Es el orden correcto?',
+    body_md: '',
+    visual: d.sigue.length >= 2
+      ? { type: 'diagram', kind: 'flow', steps: d.sigue.slice(0, 6).map(x => (typeof x === 'string' ? { label: x } : x)) }
+      : { type: 'diagram', kind: 'timeline', items: [{ label: `Sprint ${d.sprint}`, state: 'current' }, { label: label(d.sigue[0]), state: 'next' }] },
+  });
+  items.push({
+    id: 'decision',
+    title: d.decision.titular,
+    headline: d.decision.titular,
+    kicker: 'Decisión',
+    ask: 'Elige una',
+    body_md: d.decision.detalle || '',
+    visual: {
+      type: 'compare',
+      options: d.decision.opciones.slice(0, 3).map((o, i) => ({
+        id: o.id || `opcion-${i + 1}`,
+        label: o.label,
+        ...(o.imagen ? { image: o.imagen } : {}),
+        ...(o.icon ? { icon: o.icon } : {}),
+      })),
+    },
+  });
+  return {
+    id: d.id || `sprint-${d.sprint}-deck`,
+    title: `Sprint ${d.sprint}: ${d.titular}`,
+    kind: 'deliverable',
+    sprint: d.sprint,
+    connects_to: d.connects_to || [`Sprint ${d.sprint}`],
+    context_brief: d.context_brief || `Cierre del sprint ${d.sprint}: ${d.titular}. Recorre lo entregado, lo que sigue y pide la decisión: ${d.decision.titular}.`,
+    items,
+  };
 }
 
 export function getReview(id, root) {
@@ -218,6 +499,21 @@ export function getFeedback(id, root) {
 function feedbackStatus(fb) {
   if (!fb) return 'sin-feedback';
   return fb.processed ? 'procesado' : 'pendiente';
+}
+
+/** Miniatura de una revisión: la primera imagen; si no hay, el primer diagrama. */
+export function reviewCover(review) {
+  const items = Array.isArray(review?.items) ? review.items : [];
+  for (const it of items) {
+    const v = it?.visual;
+    if (v?.type === 'before_after' && typeof v.after === 'string') return { type: 'image', path: v.after };
+    const path = visualPaths(v)[0];
+    if (path) return { type: 'image', path };
+    const img = (Array.isArray(it?.media) ? it.media : []).find(m => typeof m === 'string' && IMAGE_EXT.test(m));
+    if (img) return { type: 'image', path: img };
+  }
+  for (const it of items) if (it?.visual?.type === 'diagram') return { type: 'diagram', visual: it.visual };
+  return null;
 }
 
 export function listReviews(root) {
@@ -236,6 +532,9 @@ export function listReviews(root) {
       item_count: r.items.length,
       feedback_status: feedbackStatus(fb),
       feedback_saved_at: fb ? fb.saved_at || null : null,
+      voted_count: fb && fb.items ? Object.values(fb.items).filter(v => v && v.vote).length : 0,
+      sprint: Number.isInteger(r.sprint) ? r.sprint : null,
+      cover: reviewCover(r),
     });
   }
   out.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
@@ -274,7 +573,7 @@ export function saveFeedback(reviewId, payload, root) {
   const review = getReview(reviewId, root);
   if (!review) throw new CockpitError(`No existe la revisión ${reviewId}`);
   const body = payload && typeof payload === 'object' ? payload : {};
-  const validIds = new Set((review.items || []).map(i => i.id));
+  const validIds = new Set([...(review.items || []).map(i => i.id), ...Object.keys(compareTargets(review))]);
 
   const items = {};
   const rawItems = body.items && typeof body.items === 'object' ? body.items : {};
@@ -311,7 +610,7 @@ export function pendingFeedback(root) {
     const fb = readJSONSafe(join(p.feedback, `${id}.json`));
     if (!fb || typeof fb !== 'object' || fb.processed !== false) continue;
     const review = getReview(id, root);
-    const titles = {};
+    const titles = { ...compareTargets(review) };
     if (review && Array.isArray(review.items)) for (const it of review.items) titles[it.id] = it.title;
     out.push({
       ...fb,
@@ -448,12 +747,33 @@ export function roadmapSnapshot(root) {
 
 export const SUMMARY_INSTRUCTIONS = 'Resume la conversación SOLO como JSON válido, sin texto extra ni bloques de código, con esta forma exacta: {"decisions": [string], "open_questions": [string], "requests": [string]}. decisions = lo que el usuario aprobó, rechazó o decidió. open_questions = dudas que quedaron sin resolver. requests = pedidos o ideas nuevas del usuario. Incluye solo lo que el usuario dijo de forma explícita: no infieras aprobaciones de ítems que no comentó. Frases cortas en español neutro. Arrays vacíos si no hay nada.';
 
+/** Lo que muestra un visual, en palabras: la guía de voz no ve imágenes. */
+function visualDigest(v) {
+  if (!v) return '';
+  if (v.type === 'before_after') {
+    const spots = (v.hotspots || []).map(s => s.label).filter(Boolean);
+    return `Se ve un antes y después${spots.length ? `; cambios marcados: ${spots.join(', ')}` : ''}.`;
+  }
+  if (v.type === 'compare') return `Se comparan estas opciones: ${(v.options || []).map(o => o.label).join(', ')}.`;
+  if (v.type === 'image') return `Se ve una imagen${v.alt ? `: ${v.alt}` : ''}.`;
+  if (v.type === 'diagram') {
+    if (v.kind === 'flow') return `Diagrama de pasos: ${(v.steps || []).map(s => s.label || (s.parallel || []).map(p => p.label).join(' y ')).join(' → ')}.`;
+    if (v.kind === 'org') return `Equipo: ${(v.members || []).map(m => m.label).join(', ')}.`;
+    if (v.kind === 'timeline') return `Línea de tiempo: ${(v.items || []).map(t => t.label).join(' → ')}.`;
+    if (v.kind === 'connects') return `${v.center} conecta con: ${(v.links || []).map(l => l.label).join(', ')}.`;
+  }
+  return '';
+}
+
 function itemsDigest(review, maxBody = 600) {
   return (review.items || []).map((it, i) => {
     const body = String(it.body_md || '').replace(/\s+/g, ' ').trim();
     const short = body.length > maxBody ? `${body.slice(0, maxBody)}…` : body;
     const tags = it.tags && it.tags.length ? ` (etiquetas: ${it.tags.join(', ')})` : '';
-    return `${i + 1}. [${it.id}] ${it.title}${tags}${short ? `\n   ${short}` : ''}`;
+    const seen = visualDigest(it.visual);
+    const stats = (it.stats || []).map(s => `${s.value} ${s.label}`).join(', ');
+    const extra = [seen, stats, short].filter(Boolean).join(' ');
+    return `${i + 1}. [${it.id}] ${it.title}${tags}${extra ? `\n   ${extra}` : ''}`;
   }).join('\n');
 }
 
@@ -723,12 +1043,13 @@ function cliMain(argv) {
       else console.log(formatPending(list));
       return 0;
     }
-    if (cmd === 'publish') {
-      if (!arg) { console.error('Uso: node src/cockpit.js publish <archivo.json>'); return 1; }
+    if (cmd === 'publish' || cmd === 'sprint-deck') {
+      if (!arg) { console.error(`Uso: node src/cockpit.js ${cmd} <archivo.json> [--estricto]`); return 1; }
       const raw = readFileSync(resolve(arg), 'utf8');
       let data;
       try { data = JSON.parse(raw); } catch (e) { console.error(`JSON inválido en ${arg}: ${e.message}`); return 1; }
-      const { path, review } = publishReview(data);
+      const toPublish = cmd === 'sprint-deck' ? buildSprintDeck(data) : data;
+      const { path, review } = publishReview(toPublish, undefined, { estricto: argv.includes('--estricto') });
       console.log(`Publicada "${review.title}" (${review.items.length} ítems) en ${path}. Ábrela con: node src/cockpit.js open ${review.id}`);
       return 0;
     }
@@ -744,7 +1065,7 @@ function cliMain(argv) {
       for (const r of list) console.log(`${r.id}  [${r.kind}] ${r.title}  (${r.item_count} ítems, ${r.feedback_status})`);
       return 0;
     }
-    console.log('Uso: node src/cockpit.js pending [--json] | publish <archivo> | done <id> | list | open [id] | stop');
+    console.log('Uso: node src/cockpit.js pending [--json] | publish <archivo> [--estricto] | sprint-deck <borrador> [--estricto] | done <id> | list | open [id] | stop');
     return cmd ? 1 : 0;
   } catch (e) {
     console.error(e.message);

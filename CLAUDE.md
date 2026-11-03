@@ -1,6 +1,6 @@
 # Starter Mazelab (v6-dev) — instrucciones para Claude
 
-Starter de Aldot: cada proyecto nuevo se clona desde aquí. Es un **kit de contexto + herramientas** (research, imágenes, memoria, roadmap, review-app, councils), no un proceso obligatorio. Usa lo que la tarea necesite.
+Starter de Aldot: cada proyecto se clona desde aquí. Es un **kit de contexto + herramientas**, no un proceso obligatorio. Usa lo que la tarea necesite.
 
 ## Reglas
 
@@ -19,6 +19,7 @@ Starter de Aldot: cada proyecto nuevo se clona desde aquí. Es un **kit de conte
 ## Cockpit de revisión
 
 - Toda revisión para Aldot va al cockpit, no como muro de texto: `/revisar` arma el JSON y lo publica con `node src/cockpit.js publish <archivo>`. Después corro yo `node src/cockpit.js open <id>` (levanta el server en segundo plano y abre el navegador; Aldot no abre otra terminal) y le digo "te abrí el cockpit en el navegador". Cerrarlo: `node src/cockpit.js stop`.
+- **Revisiones visuales primero:** titular + imagen; el texto solo detrás de "Ver más". Si una captura o diagrama no comunica la idea, genero una imagen con la skill `astra` (`node src/astra.js`) o `image-gen`. Cierre de sprint: `node src/cockpit.js sprint-deck <borrador>`.
 - Si el hook avisa feedback pendiente: `node src/cockpit.js pending`, aplícalo ANTES de seguir y márcalo con `node src/cockpit.js done <id>`.
 
 ## API keys (`.env`)
@@ -51,9 +52,8 @@ node --env-file=.env mi-script.js
 
 Comandos útiles:
 
-1. `node src/research.js pro "pregunta"` → research con fuentes (modos: `quick`, `pro`, `search`, `reason`, `deep`; `deep` tarda minutos, usa `--timeout-ms=600000` si necesitas más de 5 min).
-2. `npm run review-app` → levanta la app para revisar entregables en el navegador.
-3. `npm test` → corre todos los tests del starter.
+1. `node src/research.js pro "pregunta"` → research con fuentes (modos: `quick`, `pro`, `search`, `reason`, `deep`; `deep` tarda minutos).
+2. `npm test` → corre todos los tests del starter.
 
 **Memoria:** escribe solo en eventos significativos (una decisión, una lección, cierre de sprint), no en cada paso. `addDecision` acepta `reversibility: 'alta' | 'media' | 'baja'` (o texto libre, que se mapea solo).
 
