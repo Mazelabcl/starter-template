@@ -72,7 +72,7 @@ Comandos útiles:
 | "Haz un video" | copia `_catalog/video-director` a `.claude/skills/` y úsala (efectos + HyperFrames) |
 | "Haz una web" | skill `ui-ux-pro-max` si está; verifica con Playwright |
 | "Crea un agente para X" | ficha en `roles/`, sin reiniciar: skill `agent-template` y `node src/roles.js` (`roles/README.md`) |
-| "Cuánto gasté" / qué módulos se usan | `/uso` (no gasta tokens) |
+| "Cuánto gasté" / qué módulos se usan | `/uso` (botón Uso del cockpit: 0 tokens) |
 | Idea al pasar | `/idea X` y sigo con la tarea actual |
 | "Qué tenemos pendiente" | `/roadmap` |
 
