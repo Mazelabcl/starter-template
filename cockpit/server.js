@@ -39,6 +39,7 @@ import {
   SUMMARY_INSTRUCTIONS,
   CockpitError,
 } from '../src/cockpit.js';
+import { reporteProyecto, reporteTodos, paraWeb, parseDesde, claudeDirDefault } from '../src/uso.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -118,6 +119,19 @@ function originAllowed(req) {
   try {
     const u = new URL(origin);
     return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+// El uso es privado aunque alguien exponga el cockpit con COCKPIT_HOST: solo desde este
+// PC y con un Host local (esto último frena DNS rebinding).
+function requestLocal(req) {
+  const ip = req.socket.remoteAddress || '';
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) return false;
+  try {
+    const h = new URL(`http://${req.headers.host}`).hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
   } catch {
     return false;
   }
@@ -269,6 +283,21 @@ export function createCockpitServer(opts = {}) {
   const heartbeat = setInterval(() => { for (const res of clients) res.write(': ping\n\n'); }, 25_000);
   if (heartbeat.unref) heartbeat.unref();
 
+  // Uso: leer las transcripciones toma segundos, así que se guarda un minuto en memoria.
+  const usoCache = new Map();
+  function usoCacheado(alcance, desde) {
+    const clave = `${alcance}|${desde ?? ''}`;
+    const prev = usoCache.get(clave);
+    if (prev && Date.now() - prev.at < 60_000) return prev.promise;
+    const claudeDir = opts.usoDir || claudeDirDefault(env);
+    const promise = (alcance === 'todos'
+      ? reporteTodos({ starterRoot: root, claudeDir, desde })
+      : reporteProyecto({ root, claudeDir, desde })).then(paraWeb);
+    usoCache.set(clave, { at: Date.now(), promise });
+    promise.catch(() => usoCache.delete(clave));
+    return promise;
+  }
+
   function reviewOr404(res, rawId) {
     let id;
     try { id = decodeURIComponent(rawId); } catch { id = ''; }
@@ -314,6 +343,13 @@ export function createCockpitServer(opts = {}) {
         voice_name: env.COCKPIT_VOICE || REALTIME_DEFAULTS.voice,
         summary_instructions: SUMMARY_INSTRUCTIONS,
       });
+    }
+    if (method === 'GET' && path === '/api/uso') {
+      if (!requestLocal(req)) return sendJSON(res, 403, { error: 'el uso solo se ve desde este computador' });
+      let desde;
+      try { desde = parseDesde(url.searchParams.get('desde') || null); } catch (e) { return sendJSON(res, 400, { error: e.message }); }
+      const alcance = url.searchParams.get('alcance') === 'todos' ? 'todos' : 'proyecto';
+      return sendJSON(res, 200, await usoCacheado(alcance, desde));
     }
     if (method === 'GET' && path === '/api/roadmap') return sendJSON(res, 200, roadmapSnapshot(root));
     if (method === 'GET' && path === '/api/reviews') return sendJSON(res, 200, listReviews(root));

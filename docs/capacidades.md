@@ -26,6 +26,10 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 - **bold-rounds** (skill + `scripts/bold_rounds.js`, slash `/bold-rounds <objetivo> [N]`): mejora audaz de una web, proyecto o documento sobre una COPIA en `rounds/`. Cada ronda corre dos variantes en paralelo: **ciega** (subagente sin memoria, para innovar sin sesgo) y **contexto** (conoce rondas previas y tu feedback). Screenshots escritorio 1440 / celular 390 con Playwright, diff de píxeles que rechaza cambios invisibles, revisión `kind: "rounds"` en el cockpit con antes/después, pausa de control cada 3 rondas sin humano y tope de 10. El original solo cambia cuando dices "aplicar" (`node scripts/bold_rounds.js changes` lista qué cambiaría). Modo desatendido: `node scripts/bold_rounds.js run <ronda>` (usa `claude -p`). Screenshots requieren una vez `npm install --no-save playwright-core` (usa tu Chrome o Edge). Demo: `examples/cafeteria-90s/`.
 
+### Medir el uso
+
+- **uso** (`node src/uso.js`, `node src/uso.js todos`, slash `/uso`, página Uso del cockpit): tokens por sesión, hilo principal, subagentes y rondas, por modelo; carga base al abrir sesión; módulos usados y nunca usados; mayores gastos. Lee las transcripciones locales de Claude Code: no gasta tokens, es retroactivo y no sube nada. Los tokens por módulo son aproximados. Opciones: `--json`, `--desde YYYY-MM-DD`, `--proyecto <carpeta>`.
+
 ### Orquestación y calidad
 
 - **kickoff**: entrevista adaptativa que termina en un plan de batalla publicado en el cockpit (`kind: "plan"`, armado con `.claude/skills/kickoff/plan.js`): TLDRs, equipo con "actúa como", brazos, proceso, councils y riesgos. Tras aplicar el feedback autogenera `content/principles.md` + `content/INDEX.md` + `memory/project-profile.json` + `memory/active-team.json` + sprint inicial.

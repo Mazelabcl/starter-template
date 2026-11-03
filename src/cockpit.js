@@ -18,7 +18,8 @@
 //   node src/cockpit.js done <review_id>   (marca el feedback como procesado)
 //   node src/cockpit.js list               (revisiones publicadas)
 //   node src/cockpit.js open [review_id]   (levanta el server en segundo plano si
-//                                           no está y abre el navegador; idempotente)
+//                                           no está y abre el navegador; idempotente;
+//                                           `open uso` abre la página de uso)
 //   node src/cockpit.js stop               (cierra el server que levantó `open`)
 //
 // Raíz: por defecto la raíz del repo; se puede cambiar con COCKPIT_ROOT o
@@ -838,6 +839,7 @@ export function serverFiles(root) {
 export function cockpitUrl(port, reviewId) {
   const base = `http://localhost:${port}`;
   if (!reviewId) return base;
+  if (reviewId === 'uso') return `${base}/#/uso`; // página fija, no una revisión
   assertId(reviewId, 'review_id');
   return `${base}/#/r/${reviewId}`;
 }

@@ -72,7 +72,16 @@ if (!browser) {
   process.exit(3);
 }
 
-const { server, port } = await startCockpit({ root, port: 0, host: '127.0.0.1', env: {}, pollMs: 200 });
+// Transcripciones de juguete para la página de uso: nunca se leen las reales.
+const usoDir = join(root, '.transcripciones');
+const slugRoot = root.replace(/[^a-zA-Z0-9]/g, '-');
+mkdirSync(join(usoDir, slugRoot), { recursive: true });
+writeFileSync(join(usoDir, slugRoot, 'sesion-prueba.jsonl'), [
+  JSON.stringify({ type: 'user', cwd: root, timestamp: '2026-10-30T10:00:00Z', message: { role: 'user', content: 'hola' } }),
+  JSON.stringify({ type: 'assistant', cwd: root, timestamp: '2026-10-30T10:00:01Z', message: { id: 'm1', model: 'claude-prueba', content: [{ type: 'tool_use', id: 't1', name: 'Skill', input: { skill: 'council' } }], usage: { input_tokens: 10, cache_creation_input_tokens: 40000, cache_read_input_tokens: 90000, output_tokens: 700 } } }),
+].join('\n') + '\n');
+
+const { server, port } = await startCockpit({ root, port: 0, host: '127.0.0.1', env: {}, pollMs: 200, usoDir });
 const base = `http://localhost:${port}`;
 const VIEWPORTS = {
   escritorio: { viewport: { width: 1440, height: 900 } },
@@ -215,8 +224,21 @@ try {
       assert(await page.locator('.help-card svg.dg').count() >= 6, 'tarjetas sin diagrama');
     });
 
+    await check(`${name}: la página de uso se abre desde el botón y muestra números y barras`, async () => {
+      await page.goto(`${base}/#/`);
+      await page.click('#btn-uso');
+      await page.waitForSelector('.uso-tile');
+      assert((await page.locator('#uso-title').innerText()).includes('131 K'), 'total');
+      assert(await page.locator('.uso-bar-svg').count() >= 2, 'sin barras');
+      assert(await page.locator('.uso-chip').count() >= 1, 'sin nunca usados');
+      await page.click('#uso-tab-todos');
+      await page.waitForFunction(() => document.getElementById('uso-tab-todos').getAttribute('aria-pressed') === 'true');
+      await page.click('#uso-tab-proyecto');
+      await page.waitForSelector('.uso-tile');
+    });
+
     await check(`${name}: sin scroll horizontal`, async () => {
-      for (const route of ['#/', '#/ayuda', '#/r/visual/1', '#/r/visual/2', '#/r/visual/3', '#/r/visual/4']) {
+      for (const route of ['#/', '#/ayuda', '#/uso', '#/r/visual/1', '#/r/visual/2', '#/r/visual/3', '#/r/visual/4']) {
         await page.goto(`${base}/${route}`);
         await page.waitForTimeout(150);
         const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

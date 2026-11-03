@@ -9,6 +9,7 @@
 // Idioma: español neutro.
 
 import { el, icon, renderVisual, miniVisual, mediaNode, mediaUrl, diagramNode, isTallScreen } from './visuals.js';
+import { loadUso } from './uso.js';
 
 const $ = id => document.getElementById(id);
 
@@ -888,6 +889,7 @@ async function endTalk() {
 function setView(name) {
   $('view-home').hidden = name !== 'home';
   $('view-help').hidden = name !== 'help';
+  $('view-uso').hidden = name !== 'uso';
   $('view-deck').hidden = name !== 'deck';
   $('btn-talk').hidden = name !== 'deck';
   document.body.classList.toggle('deck-open', name === 'deck');
@@ -896,6 +898,7 @@ function setView(name) {
 
 function parseRoute() {
   if (location.hash === '#/ayuda') return { view: 'help' };
+  if (location.hash === '#/uso') return { view: 'uso' };
   const m = /^#\/r\/([^/]+)(?:\/(\d+))?$/.exec(location.hash);
   if (m) return { view: 'deck', id: decodeURIComponent(m[1]), slide: m[2] ? Number(m[2]) - 1 : 0 };
   return { view: 'home' };
@@ -923,6 +926,7 @@ async function route() {
   setView(r.view);
   window.scrollTo(0, 0);
   if (r.view === 'help') loadHelp();
+  else if (r.view === 'uso') loadUso($('view-uso'));
   else loadHome();
 }
 

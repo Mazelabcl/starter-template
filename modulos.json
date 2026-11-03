@@ -34,9 +34,11 @@
       "requires": ["base"],
       "files": [
         "src/cockpit.js",
+        "src/uso.js",
         "cockpit/server.js",
         "cockpit/public/index.html",
         "cockpit/public/app.js",
+        "cockpit/public/uso.js",
         "cockpit/public/visuals.js",
         "cockpit/public/diagrams.js",
         "cockpit/public/capacidades.json",
@@ -70,6 +72,21 @@
         "node src/cockpit.js stop"
       ],
       "notes": "El aviso de feedback pendiente al iniciar sesión vive en scripts/session_brief.js (hook). Si el proyecto viejo tiene su propio session_brief.js, no se toca: se informa como mejora opcional. El test cockpit.test.js importa scripts/session_brief.js; cópialo solo si ese archivo existe y exporta countPendingCockpit."
+    },
+    "uso": {
+      "description": "Medidor de uso: tokens por sesión y módulo, carga base, módulos nunca usados y mayores gastos. Lee las transcripciones locales: no gasta tokens y no sube nada.",
+      "requires": ["cockpit"],
+      "files": [
+        "src/uso.js",
+        { "src": "modulos.json", "dest": ".claude/uso-modulos.json" },
+        ".claude/commands/uso.md"
+      ],
+      "tests": ["uso.test.js"],
+      "npm": {},
+      "scripts": {},
+      "gitignore": [],
+      "verify": ["node src/uso.js --desde 2020-01-01"],
+      "notes": "node src/uso.js funciona solo. La página /uso necesita el cockpit actual: si el proyecto ya tenía uno propio, sus archivos quedan como conflicto y hay que actualizarlos para ver la página."
     },
     "bold-rounds": {
       "description": "Rediseño audaz por rondas sobre una copia (variante ciega vs. con contexto) que se vota en el cockpit.",

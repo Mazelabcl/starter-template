@@ -54,7 +54,7 @@ Comandos útiles:
 1. `node src/research.js pro "pregunta"` → research con fuentes (modos: `quick`, `pro`, `search`, `reason`, `deep`; `deep` tarda minutos).
 2. `npm test` → corre todos los tests del starter.
 
-**Memoria:** escribe solo en eventos significativos (una decisión, una lección, cierre de sprint), no en cada paso. `addDecision` acepta `reversibility: 'alta' | 'media' | 'baja'` (o texto libre, que se mapea solo).
+**Memoria:** escribe solo en eventos significativos (una decisión, una lección, cierre de sprint). `addDecision` acepta `reversibility: 'alta' | 'media' | 'baja'`.
 
 **Roadmap:** en `roadmap/roadmap.md` no edites a mano el contenido entre marcadores `<!-- ... -start -->` / `<!-- ... -end -->`; lo reescribe `src/roadmap.js`. El texto fuera de los marcadores sí se puede editar. Si faltan marcadores, `roadmap.js` los agrega solo.
 
@@ -72,6 +72,7 @@ Comandos útiles:
 | "Haz un video" | copia `_catalog/video-director` a `.claude/skills/` y úsala (efectos + HyperFrames) |
 | "Haz una web" | skill `ui-ux-pro-max` si está; verifica con Playwright |
 | "Crea un agente para X" | ficha en `roles/`, sin reiniciar: skill `agent-template` y `node src/roles.js` (`roles/README.md`) |
+| "Cuánto gasté" / qué módulos se usan | `/uso` (no gasta tokens) |
 | Idea al pasar | `/idea X` y sigo con la tarea actual |
 | "Qué tenemos pendiente" | `/roadmap` |
 

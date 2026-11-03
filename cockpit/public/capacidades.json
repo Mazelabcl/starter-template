@@ -137,6 +137,22 @@
       "more": "Cada idea es una pantalla: titular, imagen y votos. El texto queda detrás de **Ver más**."
     },
     {
+      "id": "uso",
+      "title": "Ver cuánto gastas",
+      "tag": "Tokens, módulos usados y nunca usados.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Pides /uso", "icon": "chat", "tone": "you" },
+          { "label": "Lee tu PC", "icon": "eye" },
+          { "label": "Números y barras", "icon": "bolt" },
+          { "label": "Decides qué borrar", "icon": "user", "tone": "you" }
+        ]
+      },
+      "phrase": "/uso",
+      "more": "Sale de las transcripciones que Claude Code ya guarda en tu PC: **medirlo no gasta tokens** y no se sube nada. También sirve para sesiones pasadas.\n\nLos tokens por módulo son aproximados. Por debajo: `node src/uso.js` y `node src/uso.js todos`."
+    },
+    {
       "id": "idea",
       "title": "Anotar una idea",
       "tag": "La guarda y sigue con lo que estaba.",
