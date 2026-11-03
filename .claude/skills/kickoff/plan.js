@@ -1,5 +1,7 @@
 // .claude/skills/kickoff/plan.js
-// Arma el PLAN DE BATALLA del kickoff como revisión del cockpit (kind "plan").
+// Arma el PLAN DE BATALLA del kickoff como revisión del cockpit (kind "plan"), en
+// imágenes: una lámina de TLDR, equipo (org), proceso (flow), roadmap (timeline),
+// brazos, councils y riesgos (connects). El detalle queda detrás de "Ver más".
 //
 // El orquestador escribe un borrador corto (lo que requiere criterio: TLDRs,
 // equipo, proceso, decisiones, riesgos) y este script completa lo mecánico:
@@ -50,12 +52,18 @@ export function validateDraft(d) {
   if (errors.length) throw new PlanError(`Borrador inválido:\n- ${errors.join('\n- ')}`);
 }
 
-function teamItem(m) {
-  const id = `equipo-${slug(m.id || m.rol)}`;
+// Corta a pocas palabras: en la lámina el detalle no se lee, queda detrás de "Ver más".
+const brief = (s, n = 5) => {
+  const words = String(s).replace(/\*\*/g, '').replace(/\s*\(.*?\)\s*/g, ' ').trim().split(/\s+/);
+  return words.length > n ? `${words.slice(0, n).join(' ')}…` : words.join(' ');
+};
+
+function teamBody(m) {
   const origen = m.nuevo
     ? '**Agente nuevo:** se crea durante el kickoff con `agent-template`. Hay que reiniciar Claude Code antes de poder invocarlo.'
     : `**Origen:** ${m.origen || 'agente o skill existente'}.`;
   const body = [
+    `### ${m.rol}`,
     `**Actúa como:** ${m.actua_como}`,
     '',
     `**Por qué este rol:** ${m.por_que}`,
@@ -66,7 +74,29 @@ function teamItem(m) {
     origen,
   ];
   if (m.brazos?.length) body.push('', `**Brazos que usa:** ${m.brazos.map(b => `\`${b}\``).join(', ')}`);
-  return { id, title: `Equipo: ${m.rol}`, body_md: body.join('\n'), tags: ['equipo', m.nuevo ? 'agente-nuevo' : 'existente'] };
+  return body.join('\n');
+}
+
+function teamItem(equipo) {
+  return {
+    id: 'equipo',
+    title: 'Equipo: quién hace qué',
+    headline: `Tu equipo: ${equipo.length} ${equipo.length === 1 ? 'rol' : 'roles'}`,
+    ask: '¿Te sirve este equipo?',
+    body_md: equipo.map(teamBody).join('\n\n'),
+    tags: ['equipo', ...(equipo.some(m => m.nuevo) ? ['agente-nuevo'] : [])],
+    visual: {
+      type: 'diagram',
+      kind: 'org',
+      lead: { label: 'Orquestador', note: 'Tú apruebas', icon: 'user' },
+      members: equipo.map(m => ({
+        label: m.corto || brief(m.rol),
+        icon: m.icono || 'user',
+        ...(m.nota ? { note: m.nota } : {}),
+        ...(m.nuevo ? { badge: 'Nuevo' } : {}),
+      })),
+    },
+  };
 }
 
 export function brazosSection(descripcion, entries, statusRows, { extra = [], limit = 8 } = {}) {
@@ -94,25 +124,68 @@ export function brazosSection(descripcion, entries, statusRows, { extra = [], li
     body.push('', 'Todo lo sugerido ya está conectado.');
   }
   body.push('', 'Dime cuáles quieres quitar o agregar. Ninguno se instala sin tu sí.');
-  return { item: { id: 'brazos', title: 'Brazos: qué hay conectado y qué falta', body_md: body.join('\n'), tags: ['brazos'] }, top, faltan };
+  const listos = top.filter(s => s.estado === ESTADOS.conectado);
+  const nameOf = s => brief(s.entry.nombre || s.id, 4);
+  const shownMissing = faltan.slice(0, 6);
+  const shownReady = listos.slice(0, 7 - shownMissing.length);
+  const hidden = faltan.length + listos.length - shownMissing.length - shownReady.length;
+  const links = [
+    ...shownMissing.map(s => ({ label: nameOf(s), state: 'missing' })),
+    ...shownReady.map(s => ({ label: nameOf(s), state: 'ok' })),
+    ...(hidden > 0 ? [{ label: `${hidden} más en Ver más`, icon: 'more' }] : []),
+  ];
+  const visual = links.length ? { type: 'diagram', kind: 'connects', center: 'Tu proyecto', center_icon: 'bolt', links } : undefined;
+  return {
+    item: {
+      id: 'brazos',
+      title: 'Brazos: qué hay conectado y qué falta',
+      headline: faltan.length ? `Faltan ${faltan.length} conexiones` : 'Todo conectado',
+      ask: faltan.length ? '¿Conectamos estas?' : '¿Lo apruebas?',
+      body_md: body.join('\n'),
+      tags: ['brazos'],
+      ...(visual ? { visual } : {}),
+      stats: [{ value: faltan.length, label: 'por conectar' }, { value: listos.length, label: 'listas' }],
+    },
+    top,
+    faltan,
+  };
 }
 
 export function councilsSection(decisiones, { templates = loadTemplates(), personas = loadPersonas() } = {}) {
   const lines = [];
   const found = [];
-  for (const text of decisiones) {
+  const links = [];
+  for (const d of decisiones) {
+    const text = typeof d === 'string' ? d : d.texto;
+    const label = typeof d === 'string' ? brief(d) : d.corto || brief(d.texto);
     const sugs = suggestTemplates(text, { templates, limit: 1 });
-    if (!sugs.length) { lines.push(`- **${text}** → sin council claro; se decide en el sprint con tu opinión.`); continue; }
+    if (!sugs.length) {
+      lines.push(`- **${text}** → sin council claro; se decide en el sprint con tu opinión.`);
+      links.push({ label, icon: 'user' });
+      continue;
+    }
     const s = sugs[0];
     found.push({ decision: text, template: s.template.id });
     lines.push(`- **${text}** → ${formatProposal(s, personas)}`);
+    links.push({ label, icon: 'users', note: s.template.id });
   }
   const body = [
     'Decisiones que van a aparecer y el council que conviene para cada una. **Ninguno corre sin tu sí.**',
     '',
     ...lines,
   ];
-  return { item: { id: 'councils', title: 'Councils sugeridos para decisiones que vienen', body_md: body.join('\n'), tags: ['councils'] }, found };
+  return {
+    item: {
+      id: 'councils',
+      title: 'Councils sugeridos para decisiones que vienen',
+      headline: links.length ? `${links.length} decisiones con expertos` : 'Sin decisiones grandes por ahora',
+      ask: '¿Son estas?',
+      body_md: body.join('\n'),
+      tags: ['councils'],
+      ...(links.length ? { visual: { type: 'diagram', kind: 'connects', center: 'Council de expertos', center_icon: 'users', links } } : {}),
+    },
+    found,
+  };
 }
 
 function processItem(proceso) {
@@ -124,18 +197,80 @@ function processItem(proceso) {
     body.push('');
   }
   body.push('**Dónde intervienes tú:**', ...proceso.intervenciones.map(x => `- ${x}`));
-  return { id: 'proceso', title: 'Proceso: sprints, gates y dónde intervienes', body_md: body.join('\n'), tags: ['proceso'] };
+  const steps = proceso.sprints.flatMap(s => [
+    { label: `Sprint ${s.numero}`, note: s.corto || brief(s.objetivo, 4), icon: 'rocket' },
+    ...(s.gate ? [{ label: 'Tú apruebas', note: s.gate_corto || undefined, icon: 'up', tone: 'you' }] : []),
+  ]);
+  const gates = proceso.sprints.filter(s => s.gate).length;
+  return {
+    id: 'proceso',
+    title: 'Proceso: sprints, gates y dónde intervienes',
+    headline: gates ? `Construimos, y tú apruebas ${gates} ${gates === 1 ? 'vez' : 'veces'}` : 'Cómo trabajamos',
+    ask: '¿Así está bien?',
+    body_md: body.join('\n'),
+    tags: ['proceso'],
+    ...(steps.length >= 2 ? { visual: { type: 'diagram', kind: 'flow', steps } } : {}),
+  };
+}
+
+function roadmapItem(proceso) {
+  const items = [
+    { label: 'Kickoff', state: 'past' },
+    ...proceso.sprints.map((s, i) => ({ label: s.corto || brief(s.objetivo), note: `Sprint ${s.numero}`, state: i === 0 ? 'current' : 'next' })),
+  ];
+  return {
+    id: 'roadmap',
+    title: 'Roadmap: del kickoff al lanzamiento',
+    headline: `El camino: ${proceso.sprints.length} ${proceso.sprints.length === 1 ? 'sprint' : 'sprints'}`,
+    ask: '¿Es el orden correcto?',
+    body_md: proceso.sprints.map(s => `- **Sprint ${s.numero}:** ${s.objetivo}`).join('\n'),
+    tags: ['roadmap'],
+    visual: { type: 'diagram', kind: 'timeline', items },
+  };
 }
 
 function risksItem(riesgos) {
   const body = riesgos.map(r => (typeof r === 'string' ? `- ${r}` : `- **${r.riesgo}** → ${r.mitigacion}`));
-  return { id: 'riesgos', title: 'Riesgos y cómo los cubrimos', body_md: body.join('\n'), tags: ['riesgos'] };
+  return {
+    id: 'riesgos',
+    title: 'Riesgos y cómo los cubrimos',
+    headline: `${riesgos.length} ${riesgos.length === 1 ? 'riesgo cubierto' : 'riesgos cubiertos'}`,
+    ask: '¿Falta alguno?',
+    body_md: body.join('\n'),
+    tags: ['riesgos'],
+    visual: {
+      type: 'diagram',
+      kind: 'connects',
+      center: 'Riesgos cubiertos',
+      center_icon: 'shield',
+      links: riesgos.slice(0, 8).map(r => ({ label: typeof r === 'string' ? brief(r) : r.corto || brief(r.riesgo), icon: 'shield' })),
+    },
+  };
+}
+
+function tldrItem(d, { faltan }) {
+  const steps = (d.tldr_pasos?.length ? d.tldr_pasos : d.proceso.sprints.map(s => s.corto || brief(s.objetivo, 4)))
+    .slice(0, 6).map(x => (typeof x === 'string' ? { label: x } : x));
+  return {
+    id: 'tldr',
+    title: `Lo que pediste y cómo lo haría: ${d.proyecto}`,
+    headline: d.titular || brief(d.proyecto, 10),
+    ask: '¿Es esto lo que quieres?',
+    body_md: `### Lo que pediste\n${d.tldr_usuario}\n\n### Cómo lo haría el orquestador\n${d.tldr_orquestador}`,
+    tags: ['tldr'],
+    ...(steps.length >= 2 ? { visual: { type: 'diagram', kind: 'flow', steps } } : {}),
+    stats: [
+      { value: d.proceso.sprints.length, label: d.proceso.sprints.length === 1 ? 'sprint' : 'sprints' },
+      { value: d.equipo.length, label: d.equipo.length === 1 ? 'rol en el equipo' : 'roles en el equipo' },
+      { value: faltan.length, label: 'conexiones por hacer' },
+    ],
+  };
 }
 
 export function buildContextBrief(d, { faltan = [], equipo = [] } = {}) {
   return [
     `Plan de batalla del proyecto "${d.proyecto}", recién salido del kickoff. Aldot es novato (vibe coder): explica en simple, sin jerga.`,
-    'Recórrelo en este orden: 1) los dos TLDR (qué pidió y cómo lo haría el orquestador), 2) el equipo, un integrante a la vez (rol, por qué, qué entrega), 3) los brazos y lo que falta conectar, 4) el proceso y dónde interviene él, 5) los councils sugeridos, 6) los riesgos.',
+    'Él ve cada ítem como una lámina con un diagrama: nombra lo que está viendo. Recórrelo en este orden: 1) el TLDR (qué pidió y cómo lo haría el orquestador), 2) el equipo, un integrante a la vez (rol, por qué, qué entrega), 3) los brazos y lo que falta conectar, 4) el proceso y dónde interviene él, 5) el roadmap, 6) los councils sugeridos, 7) los riesgos.',
     `En cada ítem pregunta si lo aprueba, lo cambia o lo quita. El equipo tiene ${equipo.length} integrantes${equipo.some(m => m.nuevo) ? '; los marcados como agente nuevo exigen reiniciar Claude Code después del kickoff' : ''}.`,
     faltan.length ? `Faltan por conectar: ${faltan.map(s => s.id).join(', ')}. Pregunta cuáles quiere conectar ahora y cuáles después; ninguno se instala sin su sí.` : 'Todos los brazos sugeridos ya están conectados.',
     'No prometas costos ni plazos que no estén escritos en los ítems. Nada empieza hasta que guarde el feedback: el orquestador lo lee y ajusta el plan antes del Sprint 1.',
@@ -165,14 +300,15 @@ export function buildPlanReview(draft, { ctx = null, entries = null, templates, 
     title: `Plan de batalla: ${draft.proyecto}${version > 1 ? ` (v${version})` : ''}`,
     kind: 'plan',
     created_at: new Date().toISOString(),
+    sprint: 0,
     connects_to: ['memory/project-profile.json', 'roadmap/current-sprint.json (Sprint 1)'],
     context_brief: buildContextBrief(draft, { faltan: brazos.faltan, equipo: draft.equipo }),
     items: [
-      { id: 'tldr-usuario', title: 'Lo que pediste (TLDR)', body_md: draft.tldr_usuario, tags: ['tldr'] },
-      { id: 'tldr-orquestador', title: 'Cómo lo haría el orquestador (TLDR)', body_md: draft.tldr_orquestador, tags: ['tldr'] },
-      ...draft.equipo.map(teamItem),
-      brazos.item,
+      tldrItem(draft, brazos),
+      teamItem(draft.equipo),
       processItem(draft.proceso),
+      roadmapItem(draft.proceso),
+      brazos.item,
       councils.item,
       risksItem(draft.riesgos),
     ],

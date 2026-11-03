@@ -72,6 +72,7 @@ Write `memory/plan-de-batalla.borrador.json` (format: `ejemplo-plan-borrador.jso
 - `equipo[]`: 3-5 members. Each: `rol`, `actua_como` (rich persona: specialty, years, what they obsess about), `por_que` (why THIS project needs this role), `entrega[]`, `brazos[]` (ids from the directory), `nuevo` (true if a new agent must be created) or `origen` (existing agent/skill).
 - `proceso`: `sprints[]` (numero, objetivo, entregables, gate) + `intervenciones[]` (where the user acts: approvals, credentials only they can authorize, real data they must provide).
 - `decisiones[]`, `riesgos[]` (`{ riesgo, mitigacion }`).
+- The plan becomes a picture deck (org, flow, timeline; full text stays behind "Ver más"), so also give the short labels of 2-5 words: `titular` (max 10 words), `tldr_pasos[]`, and `corto` on team members, sprints, decisions (`{ texto, corto }`) and risks; plus `nota`, `icono` and `gate_corto` where they help.
 
 Then build and publish:
 ```

@@ -1,7 +1,8 @@
 // kickoff-plan.test.js
 // Verifica el plan de batalla del kickoff (.claude/skills/kickoff/plan.js):
 //   - el borrador de ejemplo produce una revisión válida del cockpit (kind plan)
-//   - ítems: 2 TLDR, uno por integrante, brazos, proceso, councils, riesgos
+//   - en imágenes: TLDR con números, equipo (org), proceso (flow), roadmap (timeline),
+//     brazos, councils y riesgos (connects), sin avisos de "no es visual"
 //   - brazos incluye los asignados por el equipo y los comandos connect de lo que falta
 //   - councils sugeridos por decisión; context_brief apto para la guía de voz
 //   - SKILL.md del kickoff: corto (≤150 líneas) y con el paso del plan
@@ -12,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { buildPlanReview, validateDraft, chatTldr, PlanError } from './.claude/skills/kickoff/plan.js';
-import { publishReview, listReviews } from './src/cockpit.js';
+import { publishReview, listReviews, reviewWarnings } from './src/cockpit.js';
 
 let passed = 0;
 let failed = 0;
@@ -42,20 +43,40 @@ check('buildPlanReview produce una revisión válida kind=plan', () => {
   assert(result.review.id === 'plan-de-batalla-v1', result.review.id);
 });
 
-check('ítems: TLDRs, equipo, brazos, proceso, councils, riesgos', () => {
+check('ítems: una lámina por idea', () => {
   const ids = result.review.items.map(i => i.id);
-  for (const id of ['tldr-usuario', 'tldr-orquestador', 'brazos', 'proceso', 'councils', 'riesgos']) assert(ids.includes(id), `falta ${id}`);
-  const team = ids.filter(i => i.startsWith('equipo-'));
-  assert(team.length === DRAFT.equipo.length, `equipo: ${team.length}`);
-  assert(ids.length === 6 + DRAFT.equipo.length, `total ${ids.length}`);
+  assert(ids.join(',') === 'tldr,equipo,proceso,roadmap,brazos,councils,riesgos', ids.join(','));
 });
 
-check('cada integrante trae actúa como + por qué + entrega; agente nuevo avisa reinicio', () => {
-  for (const it of result.review.items.filter(i => i.id.startsWith('equipo-'))) {
-    assert(/Actúa como/.test(it.body_md) && /Por qué/.test(it.body_md) && /Entrega/.test(it.body_md), it.id);
-  }
-  const nuevo = result.review.items.find(i => i.tags.includes('agente-nuevo'));
-  assert(nuevo && /reiniciar Claude Code/.test(nuevo.body_md), 'sin aviso de reinicio');
+check('el plan es visual primero: org, flow, timeline y titulares cortos', () => {
+  const by = id => result.review.items.find(i => i.id === id);
+  assert(by('equipo').visual.kind === 'org' && by('equipo').visual.members.length === DRAFT.equipo.length, 'org');
+  assert(by('proceso').visual.kind === 'flow' && by('proceso').visual.steps.some(s => s.tone === 'you'), 'flow con los pasos del usuario');
+  const tl = by('roadmap').visual;
+  assert(tl.kind === 'timeline' && tl.items.some(t => t.state === 'current') && tl.items.some(t => t.state === 'next'), 'timeline');
+  assert(by('tldr').stats.length === 3, 'TLDR con 3 números');
+  assert(reviewWarnings(result.review).length === 0, reviewWarnings(result.review).join(' | '));
+  assert(result.review.sprint === 0, 'el plan va en el arranque');
+});
+
+check('sin etiquetas cortas igual queda visual: las arma recortando', () => {
+  const plain = JSON.parse(JSON.stringify(DRAFT));
+  delete plain.titular; delete plain.tldr_pasos;
+  plain.equipo.forEach(m => { delete m.corto; delete m.nota; delete m.icono; });
+  plain.riesgos.forEach(r => { delete r.corto; });
+  plain.decisiones = plain.decisiones.map(d => d.texto);
+  const r = buildPlanReview(plain, { ctx }).review;
+  assert(reviewWarnings(r).length === 0, reviewWarnings(r).join(' | '));
+  const risk = r.items.find(i => i.id === 'riesgos').visual.links[0].label;
+  assert(risk.split(/\s+/).length <= 5, risk);
+});
+
+check('cada integrante trae actúa como + por qué + entrega detrás de Ver más; agente nuevo avisa reinicio', () => {
+  const team = result.review.items.find(i => i.id === 'equipo');
+  for (const m of DRAFT.equipo) assert(team.body_md.includes(m.actua_como) && team.body_md.includes(m.por_que), m.rol);
+  assert(/Entrega/.test(team.body_md), 'sin entrega');
+  assert(team.tags.includes('agente-nuevo') && /reiniciar Claude Code/.test(team.body_md), 'sin aviso de reinicio');
+  assert(team.visual.members.some(m => m.badge === 'Nuevo'), 'sin marca de agente nuevo');
 });
 
 check('brazos: incluye los del equipo, estados y comandos connect de lo que falta', () => {
