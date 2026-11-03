@@ -30,21 +30,25 @@
       ]
     },
     "cockpit": {
-      "description": "Cockpit de revisión: roadmap arriba, votos por ítem, conversación por voz o texto, feedback que Claude lee. Incluye open/stop en segundo plano y el comando /revisar.",
+      "description": "Cockpit de revisión en imágenes: línea de tiempo de sprints, presentación de láminas con votos de un clic, ayuda \"Qué puedo pedir\", conversación por voz o texto, feedback que Claude lee. Incluye open/stop en segundo plano y el comando /revisar.",
       "requires": ["base"],
       "files": [
         "src/cockpit.js",
         "cockpit/server.js",
         "cockpit/public/index.html",
         "cockpit/public/app.js",
+        "cockpit/public/visuals.js",
+        "cockpit/public/diagrams.js",
+        "cockpit/public/capacidades.json",
         "cockpit/public/style.css",
         "cockpit/README.md",
         "cockpit/ejemplo-review.json",
+        "cockpit/ejemplo-sprint-deck.json",
         "cockpit/reviews/.gitkeep",
         "cockpit/feedback/.gitkeep",
         ".claude/commands/revisar.md"
       ],
-      "tests": ["cockpit.test.js"],
+      "tests": ["cockpit.test.js", "cockpit-visual.test.js"],
       "npm": {},
       "scripts": {
         "cockpit": "node cockpit/server.js",
@@ -72,13 +76,14 @@
       "requires": ["cockpit"],
       "files": [
         "scripts/bold_rounds.js",
+        "scripts/cockpit_visual_check.js",
         ".claude/skills/bold-rounds/SKILL.md",
         ".claude/commands/bold-rounds.md"
       ],
       "tests": ["bold-rounds.test.js"],
       "npm": {},
       "optional_npm": { "playwright-core": "solo para screenshots; se instala con npm install --no-save playwright-core" },
-      "scripts": {},
+      "scripts": { "cockpit:check": "node scripts/cockpit_visual_check.js" },
       "gitignore": ["/rounds/", "/rounds-*/"],
       "verify": ["node scripts/bold_rounds.js"]
     },

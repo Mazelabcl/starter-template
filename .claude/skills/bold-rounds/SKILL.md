@@ -12,7 +12,7 @@ Helper: `scripts/bold_rounds.js` (run `node scripts/bold_rounds.js` for usage). 
 
 > "Look at the site first. Then innovate: think about the user experience and think outside the box. Make one bold change that improves conversions or the look and feel, not a small tweak. Use any tool you have. You must ship a change every time."
 
-The helper embeds it in `rounds/NNN/prompt-<variant>.md` together with the guardrails: one change in ONE category (composición, tipografía, color, imágenes, interacción, jerarquía, mobile), visible at first glance, anti-slop (no default gradients, no pills everywhere, no card soup, 3-4 colors + neutrals, 1-2 named references), truthful facts, self-contained, user-facing text in Spanish neutro, and a `notes.md` (qué cambió, categoría, por qué, referencias, riesgo).
+The helper embeds it in `rounds/NNN/prompt-<variant>.md` together with the guardrails: one change in ONE category (composición, tipografía, color, imágenes, interacción, jerarquía, mobile), visible at first glance, anti-slop (no default gradients, no pills everywhere, no card soup, 3-4 colors + neutrals, 1-2 named references), truthful facts, self-contained, user-facing text in Spanish neutro, and a `notes.md` with one-line fields only (see "Variant report").
 
 ## Hard rules
 
@@ -21,6 +21,23 @@ The helper embeds it in `rounds/NNN/prompt-<variant>.md` together with the guard
 3. No visible change = rejected. "Always ship" without a visible diff is fake progress.
 4. Caps: `--rounds` (default 5, hard max 10), per-variant timeout 15 min, human checkpoint every `--pause-every` rounds (default 3). The helper refuses to prepare a round past the cap or after too many rounds without a human decision. Never bypass with `--force` unless the user asked.
 5. Never use paid APIs (image generation, etc.) inside a variant unless the user explicitly allowed it and knows the cost.
+
+## Variant report: pictures first, text optional
+
+The user decides by looking at the slider, not by reading. `notes.md` has at most one line per change; everything except `Titular` is optional:
+
+```
+# Ronda N — variante blind
+Titular: <the change in at most 8 words; the big headline of the slide>
+Categoría: <category>
+Cambio 1: <2-5 words, one visible change, top of the page first>
+Cambio 2: <one line per change, at most 5>
+Por qué: <one line>
+Referencias: <1-2 names>
+Riesgo: <one line>
+```
+
+Notes only show behind "Ver más". `review` computes numbered hotspots from the pixel diff of each variant (what only moved down is not marked) and names each with the largest text inside the zone. `Cambio N` lines replace those names only when their count matches the zones.
 
 ## Setup (once per run)
 
@@ -42,9 +59,9 @@ node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<obj
 3. Each variant writes `rounds/NNN/<variant>/notes.md`. If one is missing, note it in the review; do not write it yourself.
 4. **After + diff check:** `node scripts/bold_rounds.js after N` (screenshots "after", pixel diff vs before, rejects variants without visible change).
 5. **Look yourself:** Read the before/after PNGs (desktop and mobile) of each candidate. If a variant broke the page (overflow, unreadable text, invented facts), say so in your TLDR.
-6. **Publish:** `node scripts/bold_rounds.js review N` (cockpit review with blind, context and, if both pass, "integrar ambas"; before/after media). Then open it yourself (the user never opens a second terminal): `node src/cockpit.js open <review_id>` (starts the cockpit in the background if needed and opens the browser). Tell the user:
-   `Ronda N lista. Te abrí el cockpit en el navegador. Vota a favor de UNA opción (ciega, contexto o integrar) y guarda.`
-   Then give a 3-line TLDR: what each variant changed (category + one sentence) and which one you would pick and why.
+6. **Publish:** `node scripts/bold_rounds.js review N` (slides: one `before_after` slider with hotspots per variant, desktop and mobile, and, if both pass, an `elegir` slide to pick blind, context or "integrar ambas" with one click). Then open it yourself (the user never opens a second terminal): `node src/cockpit.js open <review_id>` (starts the cockpit in the background if needed and opens the browser). Tell the user:
+   `Ronda N lista. Te abrí el cockpit en el navegador. Mira los antes y después y elige una con un clic: se guarda solo.`
+   Then at most one line: which one you would pick and why.
 7. **Checkpoint.** Wait for the vote: `node scripts/bold_rounds.js choice N` (or `node src/cockpit.js pending`). If the user said up front "sigue solo" / unattended, you may pick yourself with `apply N <variante> --auto`; the helper forces a pause after `pause_every` such rounds.
    - If the user chose "integrar": spawn one Agent that copies `rounds/NNN/context/` to `rounds/NNN/integrada/` and merges in the chosen parts of `blind/` per the user's comment, writing its own `notes.md`; then run `after N` and show it before applying.
 8. **Apply the choice to the working copy** (seeds round N+1; the real target stays untouched):
