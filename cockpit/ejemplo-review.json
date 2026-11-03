@@ -7,20 +7,53 @@
   "items": [
     {
       "id": "votar",
-      "title": "Votar cada ítem",
-      "body_md": "Cada ítem tiene **dos botones**: aprobar o rechazar. Si algo no te convence, escribe un comentario corto al lado.\n\n- Aprobar = sigue así\n- Rechazar = hay que cambiarlo",
+      "title": "Votar cada lámina",
+      "headline": "Cada lámina es una idea: vota con un clic",
+      "ask": "Prueba votar",
+      "visual": {
+        "type": "diagram",
+        "kind": "flow",
+        "steps": [
+          { "label": "Miras", "icon": "eye" },
+          { "label": "Votas", "icon": "up", "tone": "you" },
+          { "label": "Claude lo aplica", "icon": "check" }
+        ]
+      },
+      "body_md": "Cada lámina tiene **dos botones**: me gusta o no me gusta. Si algo no te convence, agrega un comentario corto.\n\n- Me gusta = sigue así\n- No me gusta = hay que cambiarlo\n\nTus votos se guardan solos.",
       "tags": ["básico"]
     },
     {
       "id": "conversar",
       "title": "Conversar por voz",
-      "body_md": "El botón **Conversar sobre esta revisión** abre una guía por voz. Te explica cada ítem y te pregunta tu opinión, uno a la vez. Al terminar, guarda la conversación y un resumen con tus decisiones.",
+      "headline": "¿Prefieres hablar? Conversa por voz",
+      "ask": "¿Te sirve?",
+      "visual": {
+        "type": "diagram",
+        "kind": "connects",
+        "center": "Guía de voz",
+        "center_icon": "mic",
+        "links": [
+          { "label": "Te recorre las láminas", "icon": "eye" },
+          { "label": "Te pregunta", "icon": "chat" },
+          { "label": "Anota tus decisiones", "icon": "pencil" }
+        ]
+      },
+      "body_md": "El botón **Conversar** abre una guía por voz. Te explica cada lámina y te pregunta tu opinión, una a la vez. Al terminar, guarda la conversación y un resumen con tus decisiones.",
       "tags": ["voz"]
     },
     {
       "id": "guardar",
-      "title": "Guardar y seguir",
-      "body_md": "Presiona **Guardar feedback**. La próxima vez que hables con Claude, el aviso de inicio le dirá que hay feedback pendiente y lo aplicará antes de seguir.",
+      "title": "Elegir entre opciones",
+      "headline": "Cuando hay opciones, eliges con un clic",
+      "ask": "Elige una",
+      "visual": {
+        "type": "compare",
+        "options": [
+          { "id": "a", "label": "Opción A", "icon": "image" },
+          { "id": "b", "label": "Opción B", "icon": "film" }
+        ]
+      },
+      "body_md": "Tu elección se guarda sola. La próxima vez que hables con Claude, el aviso de inicio le dirá que hay feedback pendiente y lo aplicará antes de seguir.",
       "tags": ["cierre"]
     }
   ]

@@ -1,0 +1,139 @@
+{
+  "_nota": "Contenido de la página \"Qué puedo pedir\". Para agregar una capacidad, suma una tarjeta aquí: id, title, tag (pocas palabras), diagram (flow, org, timeline o connects), phrase (frase exacta para Claude) o modes[] y, si hace falta, more (detalle detrás de Ver más).",
+  "cards": [
+    {
+      "id": "bold-rounds",
+      "title": "Rediseño por rondas",
+      "tag": "Dos versiones por ronda. Tú eliges.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Copia", "icon": "copy" },
+          { "parallel": [{ "label": "Ciega", "icon": "eyeoff" }, { "label": "Con contexto", "icon": "brain" }] },
+          { "label": "Capturas", "icon": "camera" },
+          { "label": "Tú eliges", "icon": "user", "tone": "you" },
+          { "label": "Aplicar", "icon": "check" }
+        ]
+      },
+      "phrase": "Mejora esta página con 3 rondas de /bold-rounds",
+      "more": "Claude trabaja sobre una **copia**: tu original no se toca hasta que digas \"aplicar\".\n\n- **Ciega**: no sabe nada de rondas anteriores, para innovar sin sesgo.\n- **Con contexto**: conoce tus votos y rondas previas.\n- Cada ronda llega al cockpit con un antes y después, y las zonas que cambiaron marcadas con números.\n- Si un cambio no se nota en pantalla, se descarta solo."
+    },
+    {
+      "id": "council",
+      "title": "Council de expertos",
+      "tag": "Varias miradas, una propuesta mejor.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Tu pregunta", "icon": "chat", "tone": "you" },
+          { "parallel": [{ "label": "Experto 1", "icon": "user" }, { "label": "Experto 2", "icon": "user" }] },
+          { "label": "Propuesta integrada", "icon": "merge" },
+          { "label": "Votas", "icon": "up", "tone": "you" }
+        ]
+      },
+      "modes": [
+        { "label": "Tú eliges a los expertos", "phrase": "Convoca un council con el CTO y el visionario sobre si lanzamos ahora" },
+        { "label": "Creas tu propio experto", "phrase": "Crea una experta en aforo de eventos que mire seguridad y permisos, y súmala al council" },
+        { "label": "El orquestador decide", "phrase": "Arma tú el panel de expertos para esta decisión" }
+      ],
+      "more": "Cada experto responde por separado y un integrador fusiona lo mejor de cada uno, con cada aporte atribuido. Claude te dice el costo antes y nunca lo corre sin tu sí.\n\nPor debajo usa `node src/council.js run --personas cto,steve-jobs --question \"...\"`, o `--crear \"Experta en aforo de eventos: mira seguridad y permisos\"`, que se puede repetir."
+    },
+    {
+      "id": "kickoff",
+      "title": "Arrancar un proyecto",
+      "tag": "Entrevista corta, plan en imágenes.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Te entrevista", "icon": "chat" },
+          { "label": "Arma equipo", "icon": "users" },
+          { "label": "Plan en el cockpit", "icon": "image" },
+          { "label": "Apruebas", "icon": "up", "tone": "you" },
+          { "label": "Sprint 1", "icon": "rocket" }
+        ]
+      },
+      "phrase": "Vamos a empezar un proyecto nuevo: /kickoff",
+      "more": "Ves el equipo, los pasos y el camino como diagramas. Nada empieza hasta que apruebas el plan."
+    },
+    {
+      "id": "astra",
+      "title": "Imágenes con Astra",
+      "tag": "Usa tu plan de ChatGPT, sin API key.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Pides la imagen", "icon": "chat", "tone": "you" },
+          { "label": "Astra la genera", "icon": "sparkles" },
+          { "label": "Claude la revisa", "icon": "eye" },
+          { "label": "Te la muestra", "icon": "image" }
+        ]
+      },
+      "phrase": "Pídele a Astra 6 fotos de producto para la landing",
+      "more": "Conviene para lotes, cuando importa más el costo que la velocidad. Necesita Codex instalado en este PC. Por debajo corre `node src/astra.js`."
+    },
+    {
+      "id": "video-director",
+      "title": "Video por código",
+      "tag": "Apruebas el guion antes de animar.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Brief", "icon": "pencil" },
+          { "label": "Guion de dirección", "icon": "film" },
+          { "label": "Apruebas", "icon": "up", "tone": "you" },
+          { "label": "Video MP4", "icon": "rocket" }
+        ]
+      },
+      "phrase": "Dirige un video de 15 segundos para Instagram sobre este lanzamiento",
+      "more": "Usa la skill `video-director` del catálogo: si no está activa en este proyecto, Claude te lo dice y la activa con tu sí."
+    },
+    {
+      "id": "importar-modulo",
+      "title": "Traer módulos a un proyecto viejo",
+      "tag": "Copia lo nuevo sin pisar nada.",
+      "diagram": {
+        "kind": "connects",
+        "center": "Tu proyecto viejo",
+        "center_icon": "box",
+        "links": [
+          { "label": "Cockpit", "icon": "eye" },
+          { "label": "Bold rounds", "icon": "bolt" },
+          { "label": "Council", "icon": "users" },
+          { "label": "Brazos", "icon": "plug" }
+        ]
+      },
+      "phrase": "/importar-modulo cockpit",
+      "more": "Se pide **dentro del proyecto viejo**. Trae el módulo con sus dependencias, nunca sobrescribe archivos (te avisa los conflictos) y lo prueba al terminar."
+    },
+    {
+      "id": "revisar",
+      "title": "Revisión en imágenes",
+      "tag": "Lo hecho, como presentación de directorio.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Capturas", "icon": "camera" },
+          { "label": "3 números", "icon": "bolt" },
+          { "label": "Lo que sigue", "icon": "rocket" },
+          { "label": "Tu decisión", "icon": "user", "tone": "you" }
+        ]
+      },
+      "phrase": "/revisar el cierre del sprint",
+      "more": "Cada idea es una pantalla: titular, imagen y votos. El texto queda detrás de **Ver más**."
+    },
+    {
+      "id": "idea",
+      "title": "Anotar una idea",
+      "tag": "La guarda y sigue con lo que estaba.",
+      "diagram": {
+        "kind": "flow",
+        "steps": [
+          { "label": "Dices la idea", "icon": "chat", "tone": "you" },
+          { "label": "Queda en el backlog", "icon": "flag" },
+          { "label": "Aparece en el roadmap", "icon": "check" }
+        ]
+      },
+      "phrase": "/idea sumar reservas por WhatsApp"
+    }
+  ]
+}

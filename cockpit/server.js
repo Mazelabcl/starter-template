@@ -19,7 +19,7 @@
 
 import http from 'node:http';
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve, extname, sep } from 'node:path';
+import { basename, dirname, join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import '../src/load_env.js';
@@ -33,6 +33,7 @@ import {
   pendingFeedback,
   roadmapSnapshot,
   isSafeMediaPath,
+  itemMediaPaths,
   buildGuideInstructions,
   parseSummary,
   SUMMARY_INSTRUCTIONS,
@@ -277,15 +278,15 @@ export function createCockpitServer(opts = {}) {
     return review;
   }
 
-  // Solo se sirven rutas que alguna revisión declara en `media` (lista blanca),
-  // con extensión de media conocida y sin escapar de la raíz.
+  // Solo se sirven rutas que alguna revisión declara en `media` o en su `visual`
+  // (lista blanca), con extensión de media conocida y sin escapar de la raíz.
   function serveMedia(res, rel) {
     if (!isSafeMediaPath(rel)) return sendJSON(res, 400, { error: 'ruta de media inválida' });
     const ext = extname(rel).toLowerCase();
     if (!MEDIA_EXT.has(ext)) return sendJSON(res, 400, { error: 'tipo de archivo no permitido' });
     const declared = listReviews(root).some(r => {
       const rv = getReview(r.id, root);
-      return rv && rv.items.some(it => Array.isArray(it.media) && it.media.includes(rel));
+      return rv && rv.items.some(it => itemMediaPaths(it).includes(rel));
     });
     if (!declared) return sendJSON(res, 403, { error: 'media no declarada en ninguna revisión' });
     const file = safeJoin(root, rel);
@@ -306,6 +307,7 @@ export function createCockpitServer(opts = {}) {
     if (method === 'GET' && path === '/api/health') return sendJSON(res, 200, { ok: true, root });
     if (method === 'GET' && path === '/api/status') {
       return sendJSON(res, 200, {
+        project: basename(root),
         voice: Boolean(env.OPENAI_API_KEY),
         chat: Boolean(env.OPENROUTER_API_KEY) || Boolean(chatImpl !== defaultChat),
         voice_model: env.COCKPIT_VOICE_MODEL || REALTIME_DEFAULTS.model,

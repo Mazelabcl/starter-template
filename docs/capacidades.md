@@ -48,7 +48,7 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### cockpit — revisión con feedback que el orquestador consume
 
-- **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `node src/cockpit.js open [id]` lo levanta en segundo plano (puerto 7788 o el siguiente libre; PID en `cockpit/.server.pid`, log en `cockpit/.server.log`) y abre el navegador; `node src/cockpit.js stop` lo cierra. Modo manual: `npm run cockpit`. Roadmap arriba, foco, votos por ítem, conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar` o `node src/cockpit.js publish <archivo>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
+- **cockpit** (`cockpit/server.js` + `src/cockpit.js`): `node src/cockpit.js open [id]` lo levanta en segundo plano (puerto 7788 o el siguiente libre; PID en `cockpit/.server.pid`, log en `cockpit/.server.log`) y abre el navegador; `node src/cockpit.js stop` lo cierra. Modo manual: `npm run cockpit`. Inicio como línea de tiempo de sprints, revisiones como presentación de láminas (imagen, antes/después, comparar, diagramas por código), votos de un clic que se guardan solos, botón "Qué puedo pedir", conversación guiada por voz (OpenAI Realtime) o texto, y feedback en `cockpit/feedback/` que el hook de inicio avisa. Publicar: `/revisar`, `node src/cockpit.js publish <archivo> [--estricto]` o, al cerrar un sprint, `node src/cockpit.js sprint-deck <borrador>`. Leer: `node src/cockpit.js pending`; cerrar: `node src/cockpit.js done <id>`. Detalle: `cockpit/README.md`.
 
 ### Proyectos nuevos y viejos
 
@@ -70,6 +70,8 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 | `npm run smoke:quick` | Keys + memoria, sin red. |
 | `npm run test:skills-catalog` | `skills-catalog.json` en sync con las skills en disco. |
 | `npm run test:cockpit` | cockpit: contrato, feedback pendiente, rutas, path traversal, token de voz simulado. |
+| `node cockpit-visual.test.js` | Formato visual: diagramas, visuales, avisos y `--estricto`, sprint-deck, datos de "Qué puedo pedir". |
+| `npm run cockpit:check` | Cockpit en navegador real (necesita Playwright): láminas, slider, teclado, swipe, votos. No corre en `npm test`. |
 | `npm run test:review-app` | review-app: modo sprint/bloques + modo viewer. |
 | `npm run test:image-refs` | Mimetype + guard "Image 1" de `openai_images.py`. |
 | `npm run test:image-wrappers` | Guard de los wrappers multi-modelo (FLUX, Ideogram, Nano Banana Pro). |
