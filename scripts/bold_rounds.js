@@ -6,13 +6,14 @@
 //
 // Uso (desde la raíz del proyecto):
 //   node scripts/bold_rounds.js init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--out rounds] [--goal "texto"]
+//        [--modo visual|producto] [--involucramiento auto|cada:N|todas] [--hallazgos a.md,b.md]
 //   node scripts/bold_rounds.js prepare <ronda> [--force]       (copias blind/context + "antes" + prompts)
 //   node scripts/bold_rounds.js run <ronda> [blind|context|both] [--timeout-min 15]   (headless `claude -p`)
 //   node scripts/bold_rounds.js after <ronda>                   (screenshots "después" + diff + rechazo)
 //   node scripts/bold_rounds.js review <ronda> [--sprint N]     (publica la revisión kind "rounds" en el cockpit, en imágenes)
 //   node scripts/bold_rounds.js choice <ronda>                  (lee los votos del cockpit)
-//   node scripts/bold_rounds.js apply <ronda> <blind|context|integrada> [--auto]
-//   node scripts/bold_rounds.js status | changes
+//   node scripts/bold_rounds.js apply <ronda> <blind|context|integrada> [--auto --razon "..."] [--comentario "..."]
+//   node scripts/bold_rounds.js status | changes                (status incluye "siguiente_paso")
 //   node scripts/bold_rounds.js shot <carpeta|archivo|url> <prefijo>
 //   node scripts/bold_rounds.js diff <antes.png> <despues.png>
 //
@@ -29,16 +30,30 @@ import { inflateSync, deflateSync } from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
-import { publishReview, getFeedback, resolveRoot, isSafeMediaPath } from '../src/cockpit.js';
+import { publishReview, getFeedback, getReview, resolveRoot, isSafeMediaPath } from '../src/cockpit.js';
 
 export const DEFAULTS = { rounds: 5, maxRounds: 10, pauseEvery: 3, threshold: 0.005, timeoutMin: 15 };
 export const VARIANTS = ['blind', 'context', 'integrada'];
 export const CATEGORIES = ['composición', 'tipografía', 'color', 'imágenes', 'interacción', 'jerarquía', 'mobile'];
+// Modo producto: la ronda cambia lo que el usuario final PUEDE hacer, decidir u obtener.
+export const MODES = ['visual', 'producto'];
+export const PRODUCT_CATEGORIES = [
+  'capacidad nueva', 'decisión que se facilita', 'resultado o entregable nuevo', 'coordinación que se elimina',
+  'momento que se protege', 'recuerdo o valor difícil de conseguir hoy', 'monetización o motivo de compra',
+];
+// Campos obligatorios de notes.md en modo producto (sin ellos la variante se rechaza).
+export const PRODUCT_REQUIRED = ['categoria', 'antes', 'ahora', 'como_probarlo'];
+// Involucramiento: auto = Claude elige siempre (sin pausas); cada:N = pausa cada N; todas = el usuario elige cada ronda.
+export const INVOLVEMENT = ['auto', 'cada:N', 'todas'];
+// En auto no hay pausa: el tope de seguridad son las rondas máximas de la corrida (nunca más de 10).
+export const AUTO_SAFETY_CAP = 10;
 export const VIEWPORTS = {
   desktop: { width: 1440, height: 900, isMobile: false },
   mobile: { width: 390, height: 844, isMobile: true },
 };
 const SKIP = new Set(['node_modules', '.git', 'rounds', '.next', 'dist', '.cache']);
+// Corridas paralelas (--out rounds-novia, rounds-novio): una nunca copia la carpeta de la otra.
+const isRunsDir = name => SKIP.has(name) || /^rounds-[\w-]+$/.test(name);
 const NOTES = 'notes.md';
 
 // El prompt literal del usuario (demo del café de los 90). Va en inglés: es instrucción de sistema.
@@ -62,15 +77,18 @@ const toPosix = p => p.split(sep).join('/');
 export function copyTree(src, dst, { skip = [] } = {}) {
   const skipAbs = skip.map(s => resolve(s));
   mkdirSync(dst, { recursive: true });
-  cpSync(src, dst, {
-    recursive: true,
-    filter: p => {
-      const abs = resolve(p);
-      if (abs === resolve(src)) return true;
-      if (skipAbs.some(s => abs === s || abs.startsWith(s + sep))) return false;
-      return !SKIP.has(basename(p));
-    },
-  });
+  const filter = p => {
+    const abs = resolve(p);
+    if (skipAbs.some(s => abs === s || abs.startsWith(s + sep))) return false;
+    return !isRunsDir(basename(p));
+  };
+  // Hijo por hijo: si la carpeta de rondas vive DENTRO del objetivo (p. ej. objetivo "." y
+  // --out rounds-novia), cpSync del objetivo entero se niega a copiar "en un subdirectorio de sí mismo".
+  for (const name of readdirSync(src)) {
+    const from = join(src, name);
+    if (!filter(from)) continue;
+    cpSync(from, join(dst, name), { recursive: true, filter });
+  }
 }
 
 function emptyDir(dir) {
@@ -489,10 +507,10 @@ export function loadRun(out) {
 }
 const saveRun = (out, run) => writeJSON(runPaths(out).run, run);
 
-const DESIGN_TEMPLATE = goal => `# DESIGN.md — dirección corta (máx. 15 líneas)
+const DESIGN_TEMPLATE = (goal, mode = 'visual') => `# DESIGN.md — dirección corta (máx. 15 líneas)
 
 Objetivo: ${goal}
-
+${mode === 'producto' ? '\nModo producto: cada ronda cambia lo que el usuario final puede hacer, decidir u obtener (no estética).\n' : ''}
 ## Dirección
 - (se completa tras la ronda 1 con lo que el usuario eligió)
 
@@ -503,13 +521,81 @@ Objetivo: ${goal}
 
 ## Aprendido de las rondas
 - (vacío)
+
+${DESIGN_LOG_HEADER}
 `;
 
+// Sección que escribe el helper (comentarios del usuario y elecciones de Claude). Solo la lee la variante CONTEXTO.
+const DESIGN_LOG_HEADER = '## Comentarios y decisiones por ronda';
+const DESIGN_LOG_MAX = 8;
+
+/** Agrega (o reemplaza) la línea de una ronda en la sección de comentarios de DESIGN.md. */
+export function logToDesign(out, round, line) {
+  const p = runPaths(out).design;
+  let md = existsSync(p) ? readFileSync(p, 'utf8') : '';
+  if (!md.includes(DESIGN_LOG_HEADER)) md = `${md.trimEnd()}\n\n${DESIGN_LOG_HEADER}\n`;
+  const [head, tail = ''] = md.split(DESIGN_LOG_HEADER);
+  const tag = `- Ronda ${round}:`;
+  const entries = tail.split('\n').filter(l => l.startsWith('- Ronda ') && !l.startsWith(tag));
+  entries.push(`${tag} ${line}`);
+  entries.sort((a, b) => parseInt(a.slice(8), 10) - parseInt(b.slice(8), 10));
+  writeFileSync(p, `${head}${DESIGN_LOG_HEADER}\n${entries.slice(-DESIGN_LOG_MAX).join('\n')}\n`, 'utf8');
+}
+
+/** `--modo visual|producto` (por defecto visual, para no cambiar corridas viejas). */
+export function parseMode(v) {
+  if (v === undefined || v === null || v === true || v === '') return 'visual';
+  const s = String(v).trim().toLowerCase();
+  if (!MODES.includes(s)) throw new BoldError(`--modo inválido: "${v}". Usa visual | producto`);
+  return s;
+}
+
+/**
+ * `--involucramiento auto|cada:N|todas` → { involucramiento, pause_every }.
+ * Sin flag se mantiene el comportamiento viejo: cada:<pause-every>.
+ */
+export function parseInvolvement(v, { pauseEvery = DEFAULTS.pauseEvery } = {}) {
+  const every = Math.max(1, parseInt(pauseEvery, 10) || DEFAULTS.pauseEvery);
+  if (v === undefined || v === null || v === true || v === '') return { involucramiento: `cada:${every}`, pause_every: every };
+  const s = String(v).trim().toLowerCase().replace(/\s+/g, '');
+  if (s === 'auto') return { involucramiento: 'auto', pause_every: AUTO_SAFETY_CAP };
+  if (s === 'todas') return { involucramiento: 'todas', pause_every: 1 };
+  const m = /^cada[:=]?(\d+)$/.exec(s);
+  if (m && Number(m[1]) >= 1) {
+    const n = Math.min(Number(m[1]), DEFAULTS.maxRounds);
+    return { involucramiento: `cada:${n}`, pause_every: n };
+  }
+  throw new BoldError(`--involucramiento inválido: "${v}". Usa auto | cada:N (ej. cada:3) | todas`);
+}
+
+/** Tipo de involucramiento de una corrida (las viejas sin el campo = cada:pause_every). */
+export const involvementOf = run => String(run.involucramiento || `cada:${run.pause_every}`).split(':')[0];
+
+/**
+ * Cuántas rondas seguidas puede elegir Claude solo antes de pausar.
+ * auto → tope de seguridad (10, igual al máximo de rondas: nunca bloquea dentro de la corrida);
+ * cada:N → N; todas → 0 (Claude nunca elige).
+ */
+export function autoLimit(run) {
+  const kind = involvementOf(run);
+  if (kind === 'auto') return AUTO_SAFETY_CAP;
+  if (kind === 'todas') return 0;
+  return run.pause_every;
+}
+
 /** Crea la copia de trabajo. Nunca escribe en el objetivo original. */
-export async function init(target, { out = 'rounds', rounds = DEFAULTS.rounds, pauseEvery = DEFAULTS.pauseEvery, goal } = {}) {
+export async function init(target, {
+  out = 'rounds', rounds = DEFAULTS.rounds, pauseEvery = DEFAULTS.pauseEvery, goal,
+  modo, involucramiento, hallazgos = [],
+} = {}) {
   const p = runPaths(out);
   if (existsSync(p.run)) throw new BoldError(`Ya hay una corrida en ${p.dir}. Usa otro --out o borra esa carpeta.`);
   const maxRounds = Math.min(Math.max(1, parseInt(rounds, 10) || DEFAULTS.rounds), DEFAULTS.maxRounds);
+  const mode = parseMode(modo);
+  const inv = parseInvolvement(involucramiento, { pauseEvery });
+  const findings = (Array.isArray(hallazgos) ? hallazgos : String(hallazgos || '').split(','))
+    .map(s => String(s).trim()).filter(Boolean).map(f => resolve(f));
+  for (const f of findings) if (!existsSync(f)) throw new BoldError(`No existe el archivo de hallazgos ${f}`);
   emptyDir(p.working);
   let kind, entry, note = '';
   if (isUrl(target)) {
@@ -540,12 +626,17 @@ export async function init(target, { out = 'rounds', rounds = DEFAULTS.rounds, p
     web: !!entry && /\.html?$/i.test(entry),
     goal: goal || `Mejorar ${isUrl(target) ? target : basename(resolve(target))}`,
     slug: slugify(isUrl(target) ? target : basename(resolve(target))),
+    // Distingue corridas paralelas sobre el mismo objetivo en el cockpit (ids de revisión distintos).
+    tag: basename(p.dir) === 'rounds' ? '' : slugify(basename(p.dir)).replace(/^rounds-/, ''),
     created_at: new Date().toISOString(),
-    max_rounds: maxRounds, pause_every: Math.max(1, parseInt(pauseEvery, 10) || DEFAULTS.pauseEvery),
+    modo: mode,
+    involucramiento: inv.involucramiento,
+    max_rounds: maxRounds, pause_every: inv.pause_every,
+    hallazgos: findings,
     threshold: DEFAULTS.threshold, history: [], note,
   };
   saveRun(out, run);
-  if (!existsSync(p.design)) writeFileSync(p.design, DESIGN_TEMPLATE(run.goal), 'utf8');
+  if (!existsSync(p.design)) writeFileSync(p.design, DESIGN_TEMPLATE(run.goal, mode), 'utf8');
   return run;
 }
 
@@ -584,6 +675,83 @@ export function buildHistory(out, run, n, root) {
   return lines.join('\n') || '(no previous rounds)';
 }
 
+/** Comentarios del usuario y razones de Claude de rondas previas (solo los ve la variante CONTEXTO). */
+export function commentsFor(run, n) {
+  return run.history
+    .filter(h => h.round < n && ((h.comment || '').trim() || (h.reason || '').trim()))
+    .sort((a, b) => b.round - a.round)
+    .map(h => {
+      const who = h.auto ? `Claude picked ${h.variant} alone` : `user picked ${h.variant}`;
+      const parts = [`- Round ${h.round} (${who})`];
+      if ((h.comment || '').trim()) parts.push(`user comment: "${clipText(h.comment, 500)}"`);
+      if ((h.reason || '').trim()) parts.push(`Claude's reason: ${clipText(h.reason, 300)}`);
+      return parts.join(' · ');
+    }).join('\n');
+}
+
+function findingsFor(run) {
+  return (run.hallazgos || []).filter(f => existsSync(f))
+    .map(f => `### ${basename(f)}\n${clipText(readFileSync(f, 'utf8'), 3000)}`).join('\n\n');
+}
+
+function notesSpec(run, n, variant) {
+  if (run.modo === 'producto') {
+    return [
+      `   # Ronda ${n} — variante ${variant}`,
+      '   Titular: <the innovation in at most 8 words, the end-user benefit first>',
+      `   Categoría: <one of: ${PRODUCT_CATEGORIES.join(' | ')}>`,
+      '   Situación: <who, in which moment, and what fails for them today; one line>',
+      '   Antes: <what the end user could NOT do before this round>',
+      '   Ahora: <what the end user CAN do now>',
+      '   Cómo probarlo: <2-4 short steps inside the copy, e.g. "1) abre index.html 2) toca X 3) mira Y">',
+      '   Señal de validación: <metric + threshold that would prove it with real users, e.g. "40% de invitados sube 3+ fotos en la fiesta">',
+      '   Depende de prueba real: <what only real users or real data can confirm>',
+      '   Riesgo: <one line>',
+    ];
+  }
+  return [
+    `   # Ronda ${n} — variante ${variant}`,
+    '   Titular: <the change in at most 8 words; it is the big headline of the slide>',
+    `   Categoría: <one of: ${CATEGORIES.join(' | ')}>`,
+    '   Cambio 1: <2 to 5 words naming one visible change>',
+    '   Cambio 2: <one line per change, top of the page to the bottom, at most 5; omit extras>',
+    '   Por qué: <one line>',
+    '   Referencias: <1-2 named references>',
+    '   Riesgo: <one line>',
+  ];
+}
+
+function rulesFor(run, beforeShots) {
+  const look = `1. Look first: read the entry file completely${beforeShots.length ? ` and view these screenshots of the current state: ${beforeShots.join(', ')}` : ''}.`;
+  const common = [
+    '5. Self-contained: no external network assets and no paid APIs. Inline CSS/SVG/JS or local files only.',
+    '6. Never write outside the working folder. No git commands.',
+    '7. All user-facing text (page copy and notes.md) in neutral Spanish with "tú". Never voseo ("vos", "tenés", "podés", "decime").',
+  ];
+  if (run.modo === 'producto') {
+    return [
+      'Product mode: this loop innovates the PRODUCT, not its styling. Read "look and feel" in the core instruction as "how it feels to use it", never as visual polish.',
+      '',
+      'Rules:',
+      look,
+      `2. Make ONE bold product innovation that changes a capability, a decision or an outcome for the END USER of this product. Pick exactly one category: ${PRODUCT_CATEGORIES.join(', ')}. Start from a concrete moment of a concrete user and what fails for them today.`,
+      '3. Forbidden as the change of the round: anything that only touches typography, color, layout, spacing, images or copy. Visual work is allowed only as the vehicle of the new capability. A round with only aesthetic changes is rejected automatically.',
+      '4. It must be testable in the copy: leave a working interaction (a button that does something, a flow, a simulated result with sample data clearly labeled "ejemplo"), not a mockup with "próximamente". Keep facts truthful: never invent prices, statistics, testimonials or claims about the real business.',
+      ...common,
+      `8. When done, write ${NOTES} in the working folder, in Spanish, with these one-line fields (Categoría, Antes, Ahora and Cómo probarlo are required; without them the variant is rejected):`,
+    ];
+  }
+  return [
+    'Rules:',
+    look,
+    `2. Make ONE bold change inside exactly one category: ${CATEGORIES.join(', ')}. It must be visible to a user at first glance (desktop or mobile). Refactors, cleanup or small tweaks do not count: a pixel diff rejects rounds without a visible change.`,
+    '3. Anti-slop: no default purple/blue gradients, no pill-shaped everything, no "card soup" (grids of identical rounded cards), a limited palette (3-4 colors plus neutrals), real copy (no lorem ipsum). Name 1-2 concrete references (designer, studio, publication or movement) that inspired the change.',
+    '4. Keep facts truthful: do not invent prices, addresses, phone numbers or claims that are not in the original. You may rewrite, reorder and cut copy.',
+    ...common,
+    `8. When done, write ${NOTES} in the working folder, in Spanish. The user reads pictures, not reports, so keep it to these one-line fields:`,
+  ];
+}
+
 export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
   const dir = roundPaths(out, n).variant(variant);
   const parts = [
@@ -595,32 +763,22 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [] }) {
     'Core instruction from the user (follow it literally; if the target is not a website, read "site" as the document or project):',
     `"${CORE_PROMPT}"`,
     '',
-    'Rules:',
-    `1. Look first: read the entry file completely${beforeShots.length ? ` and view these screenshots of the current state: ${beforeShots.join(', ')}` : ''}.`,
-    `2. Make ONE bold change inside exactly one category: ${CATEGORIES.join(', ')}. It must be visible to a user at first glance (desktop or mobile). Refactors, cleanup or small tweaks do not count: a pixel diff rejects rounds without a visible change.`,
-    '3. Anti-slop: no default purple/blue gradients, no pill-shaped everything, no "card soup" (grids of identical rounded cards), a limited palette (3-4 colors plus neutrals), real copy (no lorem ipsum). Name 1-2 concrete references (designer, studio, publication or movement) that inspired the change.',
-    '4. Keep facts truthful: do not invent prices, addresses, phone numbers or claims that are not in the original. You may rewrite, reorder and cut copy.',
-    '5. Self-contained: no external network assets and no paid APIs. Inline CSS/SVG or local files only.',
-    '6. Never write outside the working folder. No git commands.',
-    '7. All user-facing text (page copy and notes.md) in neutral Spanish with "tú". Never voseo ("vos", "tenés", "podés", "decime").',
-    `8. When done, write ${NOTES} in the working folder, in Spanish. The user reads pictures, not reports, so keep it to these one-line fields:`,
-    `   # Ronda ${n} — variante ${variant}`,
-    '   Titular: <the change in at most 8 words; it is the big headline of the slide>',
-    `   Categoría: <one of: ${CATEGORIES.join(' | ')}>`,
-    '   Cambio 1: <2 to 5 words naming one visible change>',
-    '   Cambio 2: <one line per change, top of the page to the bottom, at most 5; omit extras>',
-    '   Por qué: <one line>',
-    '   Referencias: <1-2 named references>',
-    '   Riesgo: <one line>',
+    ...rulesFor(run, beforeShots),
+    ...notesSpec(run, n, variant),
     '9. Reply with one line: the category and a one-sentence summary.',
   ];
   if (variant === 'blind') {
     parts.push('', 'You have NO history on purpose: judge only what you see now. Do not read other folders of this loop.');
   } else {
     const design = existsSync(runPaths(out).design) ? readFileSync(runPaths(out).design, 'utf8') : '';
+    const comments = commentsFor(run, n);
+    const findings = findingsFor(run);
     parts.push('',
       'You are the CONTEXT variant: build on what was learned. Respect the user feedback below; it outranks your taste.',
-      'Avoid repeating a category used in the last 2 rounds unless the user asked for it.', '',
+      `Avoid repeating a ${run.modo === 'producto' ? 'product ' : ''}category used in the last 2 rounds unless the user asked for it.`);
+    if (comments) parts.push('', '## User comments from previous rounds (apply the latest one first)', comments);
+    if (findings) parts.push('', '## Findings to build on (audience interview / council; use them as evidence, do not copy them literally)', clipText(findings, 6000));
+    parts.push('',
       '## DESIGN.md', clipText(design, 2000), '',
       '## Previous rounds and user feedback', clipText(buildHistory(out, run, n, root), 4000));
   }
@@ -639,8 +797,12 @@ export async function prepare(n, { out = 'rounds', force = false, shots = takeSh
   if (!force && n > 1 && !run.history.some(h => h.round === n - 1)) {
     throw new BoldError(`La ronda ${n - 1} aún no tiene variante aplicada. Primero: apply ${n - 1} <variante>`);
   }
-  if (!force && autoStreak(run) >= run.pause_every) {
-    throw new BoldError(`Pausa de control: ${autoStreak(run)} rondas seguidas sin decisión humana (pause_every=${run.pause_every}). Pide al usuario que vote en el cockpit.`);
+  const limit = autoLimit(run);
+  if (!force && involvementOf(run) !== 'auto' && autoStreak(run) > 0 && autoStreak(run) >= limit) {
+    throw new BoldError(`Pausa de control (involucramiento ${run.involucramiento || `cada:${run.pause_every}`}): ${autoStreak(run)} rondas seguidas sin decisión humana. No elijas por el usuario: pídele que revise la ronda ${n - 1} en el cockpit. Cuando responda (o diga "sigue"), registra su decisión con apply ${n - 1} <variante> SIN --auto y luego prepare ${n}.`);
+  }
+  if (!force && autoStreak(run) >= AUTO_SAFETY_CAP) {
+    throw new BoldError(`Tope de seguridad: ${AUTO_SAFETY_CAP} rondas seguidas eligiendo solo. Pide al usuario que revise antes de seguir.`);
   }
   const rp = roundPaths(out, n);
   const wp = runPaths(out).working;
@@ -675,15 +837,25 @@ export async function after(n, { out = 'rounds', shots = takeShots } = {}) {
         if (Object.keys(r.ratios).length) r.visible = Object.values(r.ratios).some(x => x >= run.threshold);
       } else r.shot_error = s.reason;
     }
-    r.rejected = !r.visible;
-    r.reason = !files.length ? 'no cambió ningún archivo' : !r.visible ? `cambio no visible (diff < ${run.threshold * 100}%)` : '';
+    if (run.modo === 'producto') {
+      // Modo producto: los píxeles no bastan (ni se exigen: una capacidad puede vivir tras un clic).
+      // Se exige que cambie algún archivo y que notes.md cuente Antes/Ahora/Cómo probarlo sin categoría estética.
+      const notesP = join(vd, NOTES);
+      const pc = checkProductNotes(existsSync(notesP) ? readFileSync(notesP, 'utf8') : '');
+      r.product = { ok: pc.ok, missing: pc.missing, aesthetic: pc.aesthetic, known_category: pc.known_category };
+      r.rejected = !files.length || !pc.ok;
+      r.reason = !files.length ? 'no cambió ningún archivo' : !pc.ok ? pc.reason : '';
+    } else {
+      r.rejected = !r.visible;
+      r.reason = !files.length ? 'no cambió ningún archivo' : !r.visible ? `cambio no visible (diff < ${run.threshold * 100}%)` : '';
+    }
     result.variants[v] = r;
   }
   writeJSON(rp.check, result);
   return result;
 }
 
-export const reviewId = (run, n) => `rounds-${run.slug}-${pad(n)}`;
+export const reviewId = (run, n) => `rounds-${run.slug}${run.tag ? `-${run.tag}` : ''}-${pad(n)}`;
 const LABEL = { blind: 'ciega (sin memoria)', context: 'con contexto', integrada: 'integrada' };
 const SHORT_LABEL = { blind: 'Ciega', context: 'Con contexto', integrada: 'Integrada' };
 const CHOICE_LABEL = { blind: 'Ciega: sin memoria', context: 'Con contexto: conoce tus votos', integrada: 'Integrada', integrar: 'Integrar ambas' };
@@ -694,14 +866,47 @@ function mediaPath(abs, root) {
   return rel;
 }
 
-/** Lee las líneas de notes.md: Titular, Categoría y "Cambio N" (formato corto). */
+// Campos de notes.md (regex tolerante a tildes y a viñetas "- ").
+const NOTE_FIELDS = {
+  titular: 'Titular', categoria: 'Categor[ií]a', situacion: 'Situaci[oó]n', antes: 'Antes', ahora: 'Ahora',
+  como_probarlo: 'C[oó]mo probarlo', senal: 'Se[ñn]al(?: de validaci[oó]n)?', depende: 'Depende de prueba real',
+  riesgo: 'Riesgo', por_que: 'Por qu[eé]',
+};
+const FIELD_LABEL = { categoria: 'Categoría', antes: 'Antes', ahora: 'Ahora', como_probarlo: 'Cómo probarlo' };
+
+/** Lee las líneas de notes.md: Titular, Categoría, "Cambio N" y los campos de modo producto. */
 export function parseNotes(md) {
-  const field = name => {
-    const m = new RegExp(`^${name}:\\s*(.+)$`, 'im').exec(String(md || ''));
-    return m ? m[1].trim() : '';
+  const text = String(md || '');
+  const field = re => {
+    const m = new RegExp(`^\\s*(?:[-*]\\s*)?(?:\\*\\*)?(?:${re})(?:\\*\\*)?:\\s*(.+)$`, 'im').exec(text);
+    return m ? m[1].replace(/^\*\*\s*/, '').trim() : '';
   };
-  const cambios = [...String(md || '').matchAll(/^Cambio\s*\d*:\s*(.+)$/gim)].map(m => m[1].trim());
-  return { titular: field('Titular'), categoria: field('Categoría'), cambios };
+  const out = Object.fromEntries(Object.entries(NOTE_FIELDS).map(([k, re]) => [k, field(re)]));
+  out.cambios = [...text.matchAll(/^Cambio\s*\d*:\s*(.+)$/gim)].map(m => m[1].trim());
+  return out;
+}
+
+const fold = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+const AESTHETIC_RE = /\b(tipografi\w*|fuentes?|colou?r(es)?|paleta|layout|maquetaci\w*|composicion|jerarquia|espaciado|estetic\w*|look and feel|copy|textos?|imagen(es)?|fotos? de portada|mobile|responsive|visual(es)?|diseno visual|estilo)\b/;
+
+/** ¿La categoría es estética? (lo que el modo producto no acepta como cambio de la ronda) */
+export function isAestheticCategory(cat) {
+  const c = fold(cat);
+  if (!c) return false;
+  if (PRODUCT_CATEGORIES.some(p => c.startsWith(fold(p)) || fold(p).startsWith(c))) return false;
+  return CATEGORIES.some(v => c === fold(v)) || AESTHETIC_RE.test(c);
+}
+
+/** Validación de notes.md en modo producto: campos obligatorios y categoría no estética. */
+export function checkProductNotes(md) {
+  const n = parseNotes(md);
+  const missing = PRODUCT_REQUIRED.filter(k => !n[k]).map(k => FIELD_LABEL[k]);
+  const aesthetic = isAestheticCategory(n.categoria);
+  const known = PRODUCT_CATEGORIES.some(p => fold(n.categoria).startsWith(fold(p)));
+  const reasons = [];
+  if (missing.length) reasons.push(`faltan en notes.md: ${missing.join(', ')}`);
+  if (aesthetic) reasons.push(`la categoría "${n.categoria}" es estética (en modo producto la ronda debe cambiar una capacidad, decisión o resultado)`);
+  return { ok: !reasons.length, missing, aesthetic, known_category: known, notes: n, reason: reasons.join('; ') };
 }
 
 function readBlocks(rp, name) {
@@ -754,26 +959,65 @@ function variantVisual(rp, v, cambios, root) {
   return { type: 'before_after', before: first.before, after: first.after, device: first.device, hotspots: first.hotspots, ...(views.length > 1 ? { views } : {}) };
 }
 
+const capWords = (s, n = 10) => {
+  const w = String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  return w.length > n ? `${w.slice(0, n).join(' ')}…` : w.join(' ');
+};
+
+/** Líneas cortas bajo cada opción de "elegir": la diferencia entre ciega y contexto, lado a lado. */
+export function optionLines(parsed, modo = 'visual') {
+  const t = s => clipText(s, 140);
+  const lines = modo === 'producto'
+    ? [
+      { label: 'Titular', text: parsed.titular },
+      { label: 'Antes → Ahora', text: parsed.antes && parsed.ahora ? `${parsed.antes} → ${parsed.ahora}` : '' },
+      { label: 'Cómo probarlo', text: parsed.como_probarlo },
+      { label: 'Señal', text: parsed.senal },
+    ]
+    : [
+      { label: 'Titular', text: parsed.titular },
+      { label: 'Categoría', text: parsed.categoria },
+      { label: 'Cambios', text: (parsed.cambios || []).slice(0, 3).join(' · ') },
+    ];
+  return lines.filter(l => String(l.text || '').trim()).map(l => ({ label: l.label, text: t(l.text) }));
+}
+
+// Lámina de producto cuando no hay antes/después visible: Antes → Ahora → Cómo probarlo.
+function productDiagram(parsed) {
+  const steps = [
+    parsed.antes && { label: 'Antes', note: capWords(parsed.antes, 14), icon: 'close' },
+    parsed.ahora && { label: 'Ahora', note: capWords(parsed.ahora, 14), icon: 'rocket', tone: 'you' },
+    parsed.como_probarlo && { label: 'Cómo probarlo', note: capWords(parsed.como_probarlo, 14), icon: 'check' },
+  ].filter(Boolean);
+  return steps.length >= 2 ? { type: 'diagram', kind: 'flow', steps } : null;
+}
+
 /** Arma el JSON de la revisión (kind "rounds"), en imágenes. Puro: no publica. */
 export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
   const run = loadRun(out);
+  const product = run.modo === 'producto';
   const rp = roundPaths(out, n);
   if (!existsSync(rp.check)) throw new BoldError(`Falta ${rp.check}. Corre primero: after ${n}`);
   const check = readJSON(rp.check);
   const shot = name => { const p = join(rp.shots, `${name}.png`); return existsSync(p) ? [mediaPath(p, root)] : []; };
   const items = [];
   const ok = [];
+  const parsedBy = {};
   for (const v of ['blind', 'context', 'integrada']) {
     const c = check.variants[v];
     if (!c) continue;
     const notesP = join(rp.variant(v), NOTES);
     const notes = existsSync(notesP) ? readFileSync(notesP, 'utf8').trim() : '(la variante no dejó notes.md)';
     const parsed = parseNotes(notes);
+    parsedBy[v] = parsed;
     const ratios = Object.entries(c.ratios).map(([k, x]) => `${k} ${(x * 100).toFixed(1)}%`).join(', ');
     const media = [...shot('before-desktop'), ...shot(`${v}-desktop`), ...shot('before-mobile'), ...shot(`${v}-mobile`)];
     if (run.web && run.entry && existsSync(join(rp.variant(v), run.entry)) && /\.html?$/i.test(run.entry)) media.push(mediaPath(join(rp.variant(v), run.entry), root));
     if (!c.rejected) ok.push(v);
-    const visual = variantVisual(rp, v, parsed.cambios, root) || (c.files_changed.length
+    const slider = variantVisual(rp, v, parsed.cambios, root);
+    // En modo producto, si los píxeles casi no cambian, el antes/después no dice nada: va Antes → Ahora.
+    const pixelsMoved = Object.values(c.ratios || {}).some(x => x >= run.threshold);
+    const visual = (product && !(slider && pixelsMoved) && productDiagram(parsed)) || slider || (c.files_changed.length
       ? { type: 'diagram', kind: 'connects', center: `Variante ${SHORT_LABEL[v]}`, links: c.files_changed.slice(0, 8).map(f => ({ label: f, icon: 'pencil' })) }
       : shot('before-desktop').length ? { type: 'image', path: shot('before-desktop')[0], alt: 'La página sigue igual que antes' } : null);
     const pct = realRatio(rp, v);
@@ -782,12 +1026,13 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
       ...(pct ? [{ value: `${Math.round(pct * 100)}%`, label: 'de la página es nueva' }] : []),
       ...(zones ? [{ value: zones, label: zones === 1 ? 'zona marcada' : 'zonas marcadas' }] : []),
     ];
+    const rejectedHeadline = product ? `${SHORT_LABEL[v]}: rechazada, ${c.product?.aesthetic ? 'cambio solo estético' : 'sin Antes/Ahora/Cómo probarlo'}` : `${SHORT_LABEL[v]}: sin cambio visible`;
     items.push({
       id: v,
       title: `Ronda ${n} · Variante ${LABEL[v]}${c.rejected ? ' · RECHAZADA' : ''}`,
-      headline: c.rejected ? `${SHORT_LABEL[v]}: sin cambio visible` : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
-      kicker: `Ronda ${n} · ${SHORT_LABEL[v]}`,
-      ask: c.rejected ? 'Descartada sola' : '¿Te gusta?',
+      headline: c.rejected ? (c.files_changed.length ? rejectedHeadline : `${SHORT_LABEL[v]}: no cambió nada`) : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
+      kicker: `Ronda ${n} · ${SHORT_LABEL[v]}${product && parsed.categoria ? ` · ${capWords(parsed.categoria, 5)}` : ''}`,
+      ask: c.rejected ? 'Descartada sola' : product ? '¿Esto le sirve al usuario?' : '¿Te gusta?',
       body_md: [
         notes, '',
         `**Archivos cambiados:** ${c.files_changed.length ? c.files_changed.join(', ') : 'ninguno'}`,
@@ -801,41 +1046,75 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
     });
   }
   // Elegir con un clic: cada opción vota el ítem de su variante, así `choice` sigue igual.
+  // Cada opción muestra su diferencia en líneas cortas (no solo "opción 1 / opción 2").
   const pictured = ok.filter(v => shot(`${v}-desktop`).length);
-  if (pictured.length >= 2) {
-    const options = pictured.slice(0, 3).map(v => ({
-      id: v,
-      label: CHOICE_LABEL[v],
-      item: v,
-      image: shot(`${v}-desktop`)[0],
-      ...(shot(`${v}-mobile`).length ? { image_mobile: shot(`${v}-mobile`)[0] } : {}),
-    }));
+  const choosable = product ? ok : pictured;
+  if (choosable.length >= 2) {
+    const options = choosable.slice(0, 3).map(v => {
+      const lines = optionLines(parsedBy[v], run.modo);
+      return {
+        id: v,
+        label: CHOICE_LABEL[v],
+        item: v,
+        ...(shot(`${v}-desktop`).length ? { image: shot(`${v}-desktop`)[0] } : { icon: v === 'blind' ? 'sparkles' : 'chat' }),
+        ...(shot(`${v}-mobile`).length ? { image_mobile: shot(`${v}-mobile`)[0] } : {}),
+        ...(lines.length ? { lines } : {}),
+      };
+    });
     if (!check.variants.integrada) {
-      options.push({ id: 'integrar', label: CHOICE_LABEL.integrar, item: 'integrar', icon: 'merge', images: [shot('blind-desktop')[0], shot('context-desktop')[0]] });
+      const both = [shot('blind-desktop')[0], shot('context-desktop')[0]].filter(Boolean);
+      options.push({
+        id: 'integrar', label: CHOICE_LABEL.integrar, item: 'integrar', icon: 'merge',
+        ...(both.length === 2 ? { images: both } : {}),
+        lines: [{ label: 'Qué pasa', text: 'Claude junta lo mejor de ambas según tu comentario y te la muestra antes de seguir' }],
+      });
     }
     items.push({
       id: 'elegir',
       title: `Ronda ${n} · Elegir la base de la siguiente ronda`,
       headline: '¿Con cuál seguimos?',
       kicker: `Ronda ${n} · tu decisión`,
-      ask: 'Elige una',
-      body_md: check.variants.integrada ? '' : 'Si eliges "Integrar ambas", dime en el comentario qué tomar de cada una; Claude arma la versión integrada y te la muestra antes de seguir.',
+      ask: 'Elige una y comenta si quieres',
+      body_md: [
+        'Elige con un clic. Con el botón de comentario dices qué ajustar: la variante con contexto lo recibe en la ronda siguiente (la ciega no ve nada, a propósito).',
+        check.variants.integrada ? '' : 'Si eliges "Integrar ambas", dime en el comentario qué tomar de cada una; Claude arma la versión integrada y te la muestra antes de seguir.',
+      ].filter(Boolean).join('\n\n'),
       media: [],
       tags: ['elegir'],
       visual: { type: 'compare', options: options.slice(0, 3) },
     });
   }
+  // Si Claude eligió solo (auto / cada:N), la razón queda visible primero para revisarla después.
+  const decided = run.history.find(h => h.round === Number(n) && h.auto && (h.reason || '').trim());
+  if (decided) {
+    const pic = shot(`${decided.variant}-desktop`);
+    items.unshift({
+      id: 'decision-claude',
+      title: `Ronda ${n} · Claude eligió ${SHORT_LABEL[decided.variant]}`,
+      headline: capWords(`Claude eligió ${SHORT_LABEL[decided.variant]}: ${decided.reason}`, 10),
+      kicker: `Ronda ${n} · elección de Claude (${run.involucramiento || 'auto'})`,
+      ask: '¿Estás de acuerdo?',
+      body_md: `**Por qué:** ${decided.reason}\n\nSi no estás de acuerdo, vota abajo y deja un comentario: la variante con contexto lo recibe en la ronda siguiente.`,
+      media: [],
+      tags: ['decision-claude', decided.variant],
+      visual: pic.length ? { type: 'image', path: pic[0], alt: `Variante ${SHORT_LABEL[decided.variant]}` }
+        : { type: 'diagram', kind: 'flow', steps: [{ label: 'Claude eligió', note: SHORT_LABEL[decided.variant], icon: 'check', tone: 'ok' }, { label: 'Por qué', note: capWords(decided.reason, 14), icon: 'chat' }] },
+    });
+  }
   return {
     id: reviewId(run, n),
-    title: `Bold rounds · ${run.slug} · ronda ${n} de ${run.max_rounds}`,
+    title: `Bold rounds${product ? ' (producto)' : ''} · ${run.slug}${run.tag ? ` · ${run.tag}` : ''} · ronda ${n} de ${run.max_rounds}`,
     kind: 'rounds',
     ...(sprint !== undefined ? { sprint } : {}),
     connects_to: n > 1 ? [reviewId(run, n - 1)] : [],
     context_brief: [
       `Objetivo: ${run.goal}. Se trabaja sobre una COPIA; el original no se toca hasta que el usuario diga "aplicar".`,
+      product ? 'Modo producto: cada variante cambia lo que el usuario final puede hacer (Antes → Ahora) y trae pasos para probarlo en la copia.' : '',
       'Cada ronda corre dos variantes en paralelo: la ciega no sabe nada de rondas anteriores (para innovar sin sesgo); la de contexto conoce las rondas previas y el feedback del usuario.',
-      'Pide al usuario que vote a favor de UNA opción (ciega, contexto o integrar). La elegida se convierte en la base de la ronda siguiente. Las rechazadas no cambiaron nada visible.',
-    ].join(' '),
+      'Pide al usuario que vote a favor de UNA opción (ciega, contexto o integrar) y que deje un comentario si quiere ajustar algo. La elegida se convierte en la base de la ronda siguiente.',
+      product ? 'Las rechazadas no cambiaron nada o les faltó Antes/Ahora/Cómo probarlo, o el cambio era solo estético.' : 'Las rechazadas no cambiaron nada visible.',
+      decided ? `En esta ronda Claude eligió solo (${decided.variant}) porque: ${decided.reason}.` : '',
+    ].filter(Boolean).join(' '),
     items,
   };
 }
@@ -843,7 +1122,7 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
 export function review(n, { out = 'rounds', root, sprint } = {}) {
   const r = buildRoundReview(n, { out, root, sprint });
   const res = publishReview(r, root);
-  return { ...res, candidates: r.items.filter(i => !i.tags.includes('rechazada') && i.id !== 'elegir').map(i => i.id) };
+  return { ...res, candidates: r.items.filter(i => !i.tags.includes('rechazada') && !['elegir', 'decision-claude'].includes(i.id)).map(i => i.id) };
 }
 
 /** Lee los votos del cockpit: devuelve blind | context | integrar | null. */
@@ -856,17 +1135,41 @@ export function choiceFromFeedback(fb) {
   return null;
 }
 
+const COMMENT_ORDER = ['elegir', 'integrar', 'context', 'blind', 'integrada', 'decision-claude'];
+
+/** Comentarios de texto (y resumen de voz) que el usuario dejó en la revisión de una ronda. */
+export function feedbackComment(fb) {
+  if (!fb) return '';
+  const items = fb.items || {};
+  const ids = [...COMMENT_ORDER.filter(k => items[k]), ...Object.keys(items).filter(k => !COMMENT_ORDER.includes(k))];
+  const parts = [];
+  for (const k of ids) {
+    const text = String(items[k]?.comment || '').replace(/^Elegida: .*(\r?\n|$)/, '').trim();
+    if (text) parts.push(k === 'elegir' ? text : `(sobre ${SHORT_LABEL[k] || k}) ${text}`);
+  }
+  if (fb.summary) parts.push(...(fb.summary.decisions || []), ...(fb.summary.requests || []));
+  return clipText([...new Set(parts.map(p => String(p).trim()).filter(Boolean))].join(' | '), 1200);
+}
+
 export function choice(n, { out = 'rounds', root } = {}) {
   const run = loadRun(out);
   const fb = getFeedback(reviewId(run, n), root);
-  return { review_id: reviewId(run, n), has_feedback: !!fb, choice: choiceFromFeedback(fb) };
+  return { review_id: reviewId(run, n), has_feedback: !!fb, choice: choiceFromFeedback(fb), comment: feedbackComment(fb) };
 }
 
-/** Promueve una variante a la copia de trabajo. El objetivo original no se toca. */
-export function apply(n, variant, { out = 'rounds', auto = false, force = false } = {}) {
+/**
+ * Promueve una variante a la copia de trabajo. El objetivo original no se toca.
+ * Guarda el comentario del usuario (cockpit o `--comentario`) para la variante CONTEXTO de la
+ * ronda siguiente y en DESIGN.md. Con `auto` exige la razón y la deja visible en la revisión.
+ */
+export function apply(n, variant, { out = 'rounds', auto = false, force = false, root, comment = '', reason = '' } = {}) {
   if (variant === 'integrar') variant = 'integrada';
   if (!VARIANTS.includes(variant)) throw new BoldError(`Variante inválida: ${variant} (usa blind | context | integrada)`);
   const run = loadRun(out);
+  if (auto && involvementOf(run) === 'todas' && !force) {
+    throw new BoldError('Involucramiento "todas": el usuario elige cada ronda. No uses --auto: avísale qué está pendiente y espera su elección (cockpit o chat).');
+  }
+  if (auto && !String(reason || '').trim()) throw new BoldError('Con --auto deja escrito el porqué: --razon "una línea"');
   const rp = roundPaths(out, n);
   const vd = rp.variant(variant);
   if (!existsSync(vd)) throw new BoldError(`No existe ${vd}`);
@@ -878,11 +1181,51 @@ export function apply(n, variant, { out = 'rounds', auto = false, force = false 
   emptyDir(wp);
   copyTree(vd, wp);
   rmSync(join(wp, NOTES), { force: true });
+  const userComment = [String(comment || '').trim(), feedbackComment(getFeedback(reviewId(run, n), root))]
+    .filter(Boolean).join(' | ');
   run.history = run.history.filter(h => h.round !== Number(n));
-  run.history.push({ round: Number(n), variant, auto: !!auto, at: new Date().toISOString() });
+  run.history.push({
+    round: Number(n), variant, auto: !!auto, at: new Date().toISOString(),
+    ...(userComment ? { comment: clipText(userComment, 1500) } : {}),
+    ...(auto ? { reason: clipText(reason, 500) } : {}),
+  });
   run.history.sort((a, b) => a.round - b.round);
   saveRun(out, run);
-  return { working: wp, history: run.history };
+  logToDesign(out, n, auto
+    ? `Claude eligió ${variant} sin pausa porque ${clipText(reason, 200)}${userComment ? `; comentario: "${clipText(userComment, 160)}"` : ''}`
+    : `el usuario eligió ${variant}${userComment ? `; comentó: "${clipText(userComment, 240)}"` : ''}`);
+  let republished = false;
+  if (auto && existsSync(rp.check)) {
+    try { review(n, { out, root }); republished = true; } catch { /* sin revisión publicable (p. ej. fuera del proyecto) */ }
+  }
+  return { working: wp, history: run.history, comment: userComment, republished };
+}
+
+/**
+ * Qué toca ahora, en una línea para el usuario/Claude. Nunca inventa la elección del usuario:
+ * si el modo pide su decisión y no llegó, dice qué está pendiente y cómo responder.
+ */
+export function nextAction(run, out = 'rounds', root) {
+  const last = run.history.at(-1)?.round || 0;
+  const n = last + 1;
+  const kind = involvementOf(run);
+  if (n > run.max_rounds) return `Corrida terminada (${run.max_rounds} rondas). Resume la evolución y ofrece "aplicar" (changes).`;
+  const rp = roundPaths(out, n);
+  if (!existsSync(rp.prompt('blind'))) {
+    if (kind !== 'auto' && autoStreak(run) > 0 && autoStreak(run) >= autoLimit(run)) {
+      return `PENDIENTE del usuario: checkpoint de ${run.involucramiento}. Que revise la ronda ${last} en el cockpit (${reviewId(run, last)}) y responda; luego apply ${last} <variante> sin --auto y prepare ${n}.`;
+    }
+    return `prepare ${n}`;
+  }
+  if (!existsSync(rp.check)) return `Corre las variantes de la ronda ${n} (método A o run ${n}) y luego after ${n}.`;
+  const id = reviewId(run, n);
+  if (!getReview(id, root)) return `review ${n}`;
+  const picked = choiceFromFeedback(getFeedback(id, root));
+  if (picked) return `El usuario eligió ${picked}: ${picked === 'integrar' ? `arma la integrada, after ${n} y apply ${n} integrada` : `apply ${n} ${picked}`}.`;
+  if (kind === 'auto' || (kind === 'cada' && autoStreak(run) < autoLimit(run))) {
+    return `Claude elige (involucramiento ${run.involucramiento}): apply ${n} <blind|context> --auto --razon "<por qué, una línea>".`;
+  }
+  return `PENDIENTE del usuario: elegir la ronda ${n} en el cockpit (${id}). Dile: "Elige con un clic en el cockpit o respóndeme aquí: ciega, contexto o integrar, y un comentario si quieres". No elijas por él.`;
 }
 
 /** Lanza variantes con `claude -p` headless (modo desatendido). */
@@ -930,13 +1273,16 @@ function parseArgs(argv) {
 
 const USAGE = `Uso: node scripts/bold_rounds.js <comando>
   init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--goal "..."]   crea la copia de trabajo
+       [--modo visual|producto]               visual = look and feel (por defecto); producto = capacidad/decisión/resultado
+       [--involucramiento auto|cada:N|todas]  auto = Claude elige sin pausas; cada:N = pausa cada N; todas = tú eliges cada ronda
+       [--hallazgos a.md,b.md]                archivos (p. ej. de un council entrevista) que solo recibe la variante CONTEXTO
   prepare <ronda>          copias blind/ y context/, screenshots "antes" y prompts
   run <ronda> [both]       variantes con claude -p (desatendido)
   after <ronda>            screenshots "después" + diff + rechazo de cambios invisibles
   review <ronda> [--sprint N]   publica la ronda en el cockpit: antes/después con zonas marcadas y elegir con un clic
   choice <ronda>           lee el voto del usuario
-  apply <ronda> <blind|context|integrada> [--auto]   promueve la variante a la copia de trabajo
-  status | changes         estado de la corrida | archivos que difieren del original
+  apply <ronda> <blind|context|integrada> [--auto --razon "..."] [--comentario "..."]   promueve la variante a la copia de trabajo
+  status | changes         estado de la corrida y siguiente paso | archivos que difieren del original
   shot <objetivo> <prefijo>  |  diff <a.png> <b.png>
 Opción común: --out <carpeta> (por defecto rounds)`;
 
@@ -948,8 +1294,13 @@ async function cli(argv) {
   switch (cmd) {
     case 'init': {
       if (!a) throw new BoldError('Falta el objetivo: init <carpeta|archivo|url>');
-      const run = await init(a, { out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal });
-      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Rondas máx: ${run.max_rounds}, pausa cada ${run.pause_every}.${run.note ? `\n${run.note}` : ''}`);
+      const run = await init(a, {
+        out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal,
+        modo: flags.modo, involucramiento: flags.involucramiento, hallazgos: typeof flags.hallazgos === 'string' ? flags.hallazgos : [],
+      });
+      const inv = involvementOf(run) === 'auto' ? `auto (Claude elige sin pausas; tope de seguridad ${AUTO_SAFETY_CAP} rondas)`
+        : involvementOf(run) === 'todas' ? 'todas (tú eliges cada ronda)' : `${run.involucramiento} (Claude elige y pausa cada ${run.pause_every})`;
+      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Modo: ${run.modo}. Rondas máx: ${run.max_rounds}. Involucramiento: ${inv}.${run.hallazgos.length ? ` Hallazgos para CONTEXTO: ${run.hallazgos.length}.` : ''}${run.note ? `\n${run.note}` : ''}`);
       return 0;
     }
     case 'prepare': {
@@ -973,13 +1324,17 @@ async function cli(argv) {
     case 'choice': print(choice(a, { out })); return 0;
     case 'apply': {
       if (!b) throw new BoldError('Uso: apply <ronda> <blind|context|integrada>');
-      const r = apply(a, b, { out, auto: !!flags.auto, force: !!flags.force });
-      print(`Variante ${b} de la ronda ${a} aplicada a ${r.working}. El original sigue intacto.`);
+      const r = apply(a, b, {
+        out, auto: !!flags.auto, force: !!flags.force,
+        reason: typeof flags.razon === 'string' ? flags.razon : '', comment: typeof flags.comentario === 'string' ? flags.comentario : '',
+      });
+      print(`Variante ${b} de la ronda ${a} aplicada a ${r.working}. El original sigue intacto.${r.comment ? `\nComentario guardado para la variante con contexto: "${r.comment}"` : ''}${r.republished ? '\nLa razón de la elección quedó visible en la revisión del cockpit.' : ''}`);
+      print(`Siguiente paso: ${nextAction(loadRun(out), out)}`);
       return 0;
     }
     case 'status': {
       const run = loadRun(out);
-      print({ ...run, auto_streak: autoStreak(run), next_round: (run.history.at(-1)?.round || 0) + 1 });
+      print({ ...run, auto_streak: autoStreak(run), next_round: (run.history.at(-1)?.round || 0) + 1, siguiente_paso: nextAction(run, out) });
       return 0;
     }
     case 'changes': {

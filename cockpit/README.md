@@ -71,6 +71,7 @@ Se dibujan en el cockpit, sin servicios externos (`cockpit/public/visuals.js` y 
 ```
 
 - Coordenadas de `hotspots`: de 0 a 1 respecto de la imagen.
+- `compare`: cada opción puede traer `lines: [{ label, text }]` (máx. 5) que se ven bajo la tarjeta, para mostrar la diferencia de un vistazo (p. ej. "Antes → Ahora", "Cómo probarlo"). El botón de comentario funciona también en esta lámina.
 - `compare`: si una opción trae `item`, elegirla vota ese ítem (`up`) y limpia los de las otras opciones. Si no, vota el propio ítem y anota `Elegida: <label>` en el comentario. El feedback sigue siendo `items{<id>:{vote,comment}}`.
 - Íconos disponibles: `ICONS` en `cockpit/public/diagrams.js`.
 

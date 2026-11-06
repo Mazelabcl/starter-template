@@ -139,6 +139,7 @@ export const VISUAL_TYPES = ['image', 'before_after', 'compare', 'diagram'];
 export const DIAGRAM_KINDS = ['flow', 'org', 'timeline', 'connects'];
 export const HEADLINE_MAX_WORDS = 10;
 export const MAX_STATS = 3;
+export const MAX_OPTION_LINES = 5;
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
 const isText = v => typeof v === 'string' && v.trim().length > 0;
 const isUnit = v => typeof v === 'number' && v >= 0 && v <= 1;
@@ -223,6 +224,11 @@ function checkVisual(v, where, errors) {
           else o.images.forEach((m, j) => checkImage(m, `${w}.images[${j}]`, errors));
         }
         if (o.item !== undefined && (typeof o.item !== 'string' || !ID_RE.test(o.item))) errors.push(`${w}.item: id sin espacios`);
+        // Líneas cortas bajo cada opción para ver la DIFERENCIA de un vistazo (p. ej. Antes → Ahora).
+        if (o.lines !== undefined) {
+          if (!Array.isArray(o.lines) || o.lines.length > MAX_OPTION_LINES) errors.push(`${w}.lines: hasta ${MAX_OPTION_LINES} líneas`);
+          else o.lines.forEach((l, j) => { if (!l || !isText(l.label) || !isText(l.text)) errors.push(`${w}.lines[${j}]: { label, text }`); });
+        }
       });
     }
   }
@@ -755,7 +761,12 @@ function visualDigest(v) {
     const spots = (v.hotspots || []).map(s => s.label).filter(Boolean);
     return `Se ve un antes y después${spots.length ? `; cambios marcados: ${spots.join(', ')}` : ''}.`;
   }
-  if (v.type === 'compare') return `Se comparan estas opciones: ${(v.options || []).map(o => o.label).join(', ')}.`;
+  if (v.type === 'compare') {
+    return `Se comparan estas opciones: ${(v.options || []).map(o => {
+      const lines = (Array.isArray(o.lines) ? o.lines : []).map(l => `${l.label}: ${l.text}`).join('; ');
+      return lines ? `${o.label} (${lines})` : o.label;
+    }).join(', ')}.`;
+  }
   if (v.type === 'image') return `Se ve una imagen${v.alt ? `: ${v.alt}` : ''}.`;
   if (v.type === 'diagram') {
     if (v.kind === 'flow') return `Diagrama de pasos: ${(v.steps || []).map(s => s.label || (s.parallel || []).map(p => p.label).join(' y ')).join(' → ')}.`;

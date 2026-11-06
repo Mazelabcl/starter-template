@@ -224,12 +224,16 @@ function compareNode(v, ctx) {
       picture = el('div', { class: 'cmp-icon' }, icon(o.icon || 'flag', 56));
     }
     const plain = !path && !(Array.isArray(o.images) && o.images.length);
+    // Líneas cortas (p. ej. Antes → Ahora, Cómo probarlo): la diferencia se ve sin abrir "Ver más".
+    const lines = (Array.isArray(o.lines) ? o.lines : []).filter(l => l && l.label && l.text).slice(0, 5);
     const card = el('button', {
-      class: `cmp-card${plain ? ' cmp-plain' : ''}`, type: 'button', 'data-option': o.id, 'aria-pressed': 'false',
+      class: `cmp-card${plain ? ' cmp-plain' : ''}${lines.length ? ' cmp-has-lines' : ''}`, type: 'button', 'data-option': o.id, 'aria-pressed': 'false',
       onclick: () => { if (ctx.pick) ctx.pick(o); paint(); },
     },
     el('span', { class: 'cmp-pic' }, picture),
-    el('span', { class: 'cmp-label' }, el('span', { class: 'cmp-check' }, icon('check', 16)), o.label));
+    el('span', { class: 'cmp-label' }, el('span', { class: 'cmp-check' }, icon('check', 16)), o.label),
+    ...(lines.length ? [el('span', { class: 'cmp-lines' }, lines.map(l => el('span', { class: 'cmp-line' },
+      el('span', { class: 'cmp-line-k', text: l.label }), el('span', { class: 'cmp-line-v', text: l.text }))))] : []));
     const wrap = el('div', { class: 'cmp-cell' }, card);
     if (path) wrap.appendChild(el('a', { class: 'cmp-open', href: mediaUrl(path), target: '_blank', rel: 'noopener', 'aria-label': `Ver ${o.label} en grande`, title: 'Ver en grande' }, icon('expand', 16)));
     grid.appendChild(wrap);

@@ -292,6 +292,12 @@ body.talk-open .deck { right: min(420px, 100vw); }
 .cmp-check .dg-icon { stroke: transparent; stroke-width: 3; }
 .cmp-on .cmp-check { background: var(--done); border-color: var(--done); }
 .cmp-on .cmp-check .dg-icon { stroke: var(--surface); }
+.cmp-has-lines .cmp-pic { flex: 1 1 40%; }
+.cmp-has-lines.cmp-plain .cmp-pic { flex: none; }
+.cmp-lines { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 0 14px 12px; font-size: clamp(13px, 1.15vw, 16px); line-height: 1.25; font-weight: 500; overflow: hidden; }
+.cmp-line { display: block; }
+.cmp-line-k { display: block; font-size: .78em; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cmp-line-v { display: block; }
 .cmp-open { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(15, 15, 20, .78); }
 .cmp-open .dg-icon { stroke: #fff; }
 
@@ -446,6 +452,10 @@ body.talk-open .deck { right: min(420px, 100vw); }
   .cmp-card { flex-direction: row; }
   .cmp-pic { flex: 1.2; min-width: 0; }
   .cmp-label { flex: 1; min-width: 0; font-size: 16px; }
+  .cmp-has-lines { flex-direction: column; overflow-y: auto; }
+  .cmp-has-lines .cmp-pic { flex: 0 0 72px; }
+  .cmp-has-lines .cmp-label { flex: none; min-height: 40px; }
+  .cmp-lines { font-size: 13px; gap: 4px; padding: 0 10px 8px; }
   .cmp-open { top: 6px; right: auto; left: 6px; width: 34px; height: 34px; }
   .diagram { align-items: flex-start; }
   .slide-visual .dg { height: auto; }
