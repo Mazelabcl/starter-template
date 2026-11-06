@@ -452,7 +452,9 @@ body.talk-open .deck { right: min(420px, 100vw); }
   .cmp-card { flex-direction: row; }
   .cmp-pic { flex: 1.2; min-width: 0; }
   .cmp-label { flex: 1; min-width: 0; font-size: 16px; }
-  .cmp-has-lines { flex-direction: column; overflow-y: auto; }
+  /* Con líneas (Antes → Ahora...), las tarjetas crecen con su texto y la lista hace scroll. */
+  .cmp:has(.cmp-has-lines) { grid-auto-rows: max-content; overflow-y: auto; align-content: start; }
+  .cmp-has-lines { flex-direction: column; }
   .cmp-has-lines .cmp-pic { flex: 0 0 72px; }
   .cmp-has-lines .cmp-label { flex: none; min-height: 40px; }
   .cmp-lines { font-size: 13px; gap: 4px; padding: 0 10px 8px; }
