@@ -98,6 +98,14 @@ check('slash command con frontmatter y despacho a suggest/list', () => {
   assert(/council\.js list/.test(cmdBody) && /council\.js suggest/.test(cmdBody), 'no despacha a list/suggest');
 });
 
+check('motor agentes + entrevista + involucramiento documentados', () => {
+  for (const c of ['node src/council.js prepare --question', 'node src/council.js siguiente <id>', 'node src/council.js registrar <id>', '--formato entrevista', '--audiencia "', '--hallazgos']) assert(body.includes(c), `falta ${c}`);
+  assert(/ONE message with one Agent call/.test(body), 'debe pedir subagentes en paralelo');
+  assert(/¿Cuánto quieres involucrarte?/.test(body) && /never invent their pick/.test(body), 'falta la pregunta de involucramiento');
+  assert(/3-5 coaches/.test(body) && /Run ONLY after a yes/.test(body), 'el panel se propone y se corre tras un sí');
+  assert(fm['allowed-tools'].includes('Agent'), 'allowed-tools sin Agent');
+});
+
 check('sin voseo ni regionalismos rioplatenses', () => {
   const re = /\b(vos|tenés|podés|querés|sabés|hacés|decís|decime|andá|mirá|che|quilombo)\b/i;
   assert(!re.test(skillRaw), `skill: ${skillRaw.match(re)?.[0]}`);

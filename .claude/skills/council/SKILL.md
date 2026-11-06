@@ -1,7 +1,7 @@
 ---
 name: council
 description: Expert-persona council (CTO, devops, PM, novice user, Steve Jobs-inspired visionary...). Each persona answers independently, then a synthesizer MERGES their threats, opportunities and ideas into one improved proposal with every contribution attributed. Proactively PROPOSE it (never run it silently) on decisions with real tradeoffs, new features, naming, strategy or architecture. Triggers "convoca un council", "/council", "consulta al council", "qué opinaría un CTO", "dame otras perspectivas", "arma tú el panel de expertos".
-allowed-tools: Bash, Read, Edit
+allowed-tools: Bash, Read, Edit, Write, Agent
 ---
 
 # council: expert personas that merge, not vote
@@ -66,6 +66,17 @@ node src/council.js run --template <id> --question "<pregunta concreta>" --files
 
 Rules: never add `--yes` without the user's explicit OK for that cost. Never pass secrets or `.env` content in `--files`/`--context`.
 
+## Engine `agentes` (Claude Code subagents, no API cost) and the `entrevista` format
+
+Before running any council, ask ONCE (unless the user said it): `¿Cuánto quieres involucrarte? 1. Rápido: lo corro y te muestro el resultado (auto) 2. Te muestro el panel y apruebas (cada paso clave) 3. Revisas cada fase (todas)`. Recommend "todas" if the decision is core, "auto" if quick. In "auto" never wait between phases; in the others, if the user does not answer, say what is pending and stop (never invent their pick).
+
+- Use `agentes` when the user prefers no API spend, OpenRouter is missing, or the format is `entrevista`. Same flags as `run` (`--template`, `--personas`, `--crear`, `--files`, `--context`):
+  `node src/council.js prepare --question "..." --personas cto,pm` (add `--dry-run` to show the panel without writing)
+- It prints the prompt files of the phase. Send ONE message with one Agent call (`general-purpose`) per file, each with the file content verbatim as the whole prompt; each subagent writes its JSON. Then `node src/council.js siguiente <id>` validates and writes the next phase (if it lists missing ones, relaunch only those). After the integrator: `node src/council.js registrar <id>` (same `councils/results/<id>.json` + cockpit review, plus `councils/results/<id>-hallazgos.md`).
+- `--formato entrevista`: 3-5 coaches ("actúa como", may be "inspired by" a real person, e.g. `--crear "Coach inspirado en Gary Vaynerchuk: atención y vender sin vergüenza"`) interview 3-6 fictional audience personas (`--audiencia "Novia práctica: 29 años, organiza sola"`, repeatable). Phases: coaches ask -> each persona answers alone -> one follow-up per persona (pimponeo) -> answers -> coaches propose attributed findings -> integrator merges.
+- Propose the panel first and let the user edit or add: `Armaría este panel (sin costo de API, ~<N> subagentes):` + one line per coach and per audience persona with why. Run ONLY after a yes.
+- Feed a Bold Rounds run with the findings: `node scripts/bold_rounds.js init <obj> --modo producto --hallazgos councils/results/<id>-hallazgos.md` (only the CONTEXT variant reads it). Say that the audience is fictional: findings are hypotheses to test with real users.
+
 ## How to present the result
 
 1. The run already wrote the cockpit review (`cockpit/reviews/<id>.json`). Open it yourself (the user never opens a second terminal): `node src/cockpit.js open <id>` (starts the cockpit in the background if needed and opens the browser on that review), then say `Te abrí el cockpit en el navegador.` If `src/cockpit.js` does not exist, tell the user the file path.
@@ -102,3 +113,4 @@ The council never writes to memory. Only when the user explicitly picks a direct
 - `cost_confirmation_required`: show the cost line and ask; rerun with `--yes` only after a yes.
 - `insufficient_personas` / `merge_failed`: report it in one line (usually network or key). Suggest `npm run setup` if the key is missing.
 - `partial: true` in the result: say which persona failed; the rest of the council is still valid.
+- Engine `agentes`: `siguiente` exits with code 2 and lists the missing or invalid outputs; relaunch only those subagents with the same prompt file.

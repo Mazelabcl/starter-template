@@ -62,8 +62,8 @@ Guía de 5 minutos: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Tip: dicta promp
 | **image-gen** | "genera imagen de X", `/image-gen` | gpt-image-2 (y FLUX, Ideogram, Nano Banana Pro) con identity lock y referencias. |
 | **image-explorer** | "explora este prompt en varios modelos" | Mismo prompt en 3-4 modelos, grilla HTML para elegir. |
 | **multimodal-validation** | automático tras generar imágenes | Obliga a mirar el PNG antes de darlo por bueno. |
-| **council** | `/council` | Personas expertas (CTO, devops, PM, usuario novato...) opinan por separado y se fusionan en una propuesta mejorada, con cada aporte atribuido. |
-| **bold-rounds** | `/bold-rounds <objetivo> [N]` | Rediseño audaz por rondas sobre una copia: cada ronda compara una variante ciega (sin memoria) y una con contexto, con screenshots antes/después en el cockpit. Tú eliges; el original no se toca hasta que digas "aplicar". Demo: `examples/cafeteria-90s/`. |
+| **council** | `/council` | Personas expertas (CTO, devops, PM, usuario novato...) opinan por separado y se fusionan en una propuesta mejorada, con cada aporte atribuido. También con subagentes de Claude Code (sin API) y en modo entrevista: coaches que entrevistan a tu audiencia ficticia. |
+| **bold-rounds** | `/bold-rounds <objetivo> [N]` | Rediseño audaz (visual) o innovación de producto por rondas sobre una copia, con el involucramiento que elijas (auto, cada N, todas): cada ronda compara una variante ciega (sin memoria) y una con contexto, con screenshots antes/después en el cockpit. Tú eliges; el original no se toca hasta que digas "aplicar". Demo: `examples/cafeteria-90s/`. |
 | **agent-template** | "crea un agente para X" | Especialista como ficha de rol, sin reiniciar; archivo fijo solo si restringe herramientas. |
 | **memoria** | `src/memory.js` | Decisiones, lessons, equipo y sprints del proyecto. Viaja con el repo. |
 | **roadmap** | `/idea <texto>`, `/roadmap` | Sprint actual + backlog priorizado en `roadmap/roadmap.md`. |

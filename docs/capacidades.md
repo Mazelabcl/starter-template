@@ -20,11 +20,11 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 
 ### Decisiones complejas
 
-- **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. También se eligen expertos a mano (`--personas`), se crean al vuelo (`--crear "Rol: foco"`, con `--guardar` para conservarlos) o los elige Claude ("arma tú el panel de expertos"). Modo `multimodel` para arquitectura crítica. Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
+- **council** (skill + `src/council.js`): council de expertos. 16 personas (CTO, SRE, PM, CFO, usuario novato, visionario...) opinan por separado y un integrador fusiona lo mejor de cada una, con cada aporte atribuido. 8 plantillas por situación; `node src/council.js suggest "tarea"` propone cuál usar. También se eligen expertos a mano (`--personas`), se crean al vuelo (`--crear "Rol: foco"`, con `--guardar` para conservarlos) o los elige Claude ("arma tú el panel de expertos"). Modo `multimodel` para arquitectura crítica. Motor `agentes` (subagentes de Claude Code en paralelo, sin API: `prepare` / `siguiente` / `registrar`) y formato `entrevista` (3-5 coaches entrevistan a 3-6 personas ficticias de la audiencia, con una repregunta; los hallazgos alimentan `/bold-rounds --hallazgos`). Resultado votable en el cockpit. Slash: `/council`. Detalle: `councils/README.md` y `.claude/skills/council/SKILL.md`.
 
 ### Rediseño por rondas
 
-- **bold-rounds** (skill + `scripts/bold_rounds.js`, slash `/bold-rounds <objetivo> [N]`): mejora audaz de una web, proyecto o documento sobre una COPIA en `rounds/`. Cada ronda corre dos variantes en paralelo: **ciega** (subagente sin memoria, para innovar sin sesgo) y **contexto** (conoce rondas previas y tu feedback). Screenshots escritorio 1440 / celular 390 con Playwright, diff de píxeles que rechaza cambios invisibles, revisión `kind: "rounds"` en el cockpit con antes/después, pausa de control cada 3 rondas sin humano y tope de 10. El original solo cambia cuando dices "aplicar" (`node scripts/bold_rounds.js changes` lista qué cambiaría). Modo desatendido: `node scripts/bold_rounds.js run <ronda>` (usa `claude -p`). Screenshots requieren una vez `npm install --no-save playwright-core` (usa tu Chrome o Edge). Demo: `examples/cafeteria-90s/`.
+- **bold-rounds** (skill + `scripts/bold_rounds.js`, slash `/bold-rounds <objetivo> [N]`): mejora audaz de una web, proyecto o documento sobre una COPIA en `rounds/`. Cada ronda corre dos variantes en paralelo: **ciega** (subagente sin memoria, para innovar sin sesgo) y **contexto** (conoce rondas previas y tu feedback). Screenshots escritorio 1440 / celular 390 con Playwright, diff de píxeles que rechaza cambios invisibles, revisión `kind: "rounds"` en el cockpit con antes/después, tope de 10. `--modo producto` innova capacidades (Antes → Ahora, Cómo probarlo, Señal de validación) y rechaza cambios solo estéticos. `--involucramiento auto|cada:N|todas` decide cuánto eliges tú; tu comentario en el cockpit llega a la variante con contexto de la ronda siguiente. Corridas paralelas con `--out rounds-<nombre>`. El original solo cambia cuando dices "aplicar" (`node scripts/bold_rounds.js changes` lista qué cambiaría). Modo desatendido: `node scripts/bold_rounds.js run <ronda>` (usa `claude -p`). Screenshots requieren una vez `npm install --no-save playwright-core` (usa tu Chrome o Edge). Demo: `examples/cafeteria-90s/`.
 
 ### Medir el uso
 
@@ -85,6 +85,8 @@ Todas las skills core viven en `.claude/skills/`. Las opcionales en `.claude/ski
 | `node kickoff-plan.test.js` | Plan de batalla del kickoff: ítems, brazos, councils, publicación en el cockpit. |
 | `node roadmap-integration.test.js` | Roadmap: ideas, tareas, sprints y auto-reparación de marcadores. |
 | `node memory/test.js` | Helpers de memoria (incluye mapeo de `reversibility`). |
+| `node bold-rounds-producto.test.js` | Bold Rounds: modo producto, involucramiento, comentarios solo para CONTEXTO, corridas paralelas. |
+| `node council-agentes.test.js` | Council motor agentes y entrevista: prompts por fase, pimponeo, registro y hallazgos. |
 | `node research.test.js` | Extracción de fuentes y timeouts de `research.js` (sin red). |
 
 No corras `npm run smoke` en cada commit: gasta credits reales.

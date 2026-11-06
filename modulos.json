@@ -97,7 +97,7 @@
         ".claude/skills/bold-rounds/SKILL.md",
         ".claude/commands/bold-rounds.md"
       ],
-      "tests": ["bold-rounds.test.js"],
+      "tests": ["bold-rounds.test.js", "bold-rounds-producto.test.js"],
       "npm": {},
       "optional_npm": { "playwright-core": "solo para screenshots; se instala con npm install --no-save playwright-core" },
       "scripts": { "cockpit:check": "node scripts/cockpit_visual_check.js" },
@@ -142,13 +142,14 @@
         ".claude/skills/council/SKILL.md",
         ".claude/commands/council.md"
       ],
-      "tests": ["council-engine.test.js", "councils-library.test.js", "council-skill.test.js"],
+      "tests": ["council-engine.test.js", "councils-library.test.js", "council-skill.test.js", "council-agentes.test.js"],
       "npm": { "ajv": "^8.17.1" },
       "scripts": {},
-      "gitignore": ["councils/results/*.json", "!councils/results/.gitkeep"],
+      "gitignore": ["councils/results/*.json", "councils/results/*.md", "councils/runs/", "!councils/results/.gitkeep"],
       "verify": [
         "node src/council.js list",
-        "node src/council.js suggest \"elegir el nombre del producto\""
+        "node src/council.js suggest \"elegir el nombre del producto\"",
+        "node src/council.js prepare --question \"prueba del motor agentes\" --personas cto,pm --dry-run"
       ]
     },
     "roles": {

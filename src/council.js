@@ -30,6 +30,9 @@
 //                           [--crear "Rol: foco"]... [--guardar]
 //                           [--mode multimodel] [--files a.md,b.md] [--redteam]
 //                           [--context "..."] [--yes] [--dry-run]
+//   Motor agentes (sin llamar modelos; los corren subagentes de Claude Code):
+//   node src/council.js prepare --question "..." [--formato entrevista --audiencia "Rol: perfil"...]
+//   node src/council.js siguiente <id>   |   node src/council.js registrar <id>
 
 import { readFileSync, existsSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve, isAbsolute, relative } from 'node:path';
@@ -1020,13 +1023,15 @@ function participantsSlide(result) {
     id: 'participantes',
     title: 'Quién participó',
     kicker: 'Quién participó',
-    headline: `${alive} expertos opinaron cada uno por separado`,
+    headline: result.formato === 'entrevista' ? `${alive} coaches entrevistaron y propusieron por separado` : `${alive} expertos opinaron cada uno por separado`,
     ask: '¿Faltó alguien?',
     visual: { type: 'diagram', kind: 'org', lead: { label: 'Integrador', note: 'Fusiona lo mejor de cada uno', icon: 'merge' }, members },
-    stats: [
-      { value: `$${result.metadata.cost_usd.toFixed(3)}`, label: 'costo en USD' },
-      { value: `${Math.round(result.metadata.duration_seconds)} s`, label: 'duración' },
-    ],
+    stats: result.engine === 'agentes'
+      ? [{ value: 'Plan', label: 'subagentes de Claude Code, sin API' }, { value: alive, label: result.formato === 'entrevista' ? 'coaches' : 'expertos' }]
+      : [
+        { value: `$${result.metadata.cost_usd.toFixed(3)}`, label: 'costo en USD' },
+        { value: `${Math.round(result.metadata.duration_seconds)} s`, label: 'duración' },
+      ],
     body_md: [
       'El integrador recibió las respuestas sin nombres, para juzgar cada punto por lo que dice y no por quién lo dijo.',
       '',
@@ -1036,6 +1041,30 @@ function participantsSlide(result) {
     ].join('\n'),
     media: [],
     tags: ['participantes'],
+  };
+}
+
+// Entrevista: a quién se entrevistó (audiencia ficticia) y cuánto se preguntó.
+function interviewSlide(result) {
+  const iv = result.interview;
+  return {
+    id: 'entrevistados',
+    title: 'A quién entrevistó el panel',
+    kicker: 'Entrevista · audiencia ficticia',
+    headline: capWords(`${iv.audience.length} personas ficticias respondieron cada una por separado`),
+    ask: '¿Se parecen a tus usuarios reales?',
+    visual: {
+      type: 'diagram', kind: 'org',
+      lead: { label: 'Panel de coaches', note: capWords(result.personas.map(p => p.name).join(', '), 8), icon: 'users' },
+      members: iv.audience.map(a => ({ label: a.name, note: capWords(a.perfil, 8), icon: 'user' })),
+    },
+    stats: [
+      { value: (iv.questions || []).length, label: 'preguntas' },
+      { value: (iv.followups || []).length, label: 'repreguntas' },
+    ],
+    body_md: `Son personas ficticias: sirven para encontrar preguntas e ideas, no reemplazan una prueba con usuarios reales.\n\n${iv.transcript_md}`,
+    media: [],
+    tags: ['entrevista'],
   };
 }
 
@@ -1108,6 +1137,7 @@ export function toCockpitReview(result) {
   const items = [
     tldrSlide(result),
     participantsSlide(result),
+    ...(result.interview ? [interviewSlide(result)] : []),
     ...m.tensions.map(tensionSlide),
     ...contributions.map(c => contributionSlide(c, nameOf)),
   ];
@@ -1139,10 +1169,408 @@ export function saveResult(result, { root = REPO_ROOT } = {}) {
 }
 
 // =============================================================================
+// Motor "agentes": cada persona corre como subagente de Claude Code (herramienta
+// Agent, en paralelo) en vez de OpenRouter. Este archivo NO llama modelos: prepara
+// los prompts por fase, valida lo que escribieron los subagentes y registra el
+// resultado en el mismo formato que `run` (councils/results/<id>.json + cockpit).
+//
+// Formatos:
+//   council     respuestas (personas) -> integrar -> registrar
+//   entrevista  preguntas (coaches) -> respuestas (audiencia) -> repreguntas (coaches,
+//               una por persona: pimponeo) -> respuestas2 (audiencia) -> hallazgos
+//               (coaches) -> integrar -> registrar
+// =============================================================================
+
+export const AGENT_MODEL = 'claude-code-subagente';
+export const AGENT_FORMATS = ['council', 'entrevista'];
+export const INTERVIEW_LIMITS = { coaches: [3, 5], audience: [3, 6], questions: 12 };
+const PHASES = {
+  council: ['respuestas', 'integrar'],
+  entrevista: ['preguntas', 'respuestas', 'repreguntas', 'respuestas2', 'hallazgos', 'integrar'],
+};
+
+export const agentRunsDir = (root = REPO_ROOT) => join(root, 'councils', 'runs');
+
+// "Novia práctica: 29 años, organiza sola" -> persona ficticia de audiencia.
+export function parseAudience(spec) {
+  const text = typeof spec === 'string' ? spec.trim() : '';
+  const i = text.indexOf(':');
+  const role = i > 0 ? text.slice(0, i).trim() : '';
+  const perfil = i > 0 ? text.slice(i + 1).trim() : '';
+  if (role.length < 2 || perfil.length < 5 || !slugify(role)) {
+    throw new CouncilError(
+      `--audiencia necesita el formato "Rol: perfil", por ejemplo --audiencia "Novia práctica: 29 años, organiza sola, presupuesto ajustado". Recibí: ${text || '(vacío)'}`,
+      { code: 'invalid_audiencia' },
+    );
+  }
+  return { id: `aud-${slugify(role)}`, name: role, perfil };
+}
+
+function writeJsonInstruction(path, shape) {
+  return [
+    '',
+    '# How to deliver',
+    `Write ONLY one JSON object to this file with the Write tool: ${path}`,
+    `Shape: ${shape}`,
+    'No markdown fences, no text outside the JSON. Do not read or write any other file of this council (answer independently).',
+    'When the file is written, reply with one word: listo.',
+  ].join('\n');
+}
+
+const AUDIENCE_RULE = 'You are a FICTIONAL member of the target audience, not an expert. Speak in first person, from concrete past experiences (what you did, what went wrong, what you paid), not opinions about features. If something does not apply to you, say so. Never invent real brands, prices or statistics as facts.';
+
+function audienceSystem(a) {
+  return [
+    `ROLE: Actúas como ${a.name.charAt(0).toLowerCase()}${a.name.slice(1)}, una persona ficticia: ${a.perfil}.`,
+    AUDIENCE_RULE,
+    SPANISH_RULE,
+  ].join('\n');
+}
+
+// En el motor agentes la salida va a un archivo: se quita la regla de 'responde solo JSON'.
+const forFile = s => s
+  .replace(/\n?- Output ONLY one JSON object\. No markdown fences, no text before or after\./, '')
+  .replace(/\nOutput ONLY one JSON object\. No markdown fences\./, '');
+
+function coachSystem(p) {
+  return forFile(personaSystem(p))
+    .replace('You are one member of an expert council. Stay fully in character.', 'You are one coach of an interview panel that studies real users before innovating. Stay fully in character (you may be inspired by a real person, never claim to BE them).');
+}
+
+function readPhaseJson(path) {
+  if (!existsSync(path)) return { exists: false, data: null };
+  return { exists: true, data: parseJsonLoose(readFileSync(path, 'utf8')) };
+}
+
+const isStr = (s, min = 3) => typeof s === 'string' && s.trim().length >= min;
+const validateQuestions = d => {
+  const ok = d && Array.isArray(d.questions) && d.questions.length >= 2 && d.questions.length <= 5 && d.questions.every(q => isStr(q, 8));
+  return { ok, errors: ok ? [] : ['questions: de 2 a 5 preguntas (texto)'] };
+};
+const validateAudienceAnswers = d => {
+  const ok = d && Array.isArray(d.answers) && d.answers.length >= 1 && d.answers.every(a => a && isStr(a.q, 1) && isStr(a.answer));
+  return { ok, errors: ok ? [] : ['answers: [{q, answer}] con al menos una respuesta'] };
+};
+const validateFollowups = (d, audIds) => {
+  const ok = d && Array.isArray(d.followups) && d.followups.length >= 1 && d.followups.every(f => f && audIds.includes(f.to) && isStr(f.question, 8));
+  return { ok, errors: ok ? [] : [`followups: [{to: ${audIds.join('|')}, question}]`] };
+};
+const validateAnswers2 = d => {
+  const ok = d && Array.isArray(d.answers) && d.answers.every(a => a && isStr(a.from, 1) && isStr(a.answer));
+  return { ok, errors: ok ? [] : ['answers: [{from, answer}]'] };
+};
+
+// Preguntas de todos los coaches, numeradas Q1..Qn, repartidas en ronda (máx. 12).
+export function collectQuestions(byCoach, max = INTERVIEW_LIMITS.questions) {
+  const lists = byCoach.map(({ coach, questions }) => questions.map(text => ({ by: coach, text: String(text).trim() })));
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; out.length < max && lists.some(l => l[i]); i += 1) {
+    for (const l of lists) {
+      const q = l[i];
+      if (!q || out.length >= max) continue;
+      const key = normalizeText(q.text).trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ id: `Q${out.length + 1}`, ...q });
+    }
+  }
+  return out;
+}
+
+function phaseFile(dir, phase, who) { return join(dir, `${phase}-${who}.json`); }
+function promptFile(dir, phase, who) { return join(dir, `prompt-${phase}-${who}.md`); }
+
+/** Transcripción legible de la entrevista hasta donde haya respuestas. */
+export function buildTranscript(plan, dir) {
+  const qs = plan.questions || [];
+  const nameOf = id => plan.coaches.find(c => c.id === id)?.name || id;
+  const lines = [`# Entrevista: ${plan.question}`, ''];
+  for (const a of plan.audience) {
+    lines.push(`## ${a.name} (${a.perfil})`);
+    const r1 = readPhaseJson(phaseFile(dir, 'respuestas', a.id)).data;
+    for (const ans of r1?.answers || []) {
+      const q = qs.find(x => x.id === ans.q);
+      lines.push(`- **${ans.q}${q ? ` (${nameOf(q.by)}): ${q.text}` : ''}**`, `  ${a.name}: ${ans.answer}`);
+    }
+    const r2 = readPhaseJson(phaseFile(dir, 'respuestas2', a.id)).data;
+    for (const ans of r2?.answers || []) {
+      const f = (plan.followups || []).find(x => x.to === a.id && x.from === ans.from);
+      lines.push(`- **Repregunta de ${nameOf(ans.from)}${f ? `: ${f.question}` : ''}**`, `  ${a.name}: ${ans.answer}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+/** Prompts de una fase: [{ who, prompt_path, output_path }] (los escribe en disco). */
+function writePhase(plan, dir, phase) {
+  const tasks = [];
+  const add = (who, prompt) => {
+    const prompt_path = promptFile(dir, phase, who);
+    writeFileSync(prompt_path, `${prompt}\n`, 'utf8');
+    tasks.push({ who, prompt_path, output_path: phase === 'integrar' ? join(dir, 'merge.json') : phaseFile(dir, phase, who) });
+  };
+  const ctx = plan.context_text || '(sin contexto de proyecto disponible)';
+  const audienceList = (plan.audience || []).map(a => `- ${a.id}: ${a.name} (${a.perfil})`).join('\n');
+  if (plan.formato === 'council' && phase === 'respuestas') {
+    for (const p of plan.personas) {
+      add(p.id, [forFile(personaSystem(p)), '', personaUser({ question: plan.question, contextText: ctx, persona: p }),
+        writeJsonInstruction(phaseFile(dir, phase, p.id), 'the JSON shape above')].join('\n'));
+    }
+  }
+  if (phase === 'preguntas') {
+    for (const c of plan.coaches) {
+      add(c.id, [coachSystem(c), '', '# Tema de la entrevista', plan.question, '', '# Contexto del proyecto', ctx, '',
+        '# A quién entrevistamos (personas ficticias de la audiencia)', audienceList, '',
+        'Write 2-4 key questions from YOUR angle. Ask about past behavior and real moments ("la última vez que...", "qué hiciste cuando..."), never "¿te gustaría X?". One question per item, in neutral Spanish.',
+        writeJsonInstruction(phaseFile(dir, phase, c.id), `{"coach": "${c.id}", "questions": ["...", "..."]}`)].join('\n'));
+    }
+  }
+  if (plan.formato === 'entrevista' && phase === 'respuestas') {
+    const qs = plan.questions.map(q => `${q.id}. ${q.text}`).join('\n');
+    for (const a of plan.audience) {
+      add(a.id, [audienceSystem(a), '', '# Contexto (lo que te cuentan del producto)', plan.question, '', '# Preguntas del panel', qs, '',
+        'Answer every question in 1-3 sentences each, as yourself. Concrete stories beat opinions.',
+        writeJsonInstruction(phaseFile(dir, phase, a.id), `{"persona": "${a.id}", "answers": [{"q": "Q1", "answer": "..."}]}`)].join('\n'));
+    }
+  }
+  if (phase === 'repreguntas') {
+    const transcript = buildTranscript(plan, dir);
+    for (const c of plan.coaches) {
+      add(c.id, [coachSystem(c), '', '# Transcripción hasta ahora', transcript, '',
+        `Ask exactly ONE follow-up to each interviewee (${plan.audience.map(a => a.id).join(', ')}): dig into the most revealing or contradictory thing they said, from your angle.`,
+        writeJsonInstruction(phaseFile(dir, phase, c.id), `{"coach": "${c.id}", "followups": [{"to": "${plan.audience[0].id}", "question": "..."}]}`)].join('\n'));
+    }
+  }
+  if (phase === 'respuestas2') {
+    for (const a of plan.audience) {
+      const mine = (plan.followups || []).filter(f => f.to === a.id);
+      const r1 = readPhaseJson(phaseFile(dir, 'respuestas', a.id)).data;
+      add(a.id, [audienceSystem(a), '', '# Lo que ya respondiste', JSON.stringify(r1?.answers || [], null, 1), '',
+        '# Repreguntas del panel (responde cada una en 1-3 frases)', mine.map(f => `- de ${f.from}: ${f.question}`).join('\n') || '- (sin repreguntas: responde con un array vacío)',
+        writeJsonInstruction(phaseFile(dir, phase, a.id), `{"persona": "${a.id}", "answers": [{"from": "<coach id>", "answer": "..."}]}`)].join('\n'));
+    }
+  }
+  if (phase === 'hallazgos') {
+    const transcript = buildTranscript(plan, dir);
+    for (const c of plan.coaches) {
+      add(c.id, [coachSystem(c), '', '# Pregunta del council', plan.question, '', '# Contexto del proyecto', ctx, '', '# Transcripción completa de la entrevista', transcript, '',
+        'From YOUR angle, turn what the interviewees said into findings. "ideas" are product innovations (a capability, decision or outcome for the end user), each citing who motivated it, e.g. "(lo dijo Novia práctica)". 2-4 items per list, one sentence each.',
+        writeJsonInstruction(phaseFile(dir, phase, c.id), `{"persona": "${c.id}", "threats": ["..."], "opportunities": ["..."], "ideas": ["..."], "key_concern": "...", "would_change_mind_if": "..."}`)].join('\n'));
+    }
+  }
+  if (phase === 'integrar') {
+    const members = plan.formato === 'entrevista' ? plan.coaches : plan.personas;
+    const src = plan.formato === 'entrevista' ? 'hallazgos' : 'respuestas';
+    const answers = members.map(p => ({
+      persona_id: p.id, persona_name: p.name, answer: { ...readPhaseJson(phaseFile(dir, src, p.id)).data, persona: p.id },
+    }));
+    const { voices, map } = anonymize(answers);
+    plan.voice_map = map;
+    const contextText = plan.formato === 'entrevista' ? `${buildTranscript(plan, dir)}\n\n${ctx}` : ctx;
+    add('integrador', [forFile(MERGE_SYSTEM), '', mergeUser({ question: plan.question, contextText, voices }),
+      writeJsonInstruction(join(dir, 'merge.json'), 'the JSON shape above')].join('\n'));
+  }
+  return tasks;
+}
+
+function phaseValidator(plan, phase) {
+  if (phase === 'preguntas') return validateQuestions;
+  if (phase === 'respuestas') return plan.formato === 'council' ? validatePersonaAnswer : validateAudienceAnswers;
+  if (phase === 'repreguntas') return d => validateFollowups(d, plan.audience.map(a => a.id));
+  if (phase === 'respuestas2') return validateAnswers2;
+  if (phase === 'hallazgos') return validatePersonaAnswer;
+  return validateMerge;
+}
+
+function phaseMembers(plan, phase) {
+  if (phase === 'integrar') return ['integrador'];
+  if (plan.formato === 'council') return plan.personas.map(p => p.id);
+  return ['preguntas', 'repreguntas', 'hallazgos'].includes(phase) ? plan.coaches.map(c => c.id) : plan.audience.map(a => a.id);
+}
+
+/** Estado de la fase actual: qué salidas faltan o son inválidas. */
+export function phaseStatus(plan, dir) {
+  const phase = plan.phase;
+  const validate = phaseValidator(plan, phase);
+  const problems = [];
+  for (const who of phaseMembers(plan, phase)) {
+    const out = phase === 'integrar' ? join(dir, 'merge.json') : phaseFile(dir, phase, who);
+    const { exists, data } = readPhaseJson(out);
+    if (!exists) { problems.push({ who, output_path: out, prompt_path: promptFile(dir, phase, who), error: 'falta' }); continue; }
+    const v = data ? validate(data) : { ok: false, errors: ['no es JSON'] };
+    if (!v.ok) problems.push({ who, output_path: out, prompt_path: promptFile(dir, phase, who), error: v.errors.join('; ') });
+  }
+  return { phase, done: problems.length === 0, problems };
+}
+
+const planPath = dir => join(dir, 'plan.json');
+function loadAgentPlan(id, root) {
+  const dir = join(agentRunsDir(root), id);
+  if (!existsSync(planPath(dir))) throw new CouncilError(`No existe la corrida de agentes ${id} en ${agentRunsDir(root)}`, { code: 'run_not_found' });
+  return { dir, plan: JSON.parse(readFileSync(planPath(dir), 'utf8')) };
+}
+const saveAgentPlan = (dir, plan) => writeFileSync(planPath(dir), `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
+
+/**
+ * Prepara una corrida del motor agentes (no llama modelos). Escribe plan.json y los
+ * prompts de la primera fase en councils/runs/<id>/.
+ */
+export function prepareAgentRun({
+  question, formato = 'council', template, personas: personaIds, crear = [], audiencia = [],
+  files = [], context = '', root = REPO_ROOT, personasMap = loadPersonas(), now = new Date(), dryRun = false,
+} = {}) {
+  if (!question || !String(question).trim()) throw new CouncilError('Falta la pregunta del council.', { code: 'invalid_question' });
+  if (!AGENT_FORMATS.includes(formato)) throw new CouncilError(`Formato inválido: ${formato}. Usa council | entrevista.`, { code: 'invalid_formato' });
+  const plan0 = resolveCouncilPlan({ template, personas: personaIds, crear, mode: 'personas', personasMap });
+  const members = plan0.assignments.map(a => a.persona);
+  const audience = audiencia.map(parseAudience);
+  if (formato === 'entrevista') {
+    const [cMin, cMax] = INTERVIEW_LIMITS.coaches;
+    const [aMin, aMax] = INTERVIEW_LIMITS.audience;
+    if (members.length < cMin || members.length > cMax) throw new CouncilError(`La entrevista necesita de ${cMin} a ${cMax} coaches (tiene ${members.length}).`, { code: 'invalid_personas' });
+    if (audience.length < aMin || audience.length > aMax) throw new CouncilError(`La entrevista necesita de ${aMin} a ${aMax} personas de audiencia con --audiencia "Rol: perfil" (tiene ${audience.length}).`, { code: 'invalid_audiencia' });
+    if (new Set(audience.map(a => a.id)).size !== audience.length) throw new CouncilError('Hay personas de audiencia repetidas: usa roles distintos.', { code: 'invalid_audiencia' });
+  }
+  const ctx = buildProjectContext({ root, files, extra: context });
+  const id = makeCouncilId(now);
+  const plan = {
+    id, engine: 'agentes', formato, question, created_at: now.toISOString(), template: plan0.template?.id || null,
+    ...(formato === 'entrevista' ? { coaches: members, audience } : { personas: members }),
+    adhoc_personas: plan0.adhoc, context_text: ctx.text, context_sources: ctx.sources,
+    phase: PHASES[formato][0],
+  };
+  const panel = {
+    id, formato,
+    members: members.map(p => ({ id: p.id, name: p.name, adhoc: plan0.adhoc.some(a => a.id === p.id) })),
+    audience,
+    subagents: formato === 'entrevista' ? members.length * 3 + audience.length * 2 + 1 : members.length + 1,
+  };
+  if (dryRun) return { plan, panel, tasks: [], dir: null };
+  const dir = join(agentRunsDir(root), id);
+  mkdirSync(dir, { recursive: true });
+  const tasks = writePhase(plan, dir, plan.phase);
+  saveAgentPlan(dir, plan);
+  return { plan, panel, tasks, dir };
+}
+
+/**
+ * Avanza la corrida: si la fase actual está completa, escribe los prompts de la
+ * siguiente. Si falta algo, devuelve qué falta (para relanzar solo esos subagentes).
+ */
+export function advanceAgentRun(id, { root = REPO_ROOT } = {}) {
+  const { dir, plan } = loadAgentPlan(id, root);
+  if (plan.phase === 'registrado') return { status: 'registrado', phase: plan.phase, tasks: [] };
+  const st = phaseStatus(plan, dir);
+  if (!st.done) return { status: 'esperando', phase: st.phase, problems: st.problems, tasks: [] };
+  const order = PHASES[plan.formato];
+  const i = order.indexOf(plan.phase);
+  if (i === order.length - 1) return { status: 'listo', phase: plan.phase, tasks: [] };
+  // Datos derivados de la fase que se cierra.
+  if (plan.phase === 'preguntas') {
+    plan.questions = collectQuestions(plan.coaches.map(c => ({ coach: c.id, questions: readPhaseJson(phaseFile(dir, 'preguntas', c.id)).data.questions })));
+  }
+  if (plan.phase === 'repreguntas') {
+    plan.followups = plan.coaches.flatMap(c => readPhaseJson(phaseFile(dir, 'repreguntas', c.id)).data.followups
+      .map(f => ({ from: c.id, to: f.to, question: String(f.question).trim() })));
+  }
+  plan.phase = order[i + 1];
+  const tasks = writePhase(plan, dir, plan.phase);
+  saveAgentPlan(dir, plan);
+  return { status: 'nueva-fase', phase: plan.phase, tasks };
+}
+
+/** Archivo de hallazgos (markdown corto) para alimentar la variante CONTEXTO de bold-rounds. */
+export function findingsMarkdown(result) {
+  const m = result.merge;
+  const lines = [
+    `# Hallazgos del council ${result.id}${result.formato === 'entrevista' ? ' (entrevista)' : ''}`,
+    '', `Pregunta: ${result.question}`, `Recomendación: ${m.recommendation} (confianza ${m.confidence})`, '',
+    '## Hallazgos adoptados',
+    ...m.contributions.filter(c => c.adopted).map(c => `- ${c.titular || trunc(c.text, 90)}: ${trunc(c.text, 240)} (lo vio ${c.persona_name})`),
+  ];
+  const rejected = m.contributions.filter(c => !c.adopted);
+  if (rejected.length) lines.push('', '## Descartados (no insistir sin evidencia nueva)', ...rejected.map(c => `- ${c.titular || trunc(c.text, 90)}: ${trunc(c.why, 160)}`));
+  if (m.tensions.length) lines.push('', '## Tensiones', ...m.tensions.map(t => `- ${t.titular || t.issue}: ${trunc(t.suggested_resolution, 200)}`));
+  if (result.interview) {
+    lines.push('', '## Lo que dijo la audiencia (ficticia: validar con usuarios reales)');
+    for (const a of result.interview.audience) lines.push(`- ${a.name}: "${trunc(a.first_answer || '', 220)}"`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+/** Registra la corrida: valida merge.json, re-atribuye y guarda resultado + revisión del cockpit + hallazgos. */
+export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersonas(), now = new Date() } = {}) {
+  const { dir, plan } = loadAgentPlan(id, root);
+  if (plan.phase !== 'integrar') throw new CouncilError(`La corrida está en la fase "${plan.phase}". Corre primero: node src/council.js siguiente ${id}`, { code: 'phase_not_ready' });
+  const st = phaseStatus(plan, dir);
+  if (!st.done) throw new CouncilError(`Falta o es inválido merge.json: ${st.problems.map(p => p.error).join('; ')}`, { code: 'merge_failed' });
+  const members = plan.formato === 'entrevista' ? plan.coaches : plan.personas;
+  const map = new Map(personasMap);
+  for (const p of members) map.set(p.id, p);
+  const merge = reattribute(readPhaseJson(join(dir, 'merge.json')).data, plan.voice_map || {}, map);
+  const src = plan.formato === 'entrevista' ? 'hallazgos' : 'respuestas';
+  const answers = members.map(p => ({ persona_id: p.id, persona_name: p.name, model: AGENT_MODEL, answer: { ...readPhaseJson(phaseFile(dir, src, p.id)).data, persona: p.id } }));
+  const transcript = plan.formato === 'entrevista' ? buildTranscript(plan, dir) : null;
+  const result = {
+    id: plan.id,
+    kind: 'council',
+    engine: 'agentes',
+    formato: plan.formato,
+    created_at: plan.created_at,
+    question: plan.question,
+    mode: 'agentes',
+    template: plan.template,
+    redteam_requested: false,
+    personas: members.map(p => ({ id: p.id, name: p.name, model: AGENT_MODEL, family: 'anthropic' })),
+    adhoc_personas: plan.adhoc_personas || [],
+    context_sources: plan.context_sources || [],
+    answers,
+    merge,
+    redteam: null,
+    ...(transcript ? {
+      interview: {
+        audience: plan.audience.map(a => ({ ...a, first_answer: readPhaseJson(phaseFile(dir, 'respuestas', a.id)).data?.answers?.[0]?.answer || '' })),
+        questions: plan.questions || [],
+        followups: plan.followups || [],
+        transcript_md: transcript,
+      },
+    } : {}),
+    metadata: {
+      synth_model: AGENT_MODEL,
+      cost_usd: 0,
+      cost_source: 'plan de Claude Code (sin API)',
+      estimated_cost_usd: 0,
+      duration_seconds: Number(((now.getTime() - new Date(plan.created_at).getTime()) / 1000).toFixed(1)),
+      personas_total: members.length,
+      personas_alive: members.length,
+      partial: false,
+      failed: [],
+      drafts_agreement: agreementScore(answers),
+      anonymized: true,
+    },
+  };
+  const saved = saveResult(result, { root });
+  const findingsPath = join(root, 'councils', 'results', `${result.id}-hallazgos.md`);
+  writeFileSync(findingsPath, findingsMarkdown(result), 'utf8');
+  plan.phase = 'registrado';
+  saveAgentPlan(dir, plan);
+  return { result, ...saved, findingsPath };
+}
+
+function printTasks(tasks, root, id) {
+  const rel = p => relative(root, p).replace(/\\/g, '/');
+  console.log(`Lanza UN mensaje con ${tasks.length} llamadas Agent (general-purpose) en paralelo; cada una recibe el contenido EXACTO de su prompt:`);
+  for (const t of tasks) console.log(`  - ${t.who}: ${rel(t.prompt_path)}  ->  escribe ${rel(t.output_path)}`);
+  console.log(`Cuando terminen: node src/council.js siguiente ${id}`);
+}
+
+// =============================================================================
 // CLI
 // =============================================================================
 
-const REPEATABLE_ARGS = new Set(['crear']);
+const REPEATABLE_ARGS = new Set(['crear', 'audiencia']);
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -1180,6 +1608,12 @@ function cliUsage() {
     '  --redteam                el contrarian ataca la propuesta y se parcha',
     '  --yes                    confirma el costo (obligatorio en multimodel o > USD 0.50)',
     '  --dry-run                solo muestra costo y tiempo estimados',
+    '',
+    'Motor agentes (subagentes de Claude Code en paralelo; sin API ni costo extra):',
+    '  node src/council.js prepare --question "..." [--template|--personas|--crear] [--files] [--context] [--dry-run]',
+    '      [--formato entrevista --audiencia "Rol: perfil" (3-6 veces)]   entrevista: 3-5 coaches entrevistan a la audiencia',
+    '  node src/council.js siguiente <id>    valida la fase actual y escribe los prompts de la siguiente',
+    '  node src/council.js registrar <id>    guarda councils/results/<id>.json, la revisión del cockpit y <id>-hallazgos.md',
   ].join('\n');
 }
 
@@ -1214,6 +1648,62 @@ async function runCli() {
     for (const p of personas.values()) console.log(`  ${p.id}: ${p.name}`);
     console.log(`\nAlias: ${Object.entries(PERSONA_ALIASES).map(([a, id]) => `${a} -> ${id}`).join(', ')}`);
     return;
+  }
+
+  // ---- Motor agentes (subagentes de Claude Code; este script no llama modelos)
+  if (cmd === 'prepare') {
+    if (!args.question || args.question === true) { console.error(cliUsage()); process.exit(1); }
+    const root = args.root ? resolve(args.root) : REPO_ROOT;
+    const personasMap = root === REPO_ROOT ? loadPersonas() : new Map([...loadPersonas(), ...loadPersonas({ dir: join(root, 'councils', 'personas') })]);
+    const r = prepareAgentRun({
+      question: args.question,
+      formato: typeof args.formato === 'string' ? args.formato : 'council',
+      template: typeof args.template === 'string' ? args.template : undefined,
+      personas: list(args.personas), crear: args.crear || [], audiencia: (args.audiencia || []).filter(a => a !== true),
+      files: list(args.files), context: typeof args.context === 'string' ? args.context : '',
+      root, personasMap, dryRun: !!args['dry-run'],
+    });
+    const who = r.panel.formato === 'entrevista' ? 'Coaches' : 'Expertos';
+    console.log(`Council motor agentes (${r.panel.formato}), ~${r.panel.subagents} subagentes, sin costo de API (usa tu plan de Claude Code):`);
+    console.log(`  ${who}: ${r.panel.members.map(m => `${m.name}${m.adhoc ? ' (creado)' : ''}`).join(', ')}`);
+    if (r.panel.audience.length) console.log(`  Audiencia ficticia: ${r.panel.audience.map(a => `${a.name} (${a.perfil})`).join('; ')}`);
+    if (args['dry-run']) { console.log('(dry-run: no se escribió nada)'); return; }
+    console.log(`Corrida: councils/runs/${r.plan.id} · fase: ${r.plan.phase}`);
+    printTasks(r.tasks, root, r.plan.id);
+    return;
+  }
+
+  if (cmd === 'siguiente' || cmd === 'registrar') {
+    const id = args._[1];
+    if (!id) { console.error(`Uso: node src/council.js ${cmd} <id>`); process.exit(1); }
+    const root = args.root ? resolve(args.root) : REPO_ROOT;
+    if (cmd === 'siguiente') {
+      const r = advanceAgentRun(id, { root });
+      if (r.status === 'esperando') {
+        console.log(`Fase "${r.phase}" incompleta. Relanza solo estos subagentes (mismo prompt) y vuelve a correr siguiente:`);
+        for (const p of r.problems) console.log(`  - ${p.who}: ${relative(root, p.prompt_path).replace(/\\/g, '/')} (${p.error})`);
+        process.exitCode = 2;
+      } else if (r.status === 'listo') {
+        console.log(`Integración lista. Registra el resultado: node src/council.js registrar ${id}`);
+      } else if (r.status === 'registrado') {
+        console.log(`Ya registrado: councils/results/${id}.json`);
+      } else {
+        console.log(`Fase nueva: ${r.phase}`);
+        printTasks(r.tasks, root, id);
+      }
+      return;
+    }
+    const personasMap = root === REPO_ROOT ? loadPersonas() : new Map([...loadPersonas(), ...loadPersonas({ dir: join(root, 'councils', 'personas') })]);
+    const r = recordAgentRun(id, { root, personasMap });
+    console.log(`\n${summaryLine(r.result)}`);
+    console.log(`\n${buildTldr(r.result)}`);
+    console.log(`\nResultado: ${relative(root, r.resultPath)}\nRevisión cockpit: ${relative(root, r.reviewPath)}\nHallazgos para bold-rounds (--hallazgos): ${relative(root, r.findingsPath)}`);
+    return;
+  }
+
+  if (cmd === 'run' && args.motor === 'agentes') {
+    console.error('El motor agentes no corre con "run": usa node src/council.js prepare --question "..." [--formato entrevista] (ver la skill council).');
+    process.exit(1);
   }
 
   if (cmd !== 'run' || !args.question || args.question === true) {

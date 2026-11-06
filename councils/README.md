@@ -51,6 +51,16 @@ Un experto de `--crear` vive solo en esa corrida. Agrega `--guardar` para dejarl
 
 Personas base (16; `steve-jobs` es un alias de `visionario`): `cto`, `sre`, `seguridad`, `datos`, `pm`, `ux-research`, `growth`, `cfo`, `ventas`, `cliente`, `director-arte`, `storyteller`, `visionario`, `contrarian`, `usuario-novato`, `audiencia`.
 
+## Motor agentes y modo entrevista (sin API)
+
+En vez de OpenRouter, cada persona corre como un subagente de Claude Code (usa tu plan, sin costo de API). Claude corre los comandos; tú solo apruebas el panel.
+
+1. `node src/council.js prepare --question "¿X o Y?" --personas cto,pm` → (esto escribe un prompt por persona en `councils/runs/<id>/`; Claude los lanza en paralelo)
+2. `node src/council.js siguiente <id>` → (esto revisa lo que escribieron los subagentes y prepara la fase siguiente)
+3. `node src/council.js registrar <id>` → (esto guarda el resultado, la revisión del cockpit y `councils/results/<id>-hallazgos.md`)
+
+**Entrevista:** agrega `--formato entrevista` y de 3 a 6 `--audiencia "Rol: perfil"` (personas ficticias, por ejemplo varias novias distintas). De 3 a 5 coaches (pueden ser "inspirados en" alguien, como Gary Vaynerchuk, con `--crear`) hacen preguntas, cada persona responde sola, cada coach repregunta una vez y proponen hallazgos con atribución. Los hallazgos alimentan una corrida de Bold Rounds: `node scripts/bold_rounds.js init <objetivo> --modo producto --hallazgos councils/results/<id>-hallazgos.md` (solo los ve la variante con contexto). La audiencia es ficticia: los hallazgos son hipótesis para probar con usuarios reales.
+
 ## Dónde queda el resultado
 
 - `councils/results/<id>.json`: todo (respuestas de cada persona, fusión, red team, costo real).

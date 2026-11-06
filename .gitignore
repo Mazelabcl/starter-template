@@ -62,3 +62,7 @@ councils/results/*.json
 # Imágenes de prueba sueltas que dejan algunos scripts en la raíz
 /output.png
 /edited.png
+
+# council motor agentes: corridas por fase (prompts y respuestas de subagentes) y hallazgos para bold-rounds
+councils/runs/
+councils/results/*.md
