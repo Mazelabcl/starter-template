@@ -90,7 +90,7 @@
     },
     "bold-rounds": {
       "description": "Rediseño audaz por rondas sobre una copia (variante ciega vs. con contexto) que se vota en el cockpit.",
-      "requires": ["cockpit"],
+      "requires": ["cockpit", "council"],
       "files": [
         "scripts/bold_rounds.js",
         "scripts/cockpit_visual_check.js",

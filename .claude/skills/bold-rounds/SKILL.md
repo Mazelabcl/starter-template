@@ -19,6 +19,13 @@ The helper embeds it verbatim in `rounds/NNN/prompt-<variant>.md` and adapts onl
 
 Use `producto` when the user wants to innovate the product ("innova", "qué más podría hacer", "nuevas funciones"); `visual` when they talk about the look. If unclear, ask once: `¿Quieres innovar cómo se ve (visual) o qué puede hacer el usuario con el producto (producto)?`
 
+## Who innovates
+
+The two variants (blind, context) are the ones that innovate: two subagents, each with its own LENS and the MODEL the user chose at setup. The orchestrator (you) only prepares, checks and publishes; you never design the change yourself.
+
+- **Lens** = a concrete angle from `councils/personas/*.json` (field `lente`: what it looks at + the question it must answer), e.g. `director-arte`, `growth`, `usuario-novato`. It is a short section added to the prompt; the user's core instruction and guardrails stay literal. Blind gets its lens but no history. `init --lentes a,b,c` sets the rotation, default `auto` (picked from target and goal, never the same lens for both variants, no repeated pair across rounds). One-off override: `prepare N --lente-blind X --lente-context Y`. Unknown ids print the valid list. The lens lands in `notes.md` (`Mirada:`) and as a label on the slides.
+- **Model**: never assume one. Ask at setup (below) and pass `init --modelo sonnet|opus|haiku` (required by the CLI), override per round with `prepare N --modelo M`. `prepare` prints `MODELO_PARA_AGENT`: in method A pass exactly that value as the Agent tool's `model` parameter on BOTH calls (never leave it empty: the subagent would inherit the session's Opus). Method B (`run`) passes `--model` to `claude -p` by itself.
+
 ## Hard rules
 
 1. Work ONLY on the copy in `rounds/`. Never edit the real target until the user says "aplicar" (step 9).
@@ -46,15 +53,16 @@ Recommend `todas` when the task is core to the product or hard to undo; `auto` w
 
 ## Variant report: pictures first, text optional
 
-Visual mode `notes.md`: `Titular`, `Categoría`, `Cambio 1..5`, `Por qué`, `Referencias`, `Riesgo` (one line each). Product mode: `Titular`, `Categoría`, `Situación` (quién, qué momento, qué falla hoy), `Antes`, `Ahora`, `Cómo probarlo` (pasos en la copia), `Señal de validación` (métrica + umbral), `Depende de prueba real`, `Riesgo`. Notes only show behind "Ver más"; the "elegir" slide shows Titular, Antes → Ahora, Cómo probarlo and Señal of each option side by side (visual mode: Titular, Categoría, Cambios), plus the before/after slider slides when pixels changed.
+Visual mode `notes.md`: `Titular`, `Categoría`, `Mirada`, `Cambio 1..5`, `Por qué`, `Referencias`, `Riesgo` (one line each). Product mode: `Titular`, `Categoría`, `Mirada`, `Situación` (quién, qué momento, qué falla hoy), `Antes`, `Ahora`, `Cómo probarlo` (pasos en la copia), `Señal de validación` (métrica + umbral), `Depende de prueba real`, `Riesgo`. `Mirada` is the lens label (the helper adds it if missing). Notes only show behind "Ver más"; the "elegir" slide shows Titular, Antes → Ahora, Cómo probarlo and Señal of each option side by side (visual mode: Titular, Categoría, Cambios), plus the before/after slider slides when pixels changed. `review` computes numbered hotspots from the pixel diff (what only moved down is not marked); `Cambio N` lines name them only when their count matches the zones.
 
 ## Setup (once per run)
 
 ```bash
-node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<objetivo>" --modo producto --involucramiento todas [--hallazgos councils/results/<id>-hallazgos.md]
+node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<objetivo>" --modo producto --involucramiento todas --modelo <modelo> [--hallazgos councils/results/<id>-hallazgos.md]
 ```
 (esto copia el objetivo a `rounds/working/` sin tocar el original y crea `rounds/DESIGN.md`)
 
+- Unless the user already named a model for this run, ask before `init`: `¿Qué modelo uso en cada variante? Sonnet (equilibrado), Opus (más potente, gasta más) o Haiku (más barato).` Do not pick for them.
 - If `/bold-rounds` came without N, use 3. Without a clear goal, ask once: `¿Qué quieres lograr? (por ejemplo: más pedidos, que se vea actual, que los invitados compartan más fotos)`.
 - `--hallazgos`: findings from a council `entrevista` (or any .md). Only the CONTEXT variant receives them.
 - If `rounds/run.json` already exists, ask whether to continue that run or start another with `--out rounds-<nombre>` (all later commands need the same `--out`).
@@ -64,7 +72,7 @@ node scripts/bold_rounds.js init <carpeta|archivo|url> --rounds <N> --goal "<obj
 ## Each round N
 
 1. **Prepare:** `node scripts/bold_rounds.js prepare N`
-2. **Run both variants in parallel.** Method A (default): ONE message with two Agent calls (`general-purpose`), each with the exact content of `rounds/NNN/prompt-blind.md` and `rounds/NNN/prompt-context.md` as the whole prompt. Add nothing to the blind prompt. Method B (unattended): `node scripts/bold_rounds.js run N` (`claude -p` per variant; logs in `rounds/NNN/log-*.txt`).
+2. **Run both variants in parallel.** Method A (default): ONE message with two Agent calls (`general-purpose`, `model` = `MODELO_PARA_AGENT` from `prepare`), each with the exact content of `rounds/NNN/prompt-blind.md` and `rounds/NNN/prompt-context.md` as the whole prompt. Add nothing to the blind prompt. Method B (unattended): `node scripts/bold_rounds.js run N` (`claude -p` per variant; logs in `rounds/NNN/log-*.txt`).
 3. Each variant writes `rounds/NNN/<variant>/notes.md`. If one is missing, say so; do not write it yourself.
 4. **Check:** `node scripts/bold_rounds.js after N` (screenshots, diff, rejection by mode).
 5. **Look yourself:** Read the before/after PNGs; in product mode also open the entry file and follow "Cómo probarlo". If a variant broke the page or invented facts, say so in your TLDR.

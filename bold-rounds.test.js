@@ -14,6 +14,7 @@ import {
   init, prepare, after, apply, buildRoundReview, review, choiceFromFeedback, pixelDiff,
   encodePNG, decodePNG, takeShots, autoStreak, loadRun, buildPrompt, CORE_PROMPT, BoldError,
   changedRegions, labelRegion, parseNotes, realChangeRatio,
+  loadLens, pickLenses, autoPool, roundModel,
 } from './scripts/bold_rounds.js';
 import { validateReview, getReview, reviewWarnings, saveFeedback } from './src/cockpit.js';
 
@@ -312,6 +313,81 @@ try {
   await check('sin Playwright: takeShots devuelve la instrucción de instalación', async () => {
     const r = await takeShots(SITE, join(ROOT, 'x', 'y'), { launcher: async () => null });
     assert(!r.ok && r.reason === 'playwright' && /npm install/.test(r.hint), 'debió dar el comando de instalación');
+  });
+  // --- Lentes y modelo ---
+  const OUT2 = join(ROOT, 'rounds-lentes');
+
+  await check('lentes: lente desconocida da error claro con la lista válida', async () => {
+    let msg = '';
+    try { loadLens('no-existe'); } catch (e) { msg = e.message; }
+    assert(/no-existe/.test(msg) && /director-arte/.test(msg) && /growth/.test(msg), msg);
+    msg = '';
+    try { await init(SITE, { out: OUT2, lentes: 'growth,fantasma' }); } catch (e) { msg = e.message; }
+    assert(/fantasma/.test(msg), msg);
+    msg = '';
+    try { await init(SITE, { out: OUT2, modelo: 'gpt' }); } catch (e) { msg = e.message; }
+    assert(/sonnet/.test(msg), msg);
+  });
+
+  await check('lentes: auto nunca repite lente ni par entre rondas; modelo por defecto sonnet', async () => {
+    const run = await init(SITE, { out: OUT2, rounds: 6, goal: 'más pedidos y que se vea actual' });
+    assert(run.modelo === 'sonnet' && run.lentes === 'auto', 'defaults');
+    const seen = new Set();
+    for (let n = 1; n <= 6; n++) {
+      const p = pickLenses(run, n);
+      assert(p.blind !== p.context, `ronda ${n}: misma lente`);
+      const k = [p.blind, p.context].sort().join('+');
+      assert(!seen.has(k), `ronda ${n}: par repetido ${k}`);
+      seen.add(k);
+      run.lens_log.push({ round: n, ...p, model: 'sonnet' });
+    }
+    assert(autoPool(run).includes('growth') && autoPool(run).includes('director-arte'), 'el objetivo debe elegir growth y director de arte');
+  });
+
+  await check('lentes: prepare pone la lente en ambos prompts (ciego sin historia), modelo y override', async () => {
+    const r = await prepare(1, { out: OUT2, shots, root: ROOT, lenteBlind: 'growth', lenteContext: 'usuario-novato', modelo: 'haiku' });
+    assert(r.model === 'haiku' && /haiku/.test(r.agent_model), 'modelo de la ronda');
+    const blind = readFileSync(r.prompts.blind, 'utf8');
+    const ctx = readFileSync(r.prompts.context, 'utf8');
+    assert(blind.includes('Lens: crecimiento') && ctx.includes('Lens: usuario novato'), 'lente en prompt');
+    assert(blind.includes(CORE_PROMPT) && !blind.includes('DESIGN.md') && !blind.includes('Previous rounds'), 'el ciego sigue ciego');
+    assert(roundModel(loadRun(OUT2), 1) === 'haiku' && roundModel({}, 1) === 'sonnet', 'roundModel');
+    let msg = '';
+    try { await prepare(1, { out: OUT2, shots, root: ROOT, lenteBlind: 'growth', lenteContext: 'growth' }); } catch (e) { msg = e.message; }
+    assert(/misma lente/.test(msg), msg);
+  });
+
+  await check('modelo: la línea de comandos exige --modelo al configurar', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const dir = `${OUT2}-sin-modelo`;
+    const r = spawnSync(process.execPath, ['scripts/bold_rounds.js', 'init', SITE, '--out', dir], { encoding: 'utf8' });
+    assert(r.status !== 0 && /Falta --modelo/.test(r.stdout + r.stderr), r.stdout + r.stderr);
+    assert(!existsSync(dir), 'no debe crear la corrida');
+  });
+
+  await check('lentes: after escribe "Mirada" en notes.md y la revisión la muestra', async () => {
+    writeFileSync(join(OUT2, '001', 'blind', 'index.html'), '<h1 style="font-size:90px">Café</h1><a href="#">Pide ahora</a>');
+    writeFileSync(join(OUT2, '001', 'blind', 'notes.md'), '# Ronda 1\nTitular: Pedir primero\n');
+    writeFileSync(join(OUT2, '001', 'context', 'index.html'), '<h1 style="color:red;font-size:60px">Hola</h1><p>otra cosa</p>');
+    writeFileSync(join(OUT2, '001', 'context', 'notes.md'), '# Ronda 1\nTitular: Más claro\n');
+    await after(1, { out: OUT2, shots });
+    assert(/^Mirada: crecimiento$/m.test(readFileSync(join(OUT2, '001', 'blind', 'notes.md'), 'utf8')), 'Mirada en notes');
+    const rv = buildRoundReview(1, { out: OUT2, root: ROOT });
+    const blindItem = rv.items.find(i => i.id === 'blind');
+    assert(/Ciega · Mirada de crecimiento/.test(blindItem.kicker), blindItem.kicker);
+    const elegir = rv.items.find(i => i.id === 'elegir');
+    if (elegir) assert(elegir.visual.options.some(o => /Mirada de usuario novato/.test(o.label)), 'etiqueta en elegir');
+  });
+
+  await check('lentes: corrida vieja sin lentes/modelo sigue funcionando', async () => {
+    const OUT3 = join(ROOT, 'rounds-viejo');
+    await init(SITE, { out: OUT3 });
+    const rj = join(OUT3, 'run.json');
+    const old = JSON.parse(readFileSync(rj, 'utf8'));
+    delete old.lentes; delete old.modelo; delete old.lens_log;
+    writeFileSync(rj, JSON.stringify(old));
+    const r = await prepare(1, { out: OUT3, shots, root: ROOT });
+    assert(r.model === 'sonnet' && r.lenses.blind !== r.lenses.context, 'defaults en corrida vieja');
   });
 } finally {
   rmSync(ROOT, { recursive: true, force: true });

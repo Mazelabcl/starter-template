@@ -113,7 +113,7 @@ startSprint({ number: 1, objective: plan.proceso.sprints[0].objetivo }); // NEVE
 
 ## Step 9 — The team becomes role cards (no restart)
 
-For every approved member (except an `origen` that is already an agent file), write persona and objective in English and run (add the skill's `SKILL.md` to `--contexto` if `origen` names one):
+Ask once before creating the cards, unless the user already said: `¿Qué modelo usa el equipo? Sonnet (equilibrado), Opus (más potente, gasta más), Haiku (más barato) o uno distinto por rol.` Pass the answer as `--modelo`; do not pick for them. For every approved member (except an `origen` that is already an agent file), write persona and objective in English and run (add the skill's `SKILL.md` to `--contexto` if `origen` names one):
 ```
 node src/roles.js crear --id <id> --actua-como "<persona>" --objetivo "<goal>" [--modelo sonnet] [--contexto a.md,b.md]
 ```

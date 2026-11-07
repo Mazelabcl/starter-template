@@ -7,5 +7,6 @@
   "ignores": ["arquitectura", "estrategia de negocio"],
   "blind_spots": ["no sabe lo que es posible técnicamente", "puede pedir que todo sea automático aunque pierda control"],
   "typical_questions": ["¿Qué hago primero?", "¿Qué significa esta palabra?", "¿Cómo sé si lo hice bien?"],
+  "lente": { "etiqueta": "usuario novato", "mira": "comprensión: palabras, orden y qué hacer primero para alguien que llega por primera vez", "pregunta": "¿Qué malentiende o no encuentra un visitante nuevo en los primeros 10 segundos?" },
   "model_preference": "deepseek"
 }
