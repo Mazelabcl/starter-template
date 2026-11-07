@@ -257,6 +257,11 @@ const RE_FEEDBACK = /^\/api\/feedback\/([^/]+)$/;
 const RE_VOICE = /^\/api\/voice\/session\/([^/]+)$/;
 const RE_CHAT = /^\/api\/chat\/([^/]+)$/;
 const RE_SUMMARY = /^\/api\/summary\/([^/]+)$/;
+// Botón "Probar" de una lámina: sirve la carpeta del .html declarado en item.try.
+const RE_PROBAR = /^\/probar\/([^/]+)\/([^/]+)\/(.+)$/;
+// La demo corre con scripts pero en un origen opaco: no lee nada del cockpit y sus POST
+// llegan con Origin "null", que originAllowed rechaza.
+const PROBAR_CSP = 'sandbox allow-scripts allow-forms allow-modals allow-popups allow-downloads';
 
 /**
  * Crea el server (sin escuchar). Opciones inyectables para tests:
@@ -325,6 +330,25 @@ export function createCockpitServer(opts = {}) {
     return sendFile(res, file, extra);
   }
 
+  // Solo la carpeta del .html que una lámina declara en `try` (y sus subcarpetas), sin
+  // carpetas ocultas ni extensiones raras.
+  function serveProbar(res, rawId, rawItem, rawRel) {
+    let id, itemId, rel;
+    try { id = decodeURIComponent(rawId); itemId = decodeURIComponent(rawItem); rel = decodeURIComponent(rawRel); } catch { return sendJSON(res, 400, { error: 'ruta inválida' }); }
+    if (!ID_RE.test(id) || !ID_RE.test(itemId)) return sendJSON(res, 400, { error: 'id inválido' });
+    const review = getReview(id, root);
+    const item = review && review.items.find(it => it.id === itemId);
+    if (!item || !item.try || !isSafeMediaPath(item.try.path)) return sendJSON(res, 404, { error: 'esta lámina no tiene nada para probar' });
+    const baseDir = dirname(item.try.path).replace(/\\/g, '/');
+    const target = baseDir === '.' ? rel : `${baseDir}/${rel}`;
+    if (!isSafeMediaPath(target)) return sendJSON(res, 400, { error: 'ruta inválida' });
+    const ext = extname(target).toLowerCase();
+    if (!MIME[ext]) return sendJSON(res, 400, { error: 'tipo de archivo no permitido' });
+    const file = safeJoin(join(root, baseDir), rel);
+    if (!file || !existsSync(file) || !statSync(file).isFile()) return sendJSON(res, 404, { error: 'archivo no encontrado' });
+    return sendFile(res, file, { 'Content-Security-Policy': PROBAR_CSP, 'Cache-Control': 'no-store' });
+  }
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const path = url.pathname;
@@ -362,6 +386,7 @@ export function createCockpitServer(opts = {}) {
       return;
     }
     if (method === 'GET' && path === '/media') return serveMedia(res, url.searchParams.get('path') || '');
+    if (method === 'GET' && (m = RE_PROBAR.exec(path))) return serveProbar(res, m[1], m[2], m[3]);
 
     if (method === 'GET' && (m = RE_REVIEW.exec(path))) {
       const review = reviewOr404(res, m[1]);

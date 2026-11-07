@@ -8,8 +8,11 @@
 //   node scripts/bold_rounds.js init <carpeta|archivo|url> [--rounds 5] [--pause-every 3] [--out rounds] [--goal "texto"]
 //        [--modo visual|producto] [--involucramiento auto|cada:N|todas] [--hallazgos a.md,b.md] [--lentes a,b|auto] [--modelo sonnet]
 //   node scripts/bold_rounds.js prepare <ronda> [--force] [--lente-blind X --lente-context Y --modelo M]     (copias blind/context + "antes" + prompts)
-//   node scripts/bold_rounds.js run <ronda> [blind|context|both] [--timeout-min 15]   (headless `claude -p`)
-//   node scripts/bold_rounds.js after <ronda>                   (screenshots "después" + diff + rechazo)
+//   node scripts/bold_rounds.js run <ronda> [blind|context|both] [--fondo] [--paralelo] [--timeout-min 15]
+//        (método B: por variante, IDEAR con `claude -p` aislado y luego CONSTRUIR en otra sesión aislada)
+//   node scripts/bold_rounds.js espera <ronda> [--max-seg 240]   (espera corta a que termine `run --fondo`)
+//   node scripts/bold_rounds.js after <ronda>                   (screenshots "después" + diff + sintaxis + rechazo)
+//   node scripts/bold_rounds.js resumen                         (página visual de toda la corrida en el cockpit)
 //   node scripts/bold_rounds.js review <ronda> [--sprint N]     (publica la revisión kind "rounds" en el cockpit, en imágenes)
 //   node scripts/bold_rounds.js choice <ronda>                  (lee los votos del cockpit)
 //   node scripts/bold_rounds.js apply <ronda> <blind|context|integrada> [--auto --razon "..."] [--comentario "..."]
@@ -22,17 +25,29 @@
 // Idioma: español neutro.
 
 import {
-  cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateSync, deflateSync } from 'node:zlib';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 
 import { publishReview, getFeedback, getReview, resolveRoot, isSafeMediaPath } from '../src/cockpit.js';
+import { runAislado, detectaLimite } from '../src/claude_aislado.js';
+import { presupuestoRondas, textoPresupuesto } from '../src/presupuesto.js';
 
-export const DEFAULTS = { rounds: 5, maxRounds: 10, pauseEvery: 3, threshold: 0.005, timeoutMin: 15 };
+export const DEFAULTS = {
+  rounds: 5, maxRounds: 10, pauseEvery: 3, threshold: 0.005, timeoutMin: 15,
+  // Método B: idear y construir son sesiones aisladas distintas, con topes duros.
+  ideaModel: 'opus', buildModel: 'sonnet', ideaTurns: 6, buildTurns: 25, ideaTimeoutMin: 6,
+  ideaEffort: 'high', buildEffort: 'medium', waitSec: 240,
+};
+// Herramientas de cada fase: idear solo mira (capturas y archivo); construir solo edita.
+export const IDEA_TOOLS = ['Read'];
+export const BUILD_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Grep'];
+export const PLUGGED_WARNING = 'Aviso: deja el PC enchufado y sin suspensión mientras corre (si se suspende, las variantes se cortan y hay que reintentarlas).';
 export const VARIANTS = ['blind', 'context', 'integrada'];
 export const CATEGORIES = ['composición', 'tipografía', 'color', 'imágenes', 'interacción', 'jerarquía', 'mobile'];
 // Modo producto: la ronda cambia lo que el usuario final PUEDE hacer, decidir u obtener.
@@ -583,6 +598,9 @@ export function roundPaths(out, n) {
   return {
     dir, shots: join(dir, 'shots'), check: join(dir, 'check.json'),
     variant: v => join(dir, v), prompt: v => join(dir, `prompt-${v}.md`),
+    // Método B: prompt de idear, idea escrita, métricas por variante y estado de `run`.
+    ideaPrompt: v => join(dir, `idea-prompt-${v}.md`), idea: v => join(dir, `idea-${v}.md`),
+    runInfo: v => join(dir, `run-${v}.json`), status: join(dir, 'run-status.json'),
   };
 }
 
@@ -672,10 +690,14 @@ export function autoLimit(run) {
 /** Crea la copia de trabajo. Nunca escribe en el objetivo original. */
 export async function init(target, {
   out = 'rounds', rounds = DEFAULTS.rounds, pauseEvery = DEFAULTS.pauseEvery, goal,
-  modo, involucramiento, hallazgos = [], lentes = 'auto', modelo = DEFAULT_MODEL,
+  modo, involucramiento, hallazgos = [], lentes = 'auto', modelo, modeloIdea, modeloConstruir, paralelo = false,
 } = {}) {
   const p = runPaths(out);
-  modelo = checkModel(modelo);
+  // Idear y construir usan modelos distintos (lo elige el usuario; recomendado Opus + Sonnet).
+  // `modelo` solo fija ambos a la vez (corridas y método A de antes).
+  const modeloBuild = checkModel(modeloConstruir || modelo || DEFAULTS.buildModel);
+  const modeloIdeaOk = checkModel(modeloIdea || modelo || DEFAULTS.ideaModel);
+  modelo = modeloBuild;
   let lentesList = 'auto';
   if (lentes && lentes !== 'auto') {
     lentesList = String(lentes).split(',').map(s => s.trim()).filter(Boolean);
@@ -727,11 +749,44 @@ export async function init(target, {
     max_rounds: maxRounds, pause_every: inv.pause_every,
     hallazgos: findings,
     threshold: DEFAULTS.threshold, history: [], note,
-    lentes: lentesList, modelo, lens_log: [],
+    lentes: lentesList, modelo, modelo_idea: modeloIdeaOk, modelo_construir: modeloBuild, lens_log: [],
+    // En serie por defecto: una variante a la vez (gasta igual, pero no dispara picos ni cortes).
+    paralelo: !!paralelo,
   };
+  run.presupuesto = estimateRun(run, { working: p.working });
   saveRun(out, run);
   if (!existsSync(p.design)) writeFileSync(p.design, DESIGN_TEMPLATE(run.goal, mode), 'utf8');
   return run;
+}
+
+/** Presupuesto estimado de una corrida (tokens y % de la ventana de 5 h). */
+export function estimateRun(run, { rondas, working } = {}) {
+  let entryChars = 8000;
+  try { if (run.entry && working) entryChars = statSync(join(working, run.entry)).size; } catch { /* sin archivo */ }
+  const p = presupuestoRondas({
+    rondas: rondas || run.max_rounds, modeloIdea: run.modelo_idea || DEFAULTS.ideaModel,
+    modeloConstruir: run.modelo_construir || run.modelo || DEFAULTS.buildModel, entryChars,
+  });
+  return {
+    tokens: p.tokens, pct_ventana: p.pct_ventana, carga_usd: p.carga_usd,
+    por_variante: p.por_variante, weddi_por_variante: p.weddi_por_variante, texto: textoPresupuesto(p),
+  };
+}
+
+/** Presupuesto antes de `init` (no crea nada): lo que el usuario confirma con --yes. */
+export function previewEstimate(target, { rounds = DEFAULTS.rounds, modeloIdea, modeloConstruir, modelo } = {}) {
+  let entry = null, working = null;
+  if (!isUrl(target)) {
+    const src = resolve(target);
+    if (existsSync(src)) {
+      if (statSync(src).isDirectory()) { working = src; entry = detectEntry(src); } else { working = dirname(src); entry = basename(src); }
+    }
+  }
+  const max = Math.min(Math.max(1, parseInt(rounds, 10) || DEFAULTS.rounds), DEFAULTS.maxRounds);
+  return estimateRun({
+    entry, max_rounds: max,
+    modelo_idea: checkModel(modeloIdea || modelo || DEFAULTS.ideaModel), modelo_construir: checkModel(modeloConstruir || modelo || DEFAULTS.buildModel),
+  }, { working });
 }
 
 /** Cuántas rondas seguidas se aplicaron sin un humano (--auto). */
@@ -789,7 +844,10 @@ function findingsFor(run) {
 }
 
 function notesSpec(run, n, variant, lens = null) {
-  const mirada = lens ? [`   Mirada: ${lens.etiqueta}`] : [];
+  const mirada = [
+    ...(lens ? [`   Mirada: ${lens.etiqueta}`] : []),
+    '   Gana: <what the END USER gains, in at most 15 words; it is shown under the headline of the summary>',
+  ];
   if (run.modo === 'producto') {
     return [
       `   # Ronda ${n} — variante ${variant}`,
@@ -890,10 +948,114 @@ export function buildPrompt(variant, { run, out, n, root, beforeShots = [], lens
 }
 
 // ---------------------------------------------------------------------------
+// Método B: IDEAR (sin editar) y CONSTRUIR (sin mirar capturas), sesiones separadas
+// ---------------------------------------------------------------------------
+
+/** System prompt corto de la sesión de ideación (reemplaza al de Claude Code: ~1 K tokens en vez de ~25 K). */
+export const IDEA_SYSTEM = [
+  'You are a bold product and design innovator. You think outside the box and propose ONE concrete change that a builder can implement in a single short session.',
+  'You only look (Read tool for screenshots and files). You never edit files. Your final reply IS the idea spec, in neutral Spanish with "tú" (never voseo).',
+].join('\n');
+
+const IDEA_EXCERPT_CHARS = 12000;
+
+/** Campos que la ideación debe devolver (después van a notes.md y al prompt de construir). */
+function ideaSpec(run, n, variant, lens) {
+  return [
+    `# Ronda ${n} — variante ${variant}`,
+    ...notesSpec(run, n, variant, lens).map(l => l.trim()).slice(1),
+    'Construir: <3-6 bullets, each one concrete edit in the entry file (what element, what behavior or style). The builder only sees this spec and the files.>',
+    'No tocar: <what must stay as it is, one line>',
+  ];
+}
+
+/** Prompt de IDEAR: instrucción literal del usuario + lente + reglas, sin editar y con contexto mínimo. */
+export function buildIdeaPrompt(variant, { run, out, n, root, beforeShots = [], lens = null }) {
+  const dir = roundPaths(out, n).variant(variant);
+  let excerpt = '';
+  try { if (run.entry) excerpt = readFileSync(join(dir, run.entry), 'utf8'); } catch { /* sin entrada legible */ }
+  const product = run.modo === 'producto';
+  const parts = [
+    `IDEATION step of the ${variant.toUpperCase()} variant, round ${n}, of a "bold rounds" loop. Another session will build your idea; you only decide WHAT to change.`,
+    `Objective: ${run.goal}`,
+    `Entry file: ${run.entry ? join(dir, run.entry) : '(none)'}`,
+    '',
+    'Core instruction from the user (follow it literally; if the target is not a website, read "site" as the document or project):',
+    `"${CORE_PROMPT}"`,
+    ...(lens ? ['', 'Lens for this round (an angle to look from, not a role to play):', `- Lens: ${lens.etiqueta}`, `- You look at: ${lens.mira}`, `- Question your change must answer: ${lens.pregunta}`] : []),
+    '',
+    'How to look (keep it short, at most 3 tool calls):',
+    beforeShots.length ? `- View these screenshots of the current state with the Read tool: ${beforeShots.join(', ')}` : '- There are no screenshots: judge from the file.',
+    `- The entry file is below${excerpt.length > IDEA_EXCERPT_CHARS ? ` (first ${IDEA_EXCERPT_CHARS} characters; Read the file only if you need the rest)` : ''}.`,
+    '',
+    product
+      ? `Rules: ONE bold product innovation for the END USER (pick one category: ${PRODUCT_CATEGORIES.join(', ')}). Only-aesthetic changes are forbidden. It must be testable in the copy with sample data labeled "ejemplo". Never invent prices, statistics, testimonials or claims about the real business. Self-contained (no network, no paid APIs).`
+      : `Rules: ONE bold change in exactly one category (${CATEGORIES.join(', ')}), visible at first glance. Anti-slop: no default purple/blue gradients, no pill-shaped everything, no card soup, 3-4 colors plus neutrals, real copy. Name 1-2 concrete references. Never invent prices, addresses or claims. Self-contained (no network, no paid APIs).`,
+    'Be bold, but buildable in about 15 edits of one session.',
+    '',
+    'Reply with ONLY these lines (one line each, in Spanish), nothing before or after:',
+    ...ideaSpec(run, n, variant, lens),
+  ];
+  if (variant === 'blind') parts.push('', 'You have NO history on purpose: judge only what you see now.');
+  else {
+    const design = existsSync(runPaths(out).design) ? readFileSync(runPaths(out).design, 'utf8') : '';
+    const comments = commentsFor(run, n);
+    const findings = findingsFor(run);
+    parts.push('', 'You are the CONTEXT variant: build on what was learned. The user feedback below outranks your taste.',
+      `Avoid repeating a ${product ? 'product ' : ''}category used in the last 2 rounds unless the user asked for it.`);
+    if (comments) parts.push('', '## User comments from previous rounds (apply the latest one first)', comments);
+    if (findings) parts.push('', '## Findings to build on (use them as evidence, do not copy them literally)', clipText(findings, 6000));
+    parts.push('', '## DESIGN.md', clipText(design, 2000), '', '## Previous rounds and user feedback', clipText(buildHistory(out, run, n, root), 4000));
+  }
+  if (excerpt) parts.push('', `## ${run.entry}`, '```', excerpt.slice(0, IDEA_EXCERPT_CHARS), '```');
+  return parts.join('\n') + '\n';
+}
+
+/** Prompt de CONSTRUIR: implementar la idea tal cual, con tope de turnos y sin auto-verificación. */
+export function buildBuildPrompt(variant, idea, { run, out, n, maxTurns = DEFAULTS.buildTurns }) {
+  const dir = roundPaths(out, n).variant(variant);
+  const product = run.modo === 'producto';
+  return [
+    `BUILD step of the ${variant.toUpperCase()} variant, round ${n}. Implement the idea spec below in the working folder. Do not redesign it and do not add a second idea.`,
+    `Working folder (the ONLY place you may write): ${dir}`,
+    `Entry file: ${run.entry || '(find the main file)'}`,
+    '',
+    '## Idea spec (decided already)',
+    String(idea || '').trim(),
+    '',
+    'Rules:',
+    `1. You have at most ${maxTurns} turns. Read the entry file once, then edit. Prefer a few large Edit/Write calls over many small ones. Do not re-read files you just wrote.`,
+    '2. Do NOT take or view screenshots and do not verify visually: a helper takes before/after screenshots and checks the result after you finish.',
+    '3. Keep JavaScript valid (balanced braces, no unfinished code): a syntax check rejects the variant otherwise.',
+    product
+      ? '4. Leave a working interaction (a button that does something, a flow, a simulated result with sample data labeled "ejemplo"), never "próximamente". Never invent prices, statistics, testimonials or claims about the real business.'
+      : '4. Keep facts truthful: do not invent prices, addresses, phone numbers or claims that are not in the original.',
+    '5. Self-contained: no external network assets and no paid APIs. Inline CSS/SVG/JS or local files only. Never write outside the working folder. No git.',
+    '6. All user-facing text in neutral Spanish with "tú". Never voseo ("vos", "tenés", "podés", "decime").',
+    `7. ${NOTES} already holds the idea fields. At the end, edit it only if what you built differs (keep the same one-line fields${product ? '; Categoría, Antes, Ahora and Cómo probarlo are required' : ''}).`,
+    '8. Reply with one line: what you changed.',
+  ].join('\n') + '\n';
+}
+
+/** Escribe notes.md a partir de la idea (sin las líneas de construcción). */
+const NOTE_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?(#|Titular|Categor|Mirada|Gana|Cambio\s*\d|Por qu|Referencias|Riesgo|Situaci|Antes|Ahora|C[oó]mo probarlo|Se[ñn]al|Depende)/i;
+export function notesFromIdea(idea) {
+  const out = [];
+  let skip = false;
+  for (const l of String(idea || '').replace(/^```\w*\s*|```\s*$/g, '').split(/\r?\n/)) {
+    if (/^\s*(?:[-*]\s*)?(?:\*\*)?(Construir|No tocar)(?:\*\*)?:/i.test(l)) { skip = true; continue; }
+    if (skip && !NOTE_LINE.test(l)) continue;
+    skip = false;
+    out.push(l);
+  }
+  return `${out.join('\n').trim()}\n`;
+}
+
+// ---------------------------------------------------------------------------
 // Pasos de la ronda
 // ---------------------------------------------------------------------------
 
-export async function prepare(n, { out = 'rounds', force = false, shots = takeShots, root, lenteBlind, lenteContext, modelo } = {}) {
+export async function prepare(n, { out = 'rounds', force = false, shots = takeShots, root, lenteBlind, lenteContext, modelo, modeloIdea } = {}) {
   const run = loadRun(out);
   n = parseInt(n, 10);
   if (!(n >= 1)) throw new BoldError('Ronda inválida');
@@ -916,20 +1078,90 @@ export async function prepare(n, { out = 'rounds', force = false, shots = takeSh
   const beforeShots = before.ok ? Object.values(before.files) : [];
   const pair = pickLenses(run, n, { blind: lenteBlind, context: lenteContext });
   const model = checkModel(modelo || run.modelo || DEFAULT_MODEL);
-  run.lens_log = [...(run.lens_log || []).filter(l => l.round !== n), { round: n, ...pair, model }].sort((a, b) => a.round - b.round);
+  const modelIdea = checkModel(modeloIdea || run.modelo_idea || DEFAULTS.ideaModel);
+  run.lens_log = [...(run.lens_log || []).filter(l => l.round !== n), { round: n, ...pair, model, model_idea: modelIdea }].sort((a, b) => a.round - b.round);
   saveRun(out, run);
   for (const v of ['blind', 'context']) {
-    writeFileSync(rp.prompt(v), buildPrompt(v, { run, out, n, root, beforeShots, lens: loadLens(pair[v]) }), 'utf8');
+    const lens = loadLens(pair[v]);
+    writeFileSync(rp.prompt(v), buildPrompt(v, { run, out, n, root, beforeShots, lens }), 'utf8');
+    writeFileSync(rp.ideaPrompt(v), buildIdeaPrompt(v, { run, out, n, root, beforeShots, lens }), 'utf8');
   }
   return {
-    round: n, dir: rp.dir, before, model, lenses: pair,
-    agent_model: `Método A: pasa model: "${model}" en AMBAS llamadas a Agent. Método B (run) lo usa solo.`,
+    round: n, dir: rp.dir, before, model, model_idea: modelIdea, lenses: pair,
+    agent_model: `Método B (run, por defecto): idea con ${modelIdea} y construye con ${model}, aislado. Método A: pasa model: "${model}" en AMBAS llamadas a Agent.`,
     prompts: { blind: rp.prompt('blind'), context: rp.prompt('context') },
   };
 }
 
-/** Screenshots "después", diff contra "antes" y rechazo si no hay cambio visible. */
-export async function after(n, { out = 'rounds', shots = takeShots } = {}) {
+/** `node --check` de un archivo: null si compila, o el error en una línea. */
+export function nodeCheck(file) {
+  const r = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8', windowsHide: true });
+  if (r.status === 0) return null;
+  return String(r.stderr || r.error || 'error de sintaxis').split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+    .filter(s => !/^at |^Node\.js v/.test(s)).slice(0, 4).join(' · ').slice(0, 300);
+}
+
+/**
+ * Errores de sintaxis en lo que cambió: `node --check` de cada .js/.mjs/.cjs y de cada
+ * <script> inline de los .html (sin src; JSON y plantillas se saltan).
+ */
+export function syntaxErrors(dir, files, { check = nodeCheck } = {}) {
+  const errs = [];
+  let k = 0;
+  for (const f of files) {
+    const p = join(dir, f);
+    if (!existsSync(p)) continue;
+    if (/\.(m|c)?js$/i.test(f)) {
+      const e = check(p);
+      if (e) errs.push({ file: f, error: e.replace(p, f) });
+      continue;
+    }
+    if (!/\.html?$/i.test(f)) continue;
+    const html = readFileSync(p, 'utf8');
+    const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+    let m;
+    let i = 0;
+    while ((m = re.exec(html))) {
+      const attrs = m[1];
+      if (/\bsrc\s*=/i.test(attrs) || !m[2].trim()) continue;
+      const type = ((/\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attrs) || [])[1] || '').toLowerCase();
+      if (type && !['text/javascript', 'application/javascript', 'module'].includes(type)) continue;
+      i += 1;
+      const tmp = join(tmpdir(), `mazelab-check-${process.pid}-${k++}.${type === 'module' ? 'mjs' : 'js'}`);
+      writeFileSync(tmp, m[2], 'utf8');
+      const e = check(tmp);
+      rmSync(tmp, { force: true });
+      if (e) errs.push({ file: `${f} (<script> ${i})`, error: e.split(tmp).join(`${f}#script${i}`) });
+    }
+  }
+  return errs;
+}
+
+/** ¿La variante se cortó por el límite de uso? (run-<v>.json del método B, o el texto de logs y notas). */
+export function limitOf(rp, v) {
+  if (existsSync(rp.runInfo(v))) {
+    try {
+      const info = readJSON(rp.runInfo(v));
+      if (info.estado === 'reintentar') return info.idear?.limite || info.construir?.limite || { hit: true, message: 'límite de uso' };
+    } catch { /* run-<v>.json dañado: se sigue con los textos */ }
+  }
+  for (const f of [join(rp.dir, `log-${v}.txt`), join(rp.variant(v), NOTES)]) {
+    if (!existsSync(f)) continue;
+    const msg = detectaLimite(readFileSync(f, 'utf8').slice(-20000));
+    if (msg) return { hit: true, message: msg };
+  }
+  return null;
+}
+
+const resetText = lim => {
+  const t = Number(lim?.resets_at);
+  if (!t) return '';
+  const d = new Date(t > 1e12 ? t : t * 1000);
+  return ` (se libera cerca de las ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')})`;
+};
+
+/** Screenshots "después", diff contra "antes", sintaxis y rechazo si no hay cambio válido. */
+export async function after(n, { out = 'rounds', shots = takeShots, check = nodeCheck } = {}) {
   const run = loadRun(out);
   const rp = roundPaths(out, n);
   const wp = runPaths(out).working;
@@ -966,6 +1198,20 @@ export async function after(n, { out = 'rounds', shots = takeShots } = {}) {
       r.rejected = !r.visible;
       r.reason = !files.length ? 'no cambió ningún archivo' : !r.visible ? `cambio no visible (diff < ${run.threshold * 100}%)` : '';
     }
+    // JS roto: la variante no sirve aunque se vea distinta.
+    const syn = syntaxErrors(vd, files, { check });
+    if (syn.length) {
+      r.syntax_errors = syn;
+      r.rejected = true;
+      r.reason = `error de sintaxis en ${syn[0].file}: ${clipText(syn[0].error, 160)}`;
+    }
+    // Límite de uso: no es un problema de calidad. Se marca para reintentar, nunca como rechazo.
+    const lim = limitOf(rp, v);
+    if (lim) {
+      r.reintentar = true;
+      r.rejected = true;
+      r.reason = `límite de uso alcanzado${resetText(lim)}: no es un problema de calidad, reintenta con run ${n} ${v}`;
+    }
     result.variants[v] = r;
   }
   writeJSON(rp.check, result);
@@ -987,7 +1233,7 @@ function mediaPath(abs, root) {
 const NOTE_FIELDS = {
   titular: 'Titular', categoria: 'Categor[ií]a', situacion: 'Situaci[oó]n', antes: 'Antes', ahora: 'Ahora',
   como_probarlo: 'C[oó]mo probarlo', senal: 'Se[ñn]al(?: de validaci[oó]n)?', depende: 'Depende de prueba real',
-  riesgo: 'Riesgo', por_que: 'Por qu[eé]',
+  riesgo: 'Riesgo', por_que: 'Por qu[eé]', gana: 'Gana',
 };
 const FIELD_LABEL = { categoria: 'Categoría', antes: 'Antes', ahora: 'Ahora', como_probarlo: 'Cómo probarlo' };
 
@@ -1145,13 +1391,14 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
       ...(pct ? [{ value: `${Math.round(pct * 100)}%`, label: 'de la página es nueva' }] : []),
       ...(zones ? [{ value: zones, label: zones === 1 ? 'zona marcada' : 'zonas marcadas' }] : []),
     ];
-    const rejectedHeadline = product ? `${SHORT_LABEL[v]}: rechazada, ${c.product?.aesthetic ? 'cambio solo estético' : 'sin Antes/Ahora/Cómo probarlo'}` : `${SHORT_LABEL[v]}: sin cambio visible`;
+    const rejectedHeadline = c.syntax_errors?.length ? `${SHORT_LABEL[v]}: rechazada, el código tiene un error`
+      : product ? `${SHORT_LABEL[v]}: rechazada, ${c.product?.aesthetic ? 'cambio solo estético' : 'sin Antes/Ahora/Cómo probarlo'}` : `${SHORT_LABEL[v]}: sin cambio visible`;
     items.push({
       id: v,
       title: `Ronda ${n} · Variante ${LABEL[v]}${c.rejected ? ' · RECHAZADA' : ''}`,
-      headline: c.rejected ? (c.files_changed.length ? rejectedHeadline : `${SHORT_LABEL[v]}: no cambió nada`) : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
+      headline: c.reintentar ? `${SHORT_LABEL[v]}: pausada por límite de uso` : c.rejected ? (c.files_changed.length ? rejectedHeadline : `${SHORT_LABEL[v]}: no cambió nada`) : parsed.titular || `${SHORT_LABEL[v]}: ${parsed.categoria || 'mira el cambio'}`,
       kicker: `Ronda ${n} · ${SHORT_LABEL[v]}${mirada ? ` · ${mirada}` : ''}${product && parsed.categoria ? ` · ${capWords(parsed.categoria, 5)}` : ''}`,
-      ask: c.rejected ? 'Descartada sola' : product ? '¿Esto le sirve al usuario?' : '¿Te gusta?',
+      ask: c.reintentar ? 'Se reintenta más tarde' : c.rejected ? 'Descartada sola' : product ? '¿Esto le sirve al usuario?' : '¿Te gusta?',
       body_md: [
         notes, '',
         `**Archivos cambiados:** ${c.files_changed.length ? c.files_changed.join(', ') : 'ninguno'}`,
@@ -1159,7 +1406,7 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
         c.rejected ? `**Rechazada automáticamente:** ${c.reason}.` : '',
       ].filter(Boolean).join('\n'),
       media,
-      tags: [v, c.rejected ? 'rechazada' : 'candidata'],
+      tags: [v, c.rejected ? 'rechazada' : 'candidata', ...(c.reintentar ? ['reintentar'] : [])],
       ...(visual ? { visual } : {}),
       ...(stats.length ? { stats } : {}),
     });
@@ -1237,6 +1484,119 @@ export function buildRoundReview(n, { out = 'rounds', root, sprint } = {}) {
     ].filter(Boolean).join(' '),
     items,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Resumen visual de la corrida (una ronda por pantalla), en el cockpit
+// ---------------------------------------------------------------------------
+
+/** Las 5 palabras que confundían, en lenguaje simple. */
+export const GLOSARIO = [
+  { term: 'Ciega', text: 'La versión hecha sin memoria: no sabe qué elegiste antes. Sirve para traer ideas frescas.' },
+  { term: 'Con contexto', text: 'La versión que sí conoce tus votos, tus comentarios y lo aprendido en las rondas anteriores.' },
+  { term: 'Señal', text: 'El número que diría si la idea funciona con gente real. Ejemplo: 4 de cada 10 invitados suben una foto.' },
+  { term: 'Veredicto', text: 'Lo que pasó con la ronda: la elegiste, Claude la eligió, se descartó sola o quedó para reintentar.' },
+  { term: 'Categoría', text: 'El tipo de cambio de la ronda (color, tipografía, una capacidad nueva...). Ayuda a no repetir siempre lo mismo.' },
+];
+
+const firstSentence = s => String(s || '').split(/(?<=[.;])\s/)[0].replace(/[.;]$/, '').trim();
+
+export const resumenId = run => `rounds-${run.slug}${run.tag ? `-${run.tag}` : ''}-resumen`;
+
+function readNotes(rp, v) {
+  const p = join(rp.variant(v), NOTES);
+  return existsSync(p) ? readFileSync(p, 'utf8').trim() : '';
+}
+
+/** Veredicto de una ronda para el chip: quién eligió qué, o por qué no hay elegida. */
+function verdictOf(run, n, check) {
+  const h = run.history.find(x => x.round === n);
+  if (h) return { variant: h.variant, chip: { text: h.auto ? `Claude eligió ${SHORT_LABEL[h.variant]}` : `Elegiste ${SHORT_LABEL[h.variant]}`, tone: 'ok' } };
+  const vs = Object.entries(check?.variants || {});
+  if (vs.some(([, c]) => c.reintentar)) return { variant: null, chip: { text: 'Reintentar: límite de uso', tone: 'warn' } };
+  const ok = vs.filter(([, c]) => !c.rejected).map(([v]) => v);
+  if (!ok.length) return { variant: null, chip: { text: 'Sin cambio válido', tone: 'bad' } };
+  return { variant: ok[0], chip: { text: 'Falta elegir', tone: 'info' } };
+}
+
+/** Arma la revisión "resumen" de toda la corrida. Puro: no publica. */
+export function buildResumen({ out = 'rounds', root } = {}) {
+  const run = loadRun(out);
+  const product = run.modo === 'producto';
+  const rounds = [];
+  for (let n = 1; n <= run.max_rounds; n++) if (existsSync(roundPaths(out, n).check)) rounds.push(n);
+  if (!rounds.length) throw new BoldError('Todavía no hay rondas revisadas (corre after en al menos una ronda).');
+  const items = [];
+  const chosenRounds = rounds.filter(n => run.history.some(h => h.round === n));
+  // Lámina 1: de dónde partimos y dónde estamos.
+  const firstBefore = join(roundPaths(out, rounds[0]).shots, 'before-desktop.png');
+  const lastH = run.history.filter(h => rounds.includes(h.round)).at(-1);
+  const lastAfter = lastH ? join(roundPaths(out, lastH.round).shots, `${lastH.variant}-desktop.png`) : null;
+  if (existsSync(firstBefore) && lastAfter && existsSync(lastAfter)) {
+    items.push({
+      id: 'evolucion', title: `Evolución completa: ${chosenRounds.length} rondas aplicadas`,
+      headline: `${chosenRounds.length} ${chosenRounds.length === 1 ? 'ronda' : 'rondas'}: así cambió`,
+      kicker: 'De dónde partimos', gain: `Objetivo: ${clipText(run.goal, 140)}`,
+      visual: { type: 'before_after', before: mediaPath(firstBefore, root), after: mediaPath(lastAfter, root), device: 'desktop' },
+      ...(run.web && run.entry ? { try: { label: 'Probar la versión actual', path: mediaPath(join(roundPaths(out, lastH.round).variant(lastH.variant), run.entry), root) } } : {}),
+      body_md: `Se trabajó sobre una copia; el original sigue intacto hasta que digas "aplicar".\n\nRondas: ${rounds.length}. Elegidas: ${chosenRounds.length}.`,
+      media: [], tags: ['resumen'],
+    });
+  }
+  for (const n of rounds) {
+    const rp = roundPaths(out, n);
+    const check = readJSON(rp.check);
+    const { variant, chip } = verdictOf(run, n, check);
+    const v = variant || 'blind';
+    const parsed = parseNotes(readNotes(rp, v));
+    const slider = variant ? variantVisual(rp, v, parsed.cambios, root) : null;
+    const before = join(rp.shots, 'before-desktop.png');
+    const visual = slider || (product && productDiagram(parsed))
+      || (existsSync(before) ? { type: 'image', path: mediaPath(before, root), alt: 'Así estaba antes de la ronda' } : { type: 'diagram', kind: 'flow', steps: [{ label: 'Ronda', note: String(n), icon: 'flag' }, { label: 'Veredicto', note: chip.text, icon: 'alert' }] });
+    const gainText = parsed.gana || (product ? parsed.ahora : '') || firstSentence(parsed.por_que) || parsed.titular;
+    const entry = variant && run.web && run.entry ? join(rp.variant(v), run.entry) : null;
+    const detail = ['blind', 'context', 'integrada'].filter(x => check.variants[x]).map(x => {
+      const c = check.variants[x];
+      const p = parseNotes(readNotes(rp, x));
+      return `**${SHORT_LABEL[x]}:** ${p.titular || '(sin titular)'}${c.rejected ? ` · descartada: ${c.reason}` : ''}`;
+    });
+    const why = run.history.find(h => h.round === n);
+    items.push({
+      id: `ronda-${pad(n)}`,
+      title: `Ronda ${n} · ${variant ? SHORT_LABEL[variant] : 'sin elegida'}`,
+      headline: capWords(variant ? (parsed.titular || `Ronda ${n}`) : `Ronda ${n}: ${chip.text}`, 10),
+      kicker: `Ronda ${n} de ${run.max_rounds}`,
+      chip,
+      ...(gainText ? { gain: `Qué gana el usuario: ${clipText(gainText, 120)}` } : {}),
+      ...(entry && existsSync(entry) ? { try: { label: 'Probar', path: mediaPath(entry, root) } } : {}),
+      visual,
+      body_md: [
+        ...detail, '',
+        why?.reason ? `**Por qué se eligió:** ${why.reason}` : '',
+        why?.comment ? `**Tu comentario:** ${why.comment}` : '',
+        parsed.senal ? `**Señal para validar con gente real:** ${parsed.senal}` : '',
+        parsed.como_probarlo ? `**Cómo probarlo:** ${parsed.como_probarlo}` : '',
+      ].filter(Boolean).join('\n'),
+      media: [], tags: [chip.text],
+    });
+  }
+  items.push({
+    id: 'glosario', title: 'Glosario: 5 palabras en lenguaje simple', headline: '5 palabras, en simple',
+    kicker: 'Glosario', visual: { type: 'glossary', terms: GLOSARIO }, body_md: '', media: [], tags: ['glosario'],
+  });
+  return {
+    id: resumenId(run),
+    title: `Resumen bold rounds${product ? ' (producto)' : ''} · ${run.slug}${run.tag ? ` · ${run.tag}` : ''}`,
+    kind: 'rounds',
+    connects_to: rounds.map(n => reviewId(run, n)),
+    context_brief: `Resumen de una corrida de bold rounds sobre una copia. Objetivo: ${run.goal}. Una ronda por lámina: titular, antes/después, qué gana el usuario, botón Probar y un chip con el veredicto. El usuario decide mirando; el detalle va en "Ver más". La última lámina es un glosario.`,
+    items,
+  };
+}
+
+export function resumen({ out = 'rounds', root } = {}) {
+  const r = buildResumen({ out, root });
+  return publishReview(r, root);
 }
 
 export function review(n, { out = 'rounds', root, sprint } = {}) {
@@ -1337,7 +1697,12 @@ export function nextAction(run, out = 'rounds', root) {
     }
     return `prepare ${n}`;
   }
-  if (!existsSync(rp.check)) return `Corre las variantes de la ronda ${n} (método A o run ${n}) y luego after ${n}.`;
+  const st = existsSync(rp.status) ? (() => { try { return readJSON(rp.status); } catch { return null; } })() : null;
+  if (st && st.estado === 'corriendo') return `Las variantes de la ronda ${n} siguen corriendo: espera ${n} (espera como máximo 4 min y vuelve; no uses comandos más largos).`;
+  if (!existsSync(rp.check)) return `Corre las variantes de la ronda ${n} (run ${n} --fondo y luego espera ${n}) y después after ${n}.`;
+  let retry = [];
+  try { retry = Object.entries(readJSON(rp.check).variants || {}).filter(([, c]) => c.reintentar).map(([v]) => v); } catch { /* check dañado */ }
+  if (retry.length) return `Límite de uso alcanzado en ${retry.join(' y ')} (no es un rechazo de calidad). Cuando se libere la ventana: run ${n} ${retry.length === 2 ? 'both' : retry[0]} --fondo, espera ${n} y after ${n}.`;
   const id = reviewId(run, n);
   if (!getReview(id, root)) return `review ${n}`;
   const picked = choiceFromFeedback(getFeedback(id, root));
@@ -1348,31 +1713,135 @@ export function nextAction(run, out = 'rounds', root) {
   return `PENDIENTE del usuario: elegir la ronda ${n} en el cockpit (${id}). Dile: "Elige con un clic en el cockpit o respóndeme aquí: ciega, contexto o integrar, y un comentario si quieres". No elijas por él.`;
 }
 
-/** Lanza variantes con `claude -p` headless (modo desatendido). */
-export function runHeadless(n, which = 'both', { out = 'rounds', timeoutMin = DEFAULTS.timeoutMin, bin = 'claude' } = {}) {
+/** Resumen corto de una fase (para run-<v>.json y el reporte). */
+const phaseInfo = r => ({
+  ok: r.ok, secs: r.secs, timed_out: r.timed_out, requests: r.requests, num_turns: r.num_turns, subtype: r.subtype,
+  first_context: r.usage.first_context, peak_context: r.usage.peak_context, total_tokens: r.usage.total,
+  output_tokens: r.usage.output, cost_usd_lista: r.cost_usd, ventana_5h: r.window,
+  ...(r.limit.hit ? { limite: r.limit } : {}), ...(r.error ? { error: r.error } : {}),
+});
+
+/**
+ * Una variante del método B: IDEAR (sesión aislada, solo Read, system prompt propio) y
+ * CONSTRUIR (otra sesión aislada, solo herramientas de edición, tope de turnos). Nunca lanza.
+ * Estado: ok | reintentar (límite de uso) | timeout | fallo.
+ */
+export async function runVariant(n, v, { out = 'rounds', timeoutMin = DEFAULTS.timeoutMin, runner = runAislado, now = () => Date.now() } = {}) {
+  const run = loadRun(out);
+  const rp = roundPaths(out, n);
+  const vd = rp.variant(v);
+  if (!existsSync(rp.ideaPrompt(v))) throw new BoldError(`Falta ${rp.ideaPrompt(v)}. Corre primero: prepare ${n}`);
+  const log = (run.lens_log || []).find(l => l.round === Number(n)) || {};
+  const modelIdea = log.model_idea || run.modelo_idea || DEFAULTS.ideaModel;
+  const modelBuild = log.model || run.modelo_construir || run.modelo || DEFAULTS.buildModel;
+  const t0 = now();
+  const total = timeoutMin * 60000;
+  const info = { variant: v, round: Number(n), modelo_idea: modelIdea, modelo_construir: modelBuild, started_at: new Date(t0).toISOString() };
+  const save = () => writeJSON(rp.runInfo(v), info);
+  const idea = await runner({
+    prompt: readFileSync(rp.ideaPrompt(v), 'utf8'), cwd: vd, model: modelIdea, tools: IDEA_TOOLS,
+    systemPrompt: IDEA_SYSTEM, effort: DEFAULTS.ideaEffort, maxTurns: DEFAULTS.ideaTurns,
+    addDirs: [rp.shots], timeoutMs: Math.min(DEFAULTS.ideaTimeoutMin * 60000, total),
+    logFile: join(rp.dir, `log-${v}-idea.jsonl`),
+  });
+  info.idear = phaseInfo(idea);
+  const finish = estado => { info.estado = estado; info.secs = Math.round((now() - t0) / 1000); save(); return info; };
+  if (idea.limit.hit) return finish('reintentar');
+  if (idea.timed_out) return finish('timeout');
+  const spec = String(idea.result || '').trim();
+  if (!spec || !/Titular\s*:/i.test(spec)) { info.error = 'la ideación no devolvió una idea con Titular'; return finish('fallo'); }
+  writeFileSync(rp.idea(v), `${spec}\n`, 'utf8');
+  writeFileSync(join(vd, NOTES), notesFromIdea(spec), 'utf8');
+  const left = total - (now() - t0);
+  if (left < 60000) return finish('timeout');
+  const build = await runner({
+    prompt: buildBuildPrompt(v, spec, { run, out, n }), cwd: vd, model: modelBuild, tools: BUILD_TOOLS,
+    permissionMode: 'acceptEdits', effort: DEFAULTS.buildEffort, maxTurns: DEFAULTS.buildTurns,
+    timeoutMs: left, logFile: join(rp.dir, `log-${v}-build.jsonl`),
+  });
+  info.construir = phaseInfo(build);
+  if (build.limit.hit) return finish('reintentar');
+  if (build.timed_out) return finish('timeout');
+  // error_max_turns no es fatal: lo que alcanzó a editar se juzga en `after`.
+  return finish(build.ok || build.subtype === 'error_max_turns' ? 'ok' : 'fallo');
+}
+
+/** Totales de una variante (idea + construcción) para comparar con Weddi. */
+export function variantTotals(info) {
+  const ph = [info.idear, info.construir].filter(Boolean);
+  return {
+    contexto_inicial_idea: info.idear?.first_context ?? null,
+    contexto_inicial_construir: info.construir?.first_context ?? null,
+    peticiones: ph.reduce((s, p) => s + (p.requests || 0), 0),
+    tokens: ph.reduce((s, p) => s + (p.total_tokens || 0), 0),
+    pico: Math.max(0, ...ph.map(p => p.peak_context || 0)),
+    segundos: info.secs ?? null,
+  };
+}
+
+/**
+ * Método B (desatendido): variantes en SERIE por defecto (paralelo solo si se pide).
+ * Escribe NNN/run-status.json para que `espera` pueda informar sin bloquear al orquestador.
+ */
+export async function runHeadless(n, which = 'both', { out = 'rounds', timeoutMin = DEFAULTS.timeoutMin, paralelo, runner } = {}) {
+  const run = loadRun(out);
   const rp = roundPaths(out, n);
   const list = which === 'both' ? ['blind', 'context'] : [which];
-  const model = roundModel(loadRun(out), n);
-  return Promise.all(list.map(v => new Promise(res => {
-    const prompt = readFileSync(rp.prompt(v), 'utf8');
-    // El prompt va por stdin (evita el límite y las comillas de la línea de comandos de Windows).
-    // Un solo string con shell: en Windows `claude` es un .cmd y no se puede lanzar sin shell.
-    const cmd = [bin, '-p', '--model', model, '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write,Glob,Grep',
-      '--add-dir', `"${rp.shots}"`, '--max-turns', '40', '--output-format', 'text'].join(' ');
-    const t0 = Date.now();
-    const child = spawn(cmd, { cwd: rp.variant(v), shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '';
-    const timer = setTimeout(() => child.kill(), timeoutMin * 60000);
-    child.stdout.on('data', d => { stdout += d; });
-    child.stderr.on('data', d => { stderr += d; });
-    child.on('error', e => { clearTimeout(timer); res({ variant: v, ok: false, error: e.message }); });
-    child.on('close', code => {
-      clearTimeout(timer);
-      writeFileSync(join(rp.dir, `log-${v}.txt`), `${stdout}\n--- stderr ---\n${stderr}`, 'utf8');
-      res({ variant: v, ok: code === 0, code, secs: Math.round((Date.now() - t0) / 1000), reply: stdout.trim().split('\n').slice(-1)[0] });
-    });
-    child.stdin.end(prompt);
-  })));
+  for (const v of list) if (!['blind', 'context'].includes(v)) throw new BoldError(`Variante inválida para run: ${v} (usa blind | context | both)`);
+  const par = paralelo === undefined ? !!run.paralelo : !!paralelo;
+  const status = { estado: 'corriendo', round: Number(n), variantes: Object.fromEntries(list.map(v => [v, 'pendiente'])), paralelo: par, pid: process.pid, started_at: new Date().toISOString() };
+  writeJSON(rp.status, status);
+  const one = async v => {
+    status.variantes[v] = 'corriendo';
+    writeJSON(rp.status, status);
+    let r;
+    try { r = await runVariant(n, v, { out, timeoutMin, runner }); } catch (e) { r = { variant: v, estado: 'fallo', error: e.message }; }
+    status.variantes[v] = r.estado;
+    writeJSON(rp.status, status);
+    return r;
+  };
+  const results = [];
+  if (par) results.push(...await Promise.all(list.map(one)));
+  else for (const v of list) {
+    const r = await one(v);
+    results.push(r);
+    // Con el límite de uso alcanzado no tiene sentido lanzar la siguiente variante.
+    if (r.estado === 'reintentar') {
+      for (const w of list.slice(list.indexOf(v) + 1)) status.variantes[w] = 'reintentar';
+      break;
+    }
+  }
+  status.estado = 'listo';
+  status.finished_at = new Date().toISOString();
+  writeJSON(rp.status, status);
+  return results.map(r => ({ variant: r.variant, estado: r.estado, ...(r.error ? { error: r.error } : {}), ...(r.idear ? { medidas: variantTotals(r) } : {}) }));
+}
+
+/** Lanza `run` en segundo plano (proceso aparte) y vuelve enseguida: el orquestador nunca espera > 4 min. */
+export function runInBackground(n, which = 'both', { out = 'rounds', timeoutMin = DEFAULTS.timeoutMin, paralelo = false, spawnFn = spawn } = {}) {
+  const rp = roundPaths(out, n);
+  if (!existsSync(rp.ideaPrompt('blind'))) throw new BoldError(`Falta prepare ${n}.`);
+  mkdirSync(rp.dir, { recursive: true });
+  const args = [fileURLToPath(import.meta.url), 'run', String(n), which, '--out', out, '--timeout-min', String(timeoutMin), ...(paralelo ? ['--paralelo'] : [])];
+  const logPath = join(rp.dir, 'run-fondo.log');
+  writeJSON(rp.status, { estado: 'corriendo', round: Number(n), variantes: {}, started_at: new Date().toISOString(), fondo: true });
+  const fd = openSync(logPath, 'a');
+  const child = spawnFn(process.execPath, args, { cwd: process.cwd(), detached: true, stdio: ['ignore', fd, fd], windowsHide: true });
+  child.unref();
+  return { pid: child.pid, status: rp.status, log: logPath };
+}
+
+/** Espera corta (≤ maxSec) a que termine un `run --fondo`. done=false → volver a llamar. */
+export async function waitRun(n, { out = 'rounds', maxSec = DEFAULTS.waitSec, pollMs = 5000, sleep = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
+  const rp = roundPaths(out, n);
+  const limit = Math.min(Math.max(1, Number(maxSec) || DEFAULTS.waitSec), DEFAULTS.waitSec);
+  const t0 = Date.now();
+  for (;;) {
+    const st = existsSync(rp.status) ? readJSON(rp.status) : null;
+    if (st && st.estado === 'listo') return { done: true, status: st };
+    if ((Date.now() - t0) / 1000 >= limit) return { done: false, status: st };
+    await sleep(pollMs);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1397,10 +1866,13 @@ const USAGE = `Uso: node scripts/bold_rounds.js <comando>
        [--modo visual|producto]               visual = look and feel (por defecto); producto = capacidad/decisión/resultado
        [--involucramiento auto|cada:N|todas]  auto = Claude elige sin pausas; cada:N = pausa cada N; todas = tú eliges cada ronda
        [--hallazgos a.md,b.md]                archivos (p. ej. de un council entrevista) que solo recibe la variante CONTEXTO
-       [--lentes a,b,c|auto] --modelo sonnet|opus|haiku   lentes por variante y modelo (se pregunta al usuario)
-  prepare <ronda> [--lente-blind X] [--lente-context Y] [--modelo M]   copias blind/ y context/, screenshots "antes", prompts, lentes y modelo
-  run <ronda> [both]       variantes con claude -p (desatendido)
-  after <ronda>            screenshots "después" + diff + rechazo de cambios invisibles
+       [--lentes a,b,c|auto] --modelo-idea opus --modelo-construir sonnet   (o --modelo M para ambos; se pregunta al usuario)
+       [--paralelo] [--yes]                    sin --yes solo muestra el presupuesto (tokens y % de la ventana de 5 h)
+  prepare <ronda> [--lente-blind X] [--lente-context Y] [--modelo M] [--modelo-idea M]   copias, "antes", prompts, lentes y modelos
+  run <ronda> [both|blind|context] [--fondo] [--paralelo]   idear + construir con claude -p aislado (en serie por defecto)
+  espera <ronda> [--max-seg 240]   espera corta a que termine run --fondo (exit 3 = sigue corriendo)
+  after <ronda>            screenshots "después" + diff + sintaxis + rechazo; límite de uso = reintentar
+  resumen                  publica en el cockpit la página visual de toda la corrida (una ronda por lámina)
   review <ronda> [--sprint N]   publica la ronda en el cockpit: antes/después con zonas marcadas y elegir con un clic
   choice <ronda>           lee el voto del usuario
   apply <ronda> <blind|context|integrada> [--auto --razon "..."] [--comentario "..."]   promueve la variante a la copia de trabajo
@@ -1417,24 +1889,58 @@ async function cli(argv) {
     case 'init': {
       if (!a) throw new BoldError('Falta el objetivo: init <carpeta|archivo|url>');
       // El modelo lo elige el usuario al configurar: la línea de comandos no asume ninguno.
-      if (!flags.modelo) throw new BoldError(`Falta --modelo: pregúntale al usuario qué modelo quiere para esta corrida (${MODELS.join(' | ')}).`);
-      const run = await init(a, {
+      const mIdea = typeof flags['modelo-idea'] === 'string' ? flags['modelo-idea'] : flags.modelo;
+      const mBuild = typeof flags['modelo-construir'] === 'string' ? flags['modelo-construir'] : flags.modelo;
+      if (typeof mIdea !== 'string' || typeof mBuild !== 'string') {
+        throw new BoldError(`Falta --modelo (o --modelo-idea y --modelo-construir): pregúntale al usuario qué modelo usar para IDEAR y cuál para CONSTRUIR (${MODELS.join(' | ')}). Recomienda Opus para idear (ideas fuera de la caja) y Sonnet para construir (gasta menos). No elijas por él.`);
+      }
+      const opts = {
         out, rounds: flags.rounds || flags['max-rounds'], pauseEvery: flags['pause-every'], goal: flags.goal,
         modo: flags.modo, involucramiento: flags.involucramiento, hallazgos: typeof flags.hallazgos === 'string' ? flags.hallazgos : [],
-        lentes: flags.lentes || 'auto', modelo: flags.modelo,
-      });
+        lentes: flags.lentes || 'auto', modeloIdea: mIdea, modeloConstruir: mBuild, paralelo: !!flags.paralelo,
+      };
+      // Presupuesto visible ANTES de crear nada: sin --yes solo se muestra y se pide confirmación.
+      if (!flags.yes) {
+        const pre = previewEstimate(a, opts);
+        print(pre.texto);
+        print(`${PLUGGED_WARNING}\nPara seguir, muéstrale esto al usuario y, si dice que sí, repite el mismo comando con --yes.`);
+        return 2;
+      }
+      const run = await init(a, opts);
       const inv = involvementOf(run) === 'auto' ? `auto (Claude elige sin pausas; tope de seguridad ${AUTO_SAFETY_CAP} rondas)`
         : involvementOf(run) === 'todas' ? 'todas (tú eliges cada ronda)' : `${run.involucramiento} (Claude elige y pausa cada ${run.pause_every})`;
-      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Modo: ${run.modo}. Rondas máx: ${run.max_rounds}. Involucramiento: ${inv}. Lentes: ${Array.isArray(run.lentes) ? run.lentes.join(', ') : 'auto'}. Modelo: ${run.modelo}.${run.hallazgos.length ? ` Hallazgos para CONTEXTO: ${run.hallazgos.length}.` : ''}${run.note ? `\n${run.note}` : ''}`);
+      print(`Copia de trabajo lista en ${runPaths(out).working} (original intacto). Modo: ${run.modo}. Rondas máx: ${run.max_rounds}. Involucramiento: ${inv}. Lentes: ${Array.isArray(run.lentes) ? run.lentes.join(', ') : 'auto'}. Idea: ${run.modelo_idea}, construye: ${run.modelo_construir}. Variantes ${run.paralelo ? 'en paralelo' : 'en serie'}.${run.hallazgos.length ? ` Hallazgos para CONTEXTO: ${run.hallazgos.length}.` : ''}${run.note ? `\n${run.note}` : ''}`);
+      print(PLUGGED_WARNING);
       return 0;
     }
     case 'prepare': {
-      const r = await prepare(a, { out, force: !!flags.force, lenteBlind: flags['lente-blind'], lenteContext: flags['lente-context'], modelo: flags.modelo });
+      const r = await prepare(a, { out, force: !!flags.force, lenteBlind: flags['lente-blind'], lenteContext: flags['lente-context'], modelo: flags.modelo, modeloIdea: flags['modelo-idea'] });
       if (!r.before.ok && r.before.hint) print(r.before.hint);
-      print({ round: r.round, MODELO_PARA_AGENT: r.model, lentes: r.lenses, agent_model: r.agent_model, before: r.before.ok ? r.before.files : r.before.reason, prompts: r.prompts });
+      print({ round: r.round, MODELO_PARA_AGENT: r.model, MODELO_IDEA: r.model_idea, lentes: r.lenses, agent_model: r.agent_model, before: r.before.ok ? r.before.files : r.before.reason, prompts: r.prompts });
       return 0;
     }
-    case 'run': print(await runHeadless(a, b || 'both', { out, timeoutMin: Number(flags['timeout-min']) || DEFAULTS.timeoutMin })); return 0;
+    case 'run': {
+      const timeoutMin = Number(flags['timeout-min']) || DEFAULTS.timeoutMin;
+      if (flags.fondo) {
+        const r = runInBackground(a, b || 'both', { out, timeoutMin, paralelo: !!flags.paralelo });
+        print(`Variantes de la ronda ${a} corriendo en segundo plano (PID ${r.pid}). Ahora: node scripts/bold_rounds.js espera ${a}${out !== 'rounds' ? ` --out ${out}` : ''} (espera como máximo 4 min; repítelo hasta que diga "listo").\n${PLUGGED_WARNING}`);
+        return 0;
+      }
+      print(await runHeadless(a, b || 'both', { out, timeoutMin, ...(flags.paralelo ? { paralelo: true } : {}) }));
+      return 0;
+    }
+    case 'espera': {
+      const r = await waitRun(a, { out, maxSec: Number(flags['max-seg']) || DEFAULTS.waitSec });
+      const vs = Object.entries(r.status?.variantes || {}).map(([v, e]) => `${v}: ${e}`).join(', ') || 'arrancando';
+      if (r.done) { print(`listo (${vs}). Sigue con: after ${a}`); return 0; }
+      print(`sigue corriendo (${vs}). Vuelve a llamar: espera ${a}`);
+      return 3;
+    }
+    case 'resumen': {
+      const r = resumen({ out });
+      print(`Resumen publicado: "${r.review.title}" (${r.review.items.length} láminas). Ábrelo con: node src/cockpit.js open ${r.review.id}`);
+      return 0;
+    }
     case 'after': {
       const r = await after(a, { out });
       for (const [v, c] of Object.entries(r.variants)) print(`${v}: ${c.rejected ? `RECHAZADA (${c.reason})` : 'ok'} | archivos: ${c.files_changed.length} | diff: ${JSON.stringify(c.ratios)}${c.shot_error ? ` | sin screenshots: ${c.shot_error}` : ''}`);

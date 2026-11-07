@@ -355,10 +355,20 @@ function buildItemSlide(item) {
       el('span', { class: 'stat-value', text: String(s.value) }),
       el('span', { class: 'stat-label', text: s.label })))));
   }
+  // Lámina de resumen: chip de veredicto, una línea de "qué gana" y botón Probar.
+  const tryHref = item.try && state.review
+    ? `/probar/${encodeURIComponent(state.review.id)}/${encodeURIComponent(item.id)}/${encodeURIComponent(String(item.try.path).split('/').pop())}`
+    : null;
+  const extras = (item.gain || tryHref) ? el('div', { class: 'slide-gain-row' },
+    item.gain ? el('p', { class: 'slide-gain', text: item.gain }) : null,
+    tryHref ? el('a', { class: 'btn btn-primary btn-try', href: tryHref, target: '_blank', rel: 'noopener' }, icon('rocket', 16), item.try.label || 'Probar') : null) : null;
   return el('article', { class: 'slide', hidden: true },
     el('div', { class: 'slide-head' },
-      item.kicker ? el('p', { class: 'kicker', text: item.kicker }) : null,
-      el('h1', { class: `headline${long ? ' headline-long' : ''}`, text })),
+      (item.kicker || item.chip) ? el('p', { class: 'kicker' },
+        item.kicker || '',
+        item.chip ? el('span', { class: `chip chip-${item.chip.tone || 'info'}`, text: item.chip.text }) : null) : null,
+      el('h1', { class: `headline${long ? ' headline-long' : ''}`, text }),
+      extras),
     main);
 }
 

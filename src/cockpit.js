@@ -135,7 +135,10 @@ function isStringArray(v) {
 
 // --- Visuales: una revisión se mira, no se lee. Ver cockpit/README.md ---------
 
-export const VISUAL_TYPES = ['image', 'before_after', 'compare', 'diagram'];
+export const VISUAL_TYPES = ['image', 'before_after', 'compare', 'diagram', 'glossary'];
+// Chip de veredicto de un ítem (p. ej. "Elegida", "Rechazada", "Reintentar").
+export const CHIP_TONES = ['ok', 'warn', 'bad', 'info'];
+export const MAX_GLOSSARY_TERMS = 6;
 export const DIAGRAM_KINDS = ['flow', 'org', 'timeline', 'connects'];
 export const HEADLINE_MAX_WORDS = 10;
 export const MAX_STATS = 3;
@@ -206,6 +209,10 @@ function checkVisual(v, where, errors) {
       else v.views.forEach((x, i) => { if (x && typeof x === 'object') checkBeforeAfter(x, `${where}.views[${i}]`, errors); else errors.push(`${where}.views[${i}]: objeto`); });
     }
   }
+  if (v.type === 'glossary') {
+    if (!Array.isArray(v.terms) || !v.terms.length || v.terms.length > MAX_GLOSSARY_TERMS) errors.push(`${where}.terms: de 1 a ${MAX_GLOSSARY_TERMS} términos`);
+    else v.terms.forEach((t, i) => { if (!t || !isText(t.term) || !isText(t.text)) errors.push(`${where}.terms[${i}]: { term, text }`); });
+  }
   if (v.type === 'compare') {
     if (!Array.isArray(v.options) || v.options.length < 2 || v.options.length > 3) errors.push(`${where}.options: de 2 a 3 opciones`);
     else {
@@ -233,6 +240,20 @@ function checkVisual(v, where, errors) {
     }
   }
   if (v.type === 'diagram') checkDiagram(v, where, errors);
+}
+
+// Campos de una lámina "de resumen": línea de beneficio, chip de veredicto y botón Probar.
+function checkExtras(it, where, errors) {
+  if (it.gain !== undefined && !isText(it.gain)) errors.push(`${where}.gain: texto (una línea)`);
+  if (it.chip !== undefined && (!it.chip || !isText(it.chip.text) || (it.chip.tone !== undefined && !CHIP_TONES.includes(it.chip.tone)))) {
+    errors.push(`${where}.chip: { text, tone: ${CHIP_TONES.join('|')} }`);
+  }
+  if (it.try !== undefined) {
+    const t = it.try;
+    if (!t || !isText(t.label) || typeof t.path !== 'string' || !isSafeMediaPath(t.path) || !/\.html?$/i.test(t.path)) {
+      errors.push(`${where}.try: { label, path: ruta relativa a un .html del proyecto }`);
+    }
+  }
 }
 
 function checkStats(stats, where, errors) {
@@ -341,6 +362,7 @@ export function validateReview(review) {
       for (const k of ['headline', 'ask', 'kicker']) if (it[k] !== undefined && typeof it[k] !== 'string') errors.push(`${where}.${k}: string`);
       if (it.visual !== undefined) checkVisual(it.visual, `${where}.visual`, errors);
       checkStats(it.stats, `${where}.stats`, errors);
+      checkExtras(it, where, errors);
     });
   }
   if (errors.length) throw new CockpitError(`Revisión inválida:\n- ${errors.join('\n- ')}`);
@@ -365,6 +387,9 @@ export function validateReview(review) {
       ...(it.ask !== undefined ? { ask: it.ask.trim() } : {}),
       ...(it.visual !== undefined ? { visual: it.visual } : {}),
       ...(it.stats !== undefined ? { stats: it.stats } : {}),
+      ...(it.gain !== undefined ? { gain: it.gain.trim() } : {}),
+      ...(it.chip !== undefined ? { chip: { text: it.chip.text.trim(), tone: it.chip.tone || 'info' } } : {}),
+      ...(it.try !== undefined ? { try: { label: it.try.label.trim(), path: it.try.path } } : {}),
     })),
   };
 }

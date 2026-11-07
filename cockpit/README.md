@@ -49,7 +49,8 @@ Estimación **no verificada** (la conversión minutos → tokens de audio es apr
 
 - `cockpit/reviews/<id>.json` (lo escribe el agente u orquestador):
   `{ id, title, kind: plan|council|rounds|deliverable|other, created_at, sprint?, connects_to: [], context_brief, items: [item] }`
-- `item`: `{ id, title, headline, visual, stats?, ask?, kicker?, body_md?, media?, tags? }`. `headline` (máximo 10 palabras), `visual` y hasta 3 `stats` `{ value, label }` se ven en la lámina; `body_md` solo detrás de **Ver más**. Las revisiones viejas (solo `title`, `body_md`, `media`) se siguen viendo.
+- `item`: `{ id, title, headline, visual, stats?, ask?, kicker?, body_md?, media?, tags?, gain?, chip?, try? }`. `headline` (máximo 10 palabras), `visual` y hasta 3 `stats` `{ value, label }` se ven en la lámina; `body_md` solo detrás de **Ver más**. Las revisiones viejas (solo `title`, `body_md`, `media`) se siguen viendo.
+- Láminas de resumen (las usa `bold_rounds.js resumen`): `gain` = una línea bajo el titular ("Qué gana el usuario: ..."); `chip` = `{ text, tone: ok|warn|bad|info }`, el veredicto junto al kicker; `try` = `{ label, path }` con un `.html` del proyecto: muestra el botón **Probar**, que abre esa carpeta en `/probar/<review>/<ítem>/...` con scripts pero en sandbox (origen opaco: no lee nada del cockpit ni puede votar).
 - `cockpit/feedback/<id>.json` (lo escribe el cockpit):
   `{ review_id, saved_at, processed, items: { <item_id>: { vote: up|down|null, comment } }, conversation: [{ who: usuario|guia, text }], summary: { decisions, open_questions, requests } | null }`
 - Helpers en `src/cockpit.js`: `publishReview`, `reviewWarnings`, `buildSprintDeck`, `listReviews`, `pendingFeedback`, `markProcessed`, `roadmapSnapshot`.
@@ -68,6 +69,7 @@ Se dibujan en el cockpit, sin servicios externos (`cockpit/public/visuals.js` y 
 { "type": "diagram", "kind": "org", "lead": { "label": "Orquestador" }, "members": [{ "label": "Desarrollador", "note": "Landing", "icon": "code", "badge": "Nuevo" }] }
 { "type": "diagram", "kind": "timeline", "items": [{ "label": "Kickoff", "state": "past" }, { "label": "Sprint 1", "state": "current" }, { "label": "Sprint 2", "state": "next" }] }
 { "type": "diagram", "kind": "connects", "center": "Tu proyecto", "links": [{ "label": "Supabase", "state": "missing" }, { "label": "Canva", "state": "ok" }] }
+{ "type": "glossary", "terms": [{ "term": "Ciega", "text": "La versión hecha sin memoria." }] }
 ```
 
 - Coordenadas de `hotspots`: de 0 a 1 respecto de la imagen.

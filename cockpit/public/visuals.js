@@ -244,6 +244,15 @@ function compareNode(v, ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// Glosario: pocas palabras, cada una con su significado en lenguaje simple
+// ---------------------------------------------------------------------------
+
+function glossaryNode(v) {
+  return el('dl', { class: 'gloss' }, (v.terms || []).slice(0, 6).map(t => el('div', { class: 'gloss-row' },
+    el('dt', { text: t.term }), el('dd', { text: t.text }))));
+}
+
+// ---------------------------------------------------------------------------
 // Imagen
 // ---------------------------------------------------------------------------
 
@@ -333,6 +342,7 @@ export function renderVisual(item, ctx = {}) {
     if (v.type === 'before_after') return beforeAfterNode(v);
     if (v.type === 'compare') return compareNode(v, ctx);
     if (v.type === 'diagram') return diagramNode(v);
+    if (v.type === 'glossary') return glossaryNode(v);
   } catch { /* cae al aviso */ }
   return el('p', { class: 'visual-error', text: 'No pude dibujar este visual. Mira "Ver más".' });
 }

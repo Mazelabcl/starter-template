@@ -54,6 +54,23 @@ publishReview({
   ],
 }, root, { silencioso: true });
 
+// Lámina de resumen de bold-rounds: chip de veredicto, línea de beneficio, Probar y glosario.
+mkdirSync(join(root, 'demo'), { recursive: true });
+writeFileSync(join(root, 'demo', 'index.html'), '<!doctype html><title>demo</title><button onclick="this.textContent=1">ok</button>');
+publishReview({
+  id: 'resumen',
+  title: 'Resumen de rondas de prueba',
+  kind: 'rounds',
+  items: [
+    {
+      id: 'ronda-001', title: 'Ronda 1', headline: 'La carta se vuelve comanda', kicker: 'Ronda 1 de 1',
+      chip: { text: 'Claude eligió Ciega', tone: 'ok' }, gain: 'Qué gana el usuario: pide en un toque', try: { label: 'Probar', path: 'demo/index.html' },
+      visual: { type: 'before_after', before: 'media/antes.png', after: 'media/despues.png' },
+    },
+    { id: 'glosario', title: 'Glosario', headline: '5 palabras, en simple', visual: { type: 'glossary', terms: ['Ciega', 'Con contexto', 'Señal', 'Veredicto', 'Categoría'].map(term => ({ term, text: `Qué significa ${term}, en simple.` })) } },
+  ],
+}, root, { silencioso: true });
+
 // Revisión con el contrato viejo: solo title + body_md + media.
 publishReview({
   id: 'vieja',
@@ -205,6 +222,20 @@ try {
       await page.click('#talk-close');
     });
 
+    await check(`${name}: resumen de rondas: chip, "qué gana", Probar (sandbox con scripts) y glosario`, async () => {
+      await page.goto(`${base}/#/r/resumen`);
+      await page.waitForSelector('.slide:not([hidden]) .chip');
+      const slide = visibleSlide(page);
+      assert(await slide.locator('.chip').innerText().then(t => /Claude eligió Ciega/i.test(t)), 'chip');
+      assert(await slide.locator('.slide-gain').innerText().then(t => t.startsWith('Qué gana el usuario')), 'línea de beneficio');
+      const href = await slide.locator('.btn-try').getAttribute('href');
+      const r = await page.request.get(`${base}${href}`);
+      assert(r.status() === 200 && /sandbox allow-scripts/.test(r.headers()['content-security-policy'] || ''), `probar: ${r.status()}`);
+      await page.keyboard.press('ArrowRight');
+      await page.waitForSelector('.slide:not([hidden]) .gloss');
+      assert(await visibleSlide(page).locator('.gloss-row').count() === 5, 'glosario de 5 términos');
+    });
+
     await check(`${name}: una revisión vieja se sigue viendo`, async () => {
       await page.goto(`${base}/#/r/vieja`);
       await page.waitForFunction(() => document.querySelector('.slide:not([hidden]) .headline')?.textContent === 'Solo texto');
@@ -216,7 +247,7 @@ try {
     await check(`${name}: inicio con miniaturas y ayuda siempre a mano`, async () => {
       await page.goto(`${base}/#/`);
       await page.waitForSelector('.thumb');
-      assert(await page.locator('.thumb').count() === 2, 'miniaturas');
+      assert(await page.locator('.thumb').count() === 3, 'miniaturas (visual, resumen y vieja)');
       await page.click('#btn-help');
       await page.waitForSelector('.help-card');
       const text = await page.locator('#view-help').innerText();
