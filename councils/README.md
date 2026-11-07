@@ -51,6 +51,19 @@ Un experto de `--crear` vive solo en esa corrida. Agrega `--guardar` para dejarl
 
 Personas base (16; `steve-jobs` es un alias de `visionario`): `cto`, `sre`, `seguridad`, `datos`, `pm`, `ux-research`, `growth`, `cfo`, `ventas`, `cliente`, `director-arte`, `storyteller`, `visionario`, `contrarian`, `usuario-novato`, `audiencia`.
 
+## Entrevista directa (recomendada para entrevistas)
+
+Las personas solo escriben texto, así que no hace falta abrir una sesión completa de Claude Code por persona (en Weddi eran ~50 sesiones). Cada fase es UNA llamada corta para todos los coaches y una llamada corta por persona de audiencia:
+
+```
+node src/council.js entrevista --question "¿Qué haría que más gente pida para llevar?" --personas growth,usuario-novato --audiencia "Oficinista: 34 años, compra café camino al trabajo" --audiencia "Estudiante: 21 años, presupuesto justo"
+```
+(sin `--yes` solo muestra el presupuesto: tokens de tu plan, % aproximado de tu ventana de 5 horas y dólares de OpenRouter si los hay; con `--yes` lo corre)
+
+- Coaches e integrador: `--ruta-coaches claude` (por defecto: `claude -p` aislado con Opus, gasta tokens de tu plan) u `openrouter` (Opus por API, se cobra en dólares).
+- Audiencia: `--ruta-audiencia openrouter` (Haiku barato por API) o `claude` (Haiku por tu plan).
+- Medido (2026-11-06): 2 coaches × 2 personas = 8 llamadas, ~34 mil tokens, ~100 s, USD 0.
+
 ## Motor agentes y modo entrevista (sin API)
 
 En vez de OpenRouter, cada persona corre como un subagente de Claude Code (usa tu plan, sin costo de API). Claude corre los comandos; tú solo apruebas el panel.

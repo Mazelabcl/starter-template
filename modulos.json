@@ -35,6 +35,8 @@
       "files": [
         "src/cockpit.js",
         "src/uso.js",
+        "src/claude_aislado.js",
+        "src/presupuesto.js",
         "cockpit/server.js",
         "cockpit/public/index.html",
         "cockpit/public/app.js",
@@ -50,7 +52,7 @@
         "cockpit/feedback/.gitkeep",
         ".claude/commands/revisar.md"
       ],
-      "tests": ["cockpit.test.js", "cockpit-visual.test.js"],
+      "tests": ["cockpit.test.js", "cockpit-visual.test.js", "claude-aislado.test.js"],
       "npm": {},
       "scripts": {
         "cockpit": "node cockpit/server.js",
@@ -78,10 +80,11 @@
       "requires": ["cockpit"],
       "files": [
         "src/uso.js",
+        "src/claude_aislado.js",
         { "src": "modulos.json", "dest": ".claude/uso-modulos.json" },
         ".claude/commands/uso.md"
       ],
-      "tests": ["uso.test.js"],
+      "tests": ["uso.test.js", "uso-ventana.test.js"],
       "npm": {},
       "scripts": {},
       "gitignore": [],
@@ -97,11 +100,11 @@
         ".claude/skills/bold-rounds/SKILL.md",
         ".claude/commands/bold-rounds.md"
       ],
-      "tests": ["bold-rounds.test.js", "bold-rounds-producto.test.js"],
+      "tests": ["bold-rounds.test.js", "bold-rounds-producto.test.js", "bold-rounds-tokens.test.js"],
       "npm": {},
       "optional_npm": { "playwright-core": "solo para screenshots; se instala con npm install --no-save playwright-core" },
       "scripts": { "cockpit:check": "node scripts/cockpit_visual_check.js" },
-      "gitignore": ["/rounds/", "/rounds-*/"],
+      "gitignore": ["/rounds/", "/rounds-*/", "uso-ventana.json"],
       "verify": ["node scripts/bold_rounds.js"]
     },
     "council": {
@@ -142,7 +145,7 @@
         ".claude/skills/council/SKILL.md",
         ".claude/commands/council.md"
       ],
-      "tests": ["council-engine.test.js", "councils-library.test.js", "council-skill.test.js", "council-agentes.test.js"],
+      "tests": ["council-engine.test.js", "councils-library.test.js", "council-skill.test.js", "council-agentes.test.js", "council-directo.test.js"],
       "npm": { "ajv": "^8.17.1" },
       "scripts": {},
       "gitignore": ["councils/results/*.json", "councils/results/*.md", "councils/runs/", "!councils/results/.gitkeep"],

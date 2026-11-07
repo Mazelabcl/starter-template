@@ -1028,7 +1028,11 @@ function participantsSlide(result) {
     visual: { type: 'diagram', kind: 'org', lead: { label: 'Integrador', note: 'Fusiona lo mejor de cada uno', icon: 'merge' }, members },
     stats: result.engine === 'agentes'
       ? [{ value: 'Plan', label: 'subagentes de Claude Code, sin API' }, { value: alive, label: result.formato === 'entrevista' ? 'coaches' : 'expertos' }]
-      : [
+      : result.engine === 'directo' ? [
+        { value: `${Math.round((result.metadata.tokens_plan || 0) / 1000)} K`, label: 'tokens de tu plan' },
+        { value: `$${Number(result.metadata.cost_usd || 0).toFixed(3)}`, label: 'OpenRouter (USD)' },
+        { value: `${Math.round(result.metadata.duration_seconds)} s`, label: 'duración' },
+      ] : [
         { value: `$${result.metadata.cost_usd.toFixed(3)}`, label: 'costo en USD' },
         { value: `${Math.round(result.metadata.duration_seconds)} s`, label: 'duración' },
       ],
@@ -1420,6 +1424,7 @@ const saveAgentPlan = (dir, plan) => writeFileSync(planPath(dir), `${JSON.string
 export function prepareAgentRun({
   question, formato = 'council', template, personas: personaIds, crear = [], audiencia = [],
   files = [], context = '', root = REPO_ROOT, personasMap = loadPersonas(), now = new Date(), dryRun = false,
+  limits = INTERVIEW_LIMITS, engine = 'agentes',
 } = {}) {
   if (!question || !String(question).trim()) throw new CouncilError('Falta la pregunta del council.', { code: 'invalid_question' });
   if (!AGENT_FORMATS.includes(formato)) throw new CouncilError(`Formato inválido: ${formato}. Usa council | entrevista.`, { code: 'invalid_formato' });
@@ -1427,8 +1432,8 @@ export function prepareAgentRun({
   const members = plan0.assignments.map(a => a.persona);
   const audience = audiencia.map(parseAudience);
   if (formato === 'entrevista') {
-    const [cMin, cMax] = INTERVIEW_LIMITS.coaches;
-    const [aMin, aMax] = INTERVIEW_LIMITS.audience;
+    const [cMin, cMax] = limits.coaches;
+    const [aMin, aMax] = limits.audience;
     if (members.length < cMin || members.length > cMax) throw new CouncilError(`La entrevista necesita de ${cMin} a ${cMax} coaches (tiene ${members.length}).`, { code: 'invalid_personas' });
     if (audience.length < aMin || audience.length > aMax) throw new CouncilError(`La entrevista necesita de ${aMin} a ${aMax} personas de audiencia con --audiencia "Rol: perfil" (tiene ${audience.length}).`, { code: 'invalid_audiencia' });
     if (new Set(audience.map(a => a.id)).size !== audience.length) throw new CouncilError('Hay personas de audiencia repetidas: usa roles distintos.', { code: 'invalid_audiencia' });
@@ -1436,7 +1441,7 @@ export function prepareAgentRun({
   const ctx = buildProjectContext({ root, files, extra: context });
   const id = makeCouncilId(now);
   const plan = {
-    id, engine: 'agentes', formato, question, created_at: now.toISOString(), template: plan0.template?.id || null,
+    id, engine, formato, question, created_at: now.toISOString(), template: plan0.template?.id || null,
     ...(formato === 'entrevista' ? { coaches: members, audience } : { personas: members }),
     adhoc_personas: plan0.adhoc, context_text: ctx.text, context_sources: ctx.sources,
     phase: PHASES[formato][0],
@@ -1501,7 +1506,7 @@ export function findingsMarkdown(result) {
 }
 
 /** Registra la corrida: valida merge.json, re-atribuye y guarda resultado + revisión del cockpit + hallazgos. */
-export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersonas(), now = new Date() } = {}) {
+export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersonas(), now = new Date(), engine = 'agentes', metadata = {}, model = AGENT_MODEL } = {}) {
   const { dir, plan } = loadAgentPlan(id, root);
   if (plan.phase !== 'integrar') throw new CouncilError(`La corrida está en la fase "${plan.phase}". Corre primero: node src/council.js siguiente ${id}`, { code: 'phase_not_ready' });
   const st = phaseStatus(plan, dir);
@@ -1511,19 +1516,19 @@ export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersona
   for (const p of members) map.set(p.id, p);
   const merge = reattribute(readPhaseJson(join(dir, 'merge.json')).data, plan.voice_map || {}, map);
   const src = plan.formato === 'entrevista' ? 'hallazgos' : 'respuestas';
-  const answers = members.map(p => ({ persona_id: p.id, persona_name: p.name, model: AGENT_MODEL, answer: { ...readPhaseJson(phaseFile(dir, src, p.id)).data, persona: p.id } }));
+  const answers = members.map(p => ({ persona_id: p.id, persona_name: p.name, model, answer: { ...readPhaseJson(phaseFile(dir, src, p.id)).data, persona: p.id } }));
   const transcript = plan.formato === 'entrevista' ? buildTranscript(plan, dir) : null;
   const result = {
     id: plan.id,
     kind: 'council',
-    engine: 'agentes',
+    engine,
     formato: plan.formato,
     created_at: plan.created_at,
     question: plan.question,
-    mode: 'agentes',
+    mode: engine,
     template: plan.template,
     redteam_requested: false,
-    personas: members.map(p => ({ id: p.id, name: p.name, model: AGENT_MODEL, family: 'anthropic' })),
+    personas: members.map(p => ({ id: p.id, name: p.name, model, family: 'anthropic' })),
     adhoc_personas: plan.adhoc_personas || [],
     context_sources: plan.context_sources || [],
     answers,
@@ -1549,6 +1554,7 @@ export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersona
       failed: [],
       drafts_agreement: agreementScore(answers),
       anonymized: true,
+      ...metadata,
     },
   };
   const saved = saveResult(result, { root });
@@ -1557,6 +1563,201 @@ export function recordAgentRun(id, { root = REPO_ROOT, personasMap = loadPersona
   plan.phase = 'registrado';
   saveAgentPlan(dir, plan);
   return { result, ...saved, findingsPath };
+}
+
+// =============================================================================
+// Entrevista DIRECTA: las personas solo producen texto, así que no se abren sesiones
+// completas de Claude Code (~50 en Weddi). Cada fase es UNA llamada sin herramientas
+// para todos los coaches (y una para el integrador); cada persona de audiencia es una
+// llamada corta a un modelo barato. Rutas:
+//   claude      `claude -p` aislado (src/claude_aislado.js): tokens de tu plan, sin USD.
+//   openrouter  API de OpenRouter: se cobra en USD (solo con --yes tras ver el costo).
+// Reusa plan.json, validadores, transcripción, integración y registro del motor agentes.
+// =============================================================================
+
+export const RUTAS = ['claude', 'openrouter'];
+export const DIRECT_LIMITS = { coaches: [2, 5], audience: [2, 6], questions: 12 };
+export const DIRECT_MODELS = {
+  coaches: { claude: 'opus', openrouter: 'anthropic/claude-opus-5.5' },
+  audiencia: { claude: 'haiku', openrouter: 'anthropic/claude-haiku-5.5' },
+};
+
+const BATCH_SYSTEM = [
+  'You run an interview panel of several coaches. Each coach works INDEPENDENTLY, fully in their own character and angle (inspired by a real person at most, never claiming to BE them).',
+  'Never blend voices, never let one coach repeat another. Be concrete and specific to THIS project.',
+  'Do not invent real-world data (prices, statistics, competitors).',
+  SPANISH_RULE,
+  'Output ONLY one JSON object. No markdown fences, no text before or after.',
+].join('\n');
+
+function coachCard(p) {
+  return [
+    `## ${p.id}`,
+    `ROLE: ${p.actua_como}`,
+    `Obsesses about: ${(p.obsessions || []).join('; ')}.`,
+    `Ignores: ${(p.ignores || []).join('; ')}.`,
+    `Typical questions: ${(p.typical_questions || []).join(' | ')}`,
+  ].join('\n');
+}
+
+// Quita del prompt la entrega por archivo (motor agentes) y pide el JSON como respuesta.
+// La forma del JSON (línea "Shape:") vive en el bloque de entrega: se conserva.
+const asReply = prompt => {
+  const [body, deliver = ''] = String(prompt).split('\n# How to deliver');
+  const shape = (/^Shape: (\{.+)$/m.exec(deliver) || [])[1];
+  return `${body.trimEnd()}\n\n${shape ? `Return exactly this JSON shape: ${shape}\n` : ''}Reply with ONLY the JSON object (no markdown fences, no text outside the JSON).\n`;
+};
+
+function batchUser(plan, phase, dir) {
+  const ctx = plan.context_text || '(sin contexto de proyecto disponible)';
+  const ids = plan.coaches.map(c => c.id);
+  const shape = inner => `{${ids.map(id => `"${id}": ${inner(id)}`).join(', ')}}`;
+  const head = ['# Coaches (one JSON entry per coach id)', ...plan.coaches.map(coachCard), ''];
+  if (phase === 'preguntas') {
+    const audienceList = plan.audience.map(a => `- ${a.id}: ${a.name} (${a.perfil})`).join('\n');
+    return [...head, '# Tema de la entrevista', plan.question, '', '# Contexto del proyecto', cap(ctx, 6000), '',
+      '# A quién entrevistamos (personas ficticias de la audiencia)', audienceList, '',
+      'Each coach writes 2-4 key questions from THEIR angle. Ask about past behavior and real moments ("la última vez que...", "qué hiciste cuando..."), never "¿te gustaría X?". One question per item, in neutral Spanish.',
+      `Return exactly: ${shape(id => `{"coach": "${id}", "questions": ["...", "..."]}`)}`].join('\n');
+  }
+  if (phase === 'repreguntas') {
+    const aud = plan.audience.map(a => a.id);
+    return [...head, '# Transcripción hasta ahora', buildTranscript(plan, dir), '',
+      `Each coach asks exactly ONE follow-up to each interviewee (${aud.join(', ')}): dig into the most revealing or contradictory thing they said, from that coach's angle.`,
+      `Return exactly: ${shape(id => `{"coach": "${id}", "followups": [${aud.map(a => `{"to": "${a}", "question": "..."}`).join(', ')}]}`)}`].join('\n');
+  }
+  return [...head, '# Pregunta del council', plan.question, '', '# Contexto del proyecto', cap(ctx, 6000), '',
+    '# Transcripción completa de la entrevista', buildTranscript(plan, dir), '',
+    'Each coach, from THEIR angle, turns what the interviewees said into findings. "ideas" are product innovations (a capability, decision or outcome for the end user), each citing who motivated it, e.g. "(lo dijo Novia práctica)". 2-4 items per list, one sentence each (max ~35 words).',
+    `Return exactly: ${shape(id => `{"persona": "${id}", "threats": ["..."], "opportunities": ["..."], "ideas": ["..."], "key_concern": "...", "would_change_mind_if": "..."}`)}`].join('\n');
+}
+
+/**
+ * Una llamada de texto por la ruta elegida. Devuelve { ok, data, tokens, carga_usd, usd, secs, error }.
+ * claude: `claude -p` aislado sin herramientas y con system prompt propio (contexto ~1 K + el pedido).
+ */
+export async function callTexto({ ruta, model, system, user, validate, max_tokens = 4000, chatFn = openrouterChat, claudeFn, effort = 'medium', timeoutMs = 300000 }) {
+  const t0 = Date.now();
+  if (ruta === 'openrouter') {
+    const r = await callJson({ chatFn, model, system, user, validate, max_tokens, timeout_ms: timeoutMs });
+    const usd = r.costs.reduce((s, c) => s + c.usd, 0);
+    return { ok: r.ok, data: r.data, usd, tokens: 0, carga_usd: 0, secs: Math.round((Date.now() - t0) / 1000), error: r.ok ? null : r.error?.message, llamadas: r.costs.length };
+  }
+  const run = claudeFn || (await import('./claude_aislado.js')).runAislado;
+  const { cargaUSD } = await import('./uso.js');
+  let tokens = 0;
+  let carga = 0;
+  let calls = 0;
+  let prompt = user;
+  let lastErr = null;
+  let window = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const r = await run({ prompt, model, tools: [], systemPrompt: system, effort, maxTurns: 1, timeoutMs, cwd: tmpdirSafe() });
+    calls += 1;
+    tokens += r.usage.total;
+    carga += cargaUSD(r.usage, model);
+    if (r.window && r.window.last !== null) window = r.window;
+    if (r.limit.hit) return { ok: false, limit: r.limit, tokens, carga_usd: carga, usd: 0, secs: Math.round((Date.now() - t0) / 1000), error: `límite de uso: ${r.limit.message || ''}`, llamadas: calls, window };
+    const data = parseJsonLoose(r.result);
+    const v = data ? validate(data) : { ok: false, errors: [r.timed_out ? 'se cortó por tiempo' : 'la respuesta no es JSON'] };
+    if (v.ok) return { ok: true, data, tokens, carga_usd: carga, usd: 0, secs: Math.round((Date.now() - t0) / 1000), llamadas: calls, window };
+    lastErr = v.errors.slice(0, 5).join('; ');
+    prompt = `${user}\n\nYour previous answer was not valid: ${lastErr}. Return ONLY the corrected JSON object.`;
+  }
+  return { ok: false, tokens, carga_usd: carga, usd: 0, secs: Math.round((Date.now() - t0) / 1000), error: lastErr, llamadas: calls, window };
+}
+
+// Las hijas por la ruta claude corren en una carpeta vacía: sin CLAUDE.md del proyecto ni archivos.
+function tmpdirSafe() {
+  const d = join(process.env.TEMP || process.env.TMPDIR || '/tmp', 'mazelab-council');
+  mkdirSync(d, { recursive: true });
+  return d;
+}
+
+const byCoach = (plan, validateOne) => d => {
+  const errors = [];
+  for (const c of plan.coaches) {
+    const v = d && d[c.id] ? validateOne(d[c.id]) : { ok: false, errors: ['falta'] };
+    if (!v.ok) errors.push(`${c.id}: ${v.errors.join(', ')}`);
+  }
+  return { ok: !errors.length, errors };
+};
+
+/** Presupuesto del modo directo (tokens del plan, % de ventana y USD de OpenRouter). */
+export async function estimateDirectInterview({ coaches, audiencia, rutaCoaches = 'claude', rutaAudiencia = 'openrouter' }) {
+  const { presupuestoEntrevista, textoPresupuesto } = await import('./presupuesto.js');
+  const p = presupuestoEntrevista({
+    coaches, audiencia, rutaCoaches, rutaAudiencia,
+    modeloCoaches: DIRECT_MODELS.coaches[rutaCoaches], modeloAudiencia: DIRECT_MODELS.audiencia[rutaAudiencia],
+    precioOpenRouter: (modelo, i, o) => priceOf(modelo, i, o),
+  });
+  return { ...p, texto: textoPresupuesto(p, { titulo: 'Presupuesto del council entrevista' }) };
+}
+
+/**
+ * Corre una entrevista completa con llamadas directas y la registra como cualquier council
+ * (councils/results/<id>.json, revisión del cockpit y <id>-hallazgos.md para bold-rounds).
+ */
+export async function runDirectInterview({
+  question, template, personas: personaIds, crear = [], audiencia = [], files = [], context = '',
+  rutaCoaches = 'claude', rutaAudiencia = 'openrouter', root = REPO_ROOT, personasMap = loadPersonas(),
+  chatFn = openrouterChat, claudeFn, onProgress = () => {}, now = () => new Date(),
+} = {}) {
+  if (!RUTAS.includes(rutaCoaches) || !RUTAS.includes(rutaAudiencia)) throw new CouncilError(`Ruta inválida: usa ${RUTAS.join(' | ')}`, { code: 'invalid_ruta' });
+  const t0 = now();
+  const { plan, dir } = prepareAgentRun({ question, formato: 'entrevista', template, personas: personaIds, crear, audiencia, files, context, root, personasMap, now: t0, limits: DIRECT_LIMITS, engine: 'directo' });
+  const meter = { tokens_plan: 0, carga_usd: 0, cost_usd: 0, llamadas: 0, fases: [], window: null };
+  const take = (fase, r) => {
+    meter.tokens_plan += r.tokens || 0; meter.carga_usd += r.carga_usd || 0; meter.cost_usd += r.usd || 0; meter.llamadas += r.llamadas || 0;
+    if (r.window) meter.window = r.window;
+    meter.fases.push({ fase, ok: r.ok, secs: r.secs, tokens: r.tokens || 0, usd: Number((r.usd || 0).toFixed(5)) });
+    onProgress({ fase, ok: r.ok, secs: r.secs });
+    if (!r.ok) throw new CouncilError(`Falló la fase "${fase}": ${r.error || 'sin detalle'}${r.limit ? ' (límite de uso: reintenta cuando se libere la ventana)' : ''}`, { code: r.limit ? 'usage_limit' : 'phase_failed', details: { dir } });
+  };
+  const coachModel = DIRECT_MODELS.coaches[rutaCoaches];
+  const audModel = DIRECT_MODELS.audiencia[rutaAudiencia];
+  const coachCall = async (fase, validateOne) => {
+    const r = await callTexto({ ruta: rutaCoaches, model: coachModel, system: BATCH_SYSTEM, user: batchUser(plan, fase, dir), validate: byCoach(plan, validateOne), max_tokens: 6000, chatFn, claudeFn });
+    take(fase, r);
+    for (const c of plan.coaches) writeFileSync(phaseFile(dir, fase, c.id), `${JSON.stringify(r.data[c.id], null, 2)}\n`, 'utf8');
+  };
+  const audCalls = async fase => {
+    const validate = phaseValidator(plan, fase);
+    for (const a of plan.audience) {
+      const prompt = readFileSync(promptFile(dir, fase, a.id), 'utf8');
+      const [sys, ...rest] = asReply(prompt).split('\n\n');
+      const r = await callTexto({ ruta: rutaAudiencia, model: audModel, system: sys, user: rest.join('\n\n'), validate, max_tokens: 1500, chatFn, claudeFn, effort: 'low' });
+      take(`${fase}:${a.id}`, r);
+      writeFileSync(phaseFile(dir, fase, a.id), `${JSON.stringify(r.data, null, 2)}\n`, 'utf8');
+    }
+  };
+  const advance = () => {
+    const r = advanceAgentRun(plan.id, { root });
+    if (r.status === 'esperando') throw new CouncilError(`Fase incompleta: ${r.problems.map(p => `${p.who} (${p.error})`).join(', ')}`, { code: 'phase_failed', details: { dir } });
+    Object.assign(plan, JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8')));
+  };
+  await coachCall('preguntas', validateQuestions); advance();
+  await audCalls('respuestas'); advance();
+  await coachCall('repreguntas', d => validateFollowups(d, plan.audience.map(a => a.id))); advance();
+  await audCalls('respuestas2'); advance();
+  await coachCall('hallazgos', validatePersonaAnswer); advance();
+  // Integrador: el prompt que ya arma el motor agentes (respuestas anonimizadas), como respuesta directa.
+  const ip = asReply(readFileSync(promptFile(dir, 'integrar', 'integrador'), 'utf8'));
+  const cut = ip.indexOf('\n# Pregunta del council');
+  const r = await callTexto({ ruta: rutaCoaches, model: coachModel, system: ip.slice(0, cut).trim(), user: ip.slice(cut).trim(), validate: validateMerge, max_tokens: 8000, chatFn, claudeFn, effort: 'high' });
+  take('integrar', r);
+  writeFileSync(join(dir, 'merge.json'), `${JSON.stringify(r.data, null, 2)}\n`, 'utf8');
+  const secs = Number(((now().getTime() - t0.getTime()) / 1000).toFixed(1));
+  const label = `${rutaCoaches === 'claude' ? `claude -p aislado (${coachModel})` : coachModel} + audiencia ${rutaAudiencia === 'claude' ? `claude -p aislado (${audModel})` : audModel}`;
+  const rec = recordAgentRun(plan.id, {
+    root, personasMap, now: now(), engine: 'directo', model: rutaCoaches === 'claude' ? `claude-${coachModel}` : coachModel,
+    metadata: {
+      synth_model: label, cost_usd: Number(meter.cost_usd.toFixed(5)), cost_source: meter.cost_usd ? 'OpenRouter (real)' : 'plan de Claude Code (sin USD)',
+      tokens_plan: meter.tokens_plan, carga_plan_usd: Number(meter.carga_usd.toFixed(3)), llamadas: meter.llamadas,
+      duration_seconds: secs, rutas: { coaches: rutaCoaches, audiencia: rutaAudiencia }, fases: meter.fases, ventana_5h: meter.window,
+    },
+  });
+  return { ...rec, metrics: { ...meter, secs } };
 }
 
 function printTasks(tasks, root, id) {
@@ -1608,6 +1809,11 @@ function cliUsage() {
     '  --redteam                el contrarian ataca la propuesta y se parcha',
     '  --yes                    confirma el costo (obligatorio en multimodel o > USD 0.50)',
     '  --dry-run                solo muestra costo y tiempo estimados',
+    '',
+    'Entrevista directa (recomendada: llamadas cortas sin herramientas, no sesiones completas):',
+    '  node src/council.js entrevista --question "..." --personas a,b --audiencia "Rol: perfil" (2-6 veces)',
+    '      [--ruta-coaches claude|openrouter] [--ruta-audiencia openrouter|claude] [--files] [--context] [--yes]',
+    '      sin --yes solo muestra el presupuesto (tokens del plan, % de la ventana de 5 h y USD de OpenRouter)',
     '',
     'Motor agentes (subagentes de Claude Code en paralelo; sin API ni costo extra):',
     '  node src/council.js prepare --question "..." [--template|--personas|--crear] [--files] [--context] [--dry-run]',
@@ -1670,6 +1876,40 @@ async function runCli() {
     if (args['dry-run']) { console.log('(dry-run: no se escribió nada)'); return; }
     console.log(`Corrida: councils/runs/${r.plan.id} · fase: ${r.plan.phase}`);
     printTasks(r.tasks, root, r.plan.id);
+    return;
+  }
+
+  // ---- Entrevista directa (llamadas cortas, sin sesiones completas)
+  if (cmd === 'entrevista') {
+    if (!args.question || args.question === true) { console.error(cliUsage()); process.exit(1); }
+    const root = args.root ? resolve(args.root) : REPO_ROOT;
+    const personasMap = root === REPO_ROOT ? loadPersonas() : new Map([...loadPersonas(), ...loadPersonas({ dir: join(root, 'councils', 'personas') })]);
+    const rutaCoaches = typeof args['ruta-coaches'] === 'string' ? args['ruta-coaches'] : 'claude';
+    const rutaAudiencia = typeof args['ruta-audiencia'] === 'string' ? args['ruta-audiencia'] : (process.env.OPENROUTER_API_KEY ? 'openrouter' : 'claude');
+    const opts = {
+      question: args.question, template: typeof args.template === 'string' ? args.template : undefined,
+      personas: list(args.personas), crear: args.crear || [], audiencia: (args.audiencia || []).filter(a => a !== true),
+      files: list(args.files), context: typeof args.context === 'string' ? args.context : '', root, personasMap, rutaCoaches, rutaAudiencia,
+    };
+    const dry = prepareAgentRun({ ...opts, formato: 'entrevista', limits: DIRECT_LIMITS, dryRun: true });
+    const est = await estimateDirectInterview({ coaches: dry.panel.members.length, audiencia: dry.panel.audience.length, rutaCoaches, rutaAudiencia });
+    console.log(`Council entrevista DIRECTO: coaches ${dry.panel.members.map(m => m.name).join(', ')} · audiencia ${dry.panel.audience.map(a => a.name).join(', ')}`);
+    console.log(`Rutas: coaches e integrador por ${rutaCoaches === 'claude' ? `claude -p aislado (${DIRECT_MODELS.coaches.claude}, tokens de tu plan)` : `OpenRouter (${DIRECT_MODELS.coaches.openrouter}, USD)`}; audiencia por ${rutaAudiencia === 'claude' ? `claude -p aislado (${DIRECT_MODELS.audiencia.claude})` : `OpenRouter (${DIRECT_MODELS.audiencia.openrouter}, USD)`}.`);
+    console.log(est.texto);
+    if (rutaCoaches === 'claude') {
+      const alt = await estimateDirectInterview({ coaches: dry.panel.members.length, audiencia: dry.panel.audience.length, rutaCoaches: 'openrouter', rutaAudiencia: 'openrouter' });
+      console.log(`  Opción: --ruta-coaches openrouter --ruta-audiencia openrouter usa la API de OpenRouter (Opus y Haiku) en vez de tu plan: ~USD ${alt.usd_openrouter.toFixed(3)} en dólares y 0 % de tu ventana. Solo si el usuario lo confirma.`);
+    }
+    if (!args.yes) {
+      console.log('Para correrlo, muéstrale esto al usuario y, si dice que sí, repite el comando con --yes.');
+      process.exitCode = 2;
+      return;
+    }
+    const r = await runDirectInterview({ ...opts, onProgress: ev => console.error(`  ${ev.ok ? 'ok   ' : 'FALLA'} ${ev.fase} (${ev.secs} s)`) });
+    console.log(`\n${summaryLine(r.result)}`);
+    console.log(`\n${buildTldr(r.result)}`);
+    console.log(`\nCosto real: ${Math.round(r.metrics.tokens_plan / 1000)} K tokens de tu plan · USD ${r.metrics.cost_usd.toFixed(4)} en OpenRouter · ${r.metrics.llamadas} llamadas · ${Math.round(r.metrics.secs)} s`);
+    console.log(`Resultado: ${r.resultPath}\nRevisión cockpit: ${r.reviewPath}\nHallazgos para bold-rounds (--hallazgos): ${r.findingsPath}`);
     return;
   }
 
