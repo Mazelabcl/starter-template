@@ -17,7 +17,7 @@
 // Env: USO_CLAUDE_DIR (carpeta de transcripciones, la usan los tests).
 // Idioma: español neutro.
 
-import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -652,7 +652,7 @@ function carpetasCandidatas(root, dir) {
   return (cand.length ? cand : nombres).map(n => join(dir, n));
 }
 
-export async function reporteProyecto({ root = REPO_ROOT, claudeDir = claudeDirDefault(), desde = null } = {}) {
+export async function reporteProyecto({ root = REPO_ROOT, claudeDir = claudeDirDefault(), desde = null, home = homedir() } = {}) {
   const raiz = resolve(root);
   const col = nuevoColector(catalogoModulos(raiz));
   const ids = [];
@@ -668,10 +668,11 @@ export async function reporteProyecto({ root = REPO_ROOT, claudeDir = claudeDirD
   const r = resumir(ids, col, { desde, nombre: basename(raiz) });
   r.externos = externosDe(raiz, desde);
   r.lectura = { ...col.stats };
+  r.mcp_globales = mcpGlobales({ root: raiz, home });
   return r;
 }
 
-export async function reporteTodos({ starterRoot = REPO_ROOT, claudeDir = claudeDirDefault(), desde = null } = {}) {
+export async function reporteTodos({ starterRoot = REPO_ROOT, claudeDir = claudeDirDefault(), desde = null, home = homedir() } = {}) {
   let carpetas = [];
   try { carpetas = readdirSync(claudeDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => join(claudeDir, d.name)); } catch { /* sin datos */ }
 
@@ -789,14 +790,185 @@ export async function reporteTodos({ starterRoot = REPO_ROOT, claudeDir = claude
     aviso_atribucion: AVISO_ATRIBUCION,
     aviso_limites: AVISO_LIMITES,
     lectura: { ...col.stats },
+    mcp_globales: mcpGlobales({ root: starterRoot, home }),
   };
   salida.sugerencias = sugerencias({ ...global, modulos, base_otros: salida.carga_base_no_starter.mediana });
   return salida;
 }
 
+// ---------------------------------------------------------------------------
+// Ventana de 5 horas: calibración con los cortes reales por límite de uso
+// ---------------------------------------------------------------------------
+// Anthropic no publica cuánto cabe en la ventana de 5 h del plan ni cuánto pesa cada
+// tipo de token. Aproximación: se pondera cada token por su precio de lista relativo
+// ("carga", en USD equivalentes de API; verificado con total_cost_usd de `claude -p`
+// el 2026-11-06: entrada por millón Opus 4, Sonnet 2, Haiku 0,1; salida x5; escritura
+// de caché 1 h x2 y 5 min x1,25; relectura x0,1). La ventana se calibra sumando la carga
+// de TODAS las sesiones del PC entre el inicio de la ventana y el primer aviso
+// "You've hit your 5-hour limit" (apiError usage_limit_reached, trae resetsAt).
+// Es una ESTIMACIÓN y se rotula así.
+
+const PRECIO_ENTRADA = [[/opus/i, 4], [/sonnet/i, 2], [/haiku/i, 0.1]];
+export const precioEntrada = modelo => (PRECIO_ENTRADA.find(([re]) => re.test(String(modelo || ''))) || [null, 2])[1];
+
+/** Carga (USD equivalentes de API) de un registro de tokens. */
+export function cargaUSD({ input = 0, cache_write = 0, cache_write_5m = null, cache_read = 0, output = 0 }, modelo) {
+  const w5 = cache_write_5m === null ? 0 : Math.min(cache_write_5m, cache_write);
+  const w1 = cache_write - w5;
+  return ((input + w1 * 2 + w5 * 1.25 + cache_read * 0.1 + output * 5) * precioEntrada(modelo)) / 1e6;
+}
+
+// Calibración por defecto (2026-11-06, `node src/uso.js ventana --vivo`): mediana de los
+// 3 cortes más recientes (2-nov y los dos de Weddi del 6-nov, carga USD 157, 127 y 92) y
+// de la utilización real (8 % = USD 17,6). Se reemplaza con `ventana --guardar`.
+export const VENTANA_POR_DEFECTO = {
+  carga_usd: 142, tokens: 158e6, fuente: 'cortes reales de Weddi y utilización medida, 2026-11-06 (estimación)',
+};
+export const VENTANA_ARCHIVO = join(REPO_ROOT, 'uso-ventana.json');
+
+export function ventanaCalibrada(archivo = VENTANA_ARCHIVO) {
+  try {
+    const v = JSON.parse(readFileSync(archivo, 'utf8'));
+    if (num(v.carga_usd) > 0) return { ...VENTANA_POR_DEFECTO, ...v };
+  } catch { /* sin archivo: valor por defecto */ }
+  return { ...VENTANA_POR_DEFECTO };
+}
+
+function jsonlRecientes(dir, desde, out = []) {
+  let nombres = [];
+  try { nombres = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const d of nombres) {
+    const p = join(dir, d.name);
+    if (d.isDirectory()) jsonlRecientes(p, desde, out);
+    else if (d.name.endsWith('.jsonl')) {
+      try { if (statSync(p).mtimeMs >= desde) out.push(p); } catch { /* borrado */ }
+    }
+  }
+  return out;
+}
+
+/**
+ * Busca los cortes por límite de 5 h en las transcripciones de los últimos `dias` y suma
+ * la carga de todas las sesiones dentro de cada ventana. Solo lee números y fechas.
+ */
+export async function calibrarVentana({ claudeDir = claudeDirDefault(), dias = 14, ahora = Date.now(), vivo = null } = {}) {
+  const desde = ahora - dias * 86400000;
+  const recs = new Map();
+  const cortes = new Map();
+  for (const file of jsonlRecientes(claudeDir, desde)) {
+    const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
+    for await (const line of rl) {
+      if (!line.includes('"type":"assistant"')) continue;
+      let o;
+      try { o = JSON.parse(line); } catch { continue; }
+      const ts = Date.parse(o.timestamp) || 0;
+      const msg = o.message || {};
+      if (o.apiError === 'usage_limit_reached') {
+        const info = o.apiErrorParams?.rate_limit_info || {};
+        if (info.rateLimitType && info.rateLimitType !== 'five_hour') continue;
+        const reset = num(info.resetsAt) * 1000;
+        if (!reset) continue;
+        const c = cortes.get(reset);
+        if (!c || ts < c.hit_at) cortes.set(reset, { resets_at: reset, hit_at: ts });
+        continue;
+      }
+      const u = msg.usage;
+      if (!u || msg.model === '<synthetic>' || ts < desde) continue;
+      const clave = msg.id || o.requestId || o.uuid;
+      if (!clave) continue;
+      const d = {
+        input: num(u.input_tokens), cache_write: num(u.cache_creation_input_tokens),
+        cache_write_5m: u.cache_creation ? num(u.cache_creation.ephemeral_5m_input_tokens) : null,
+        cache_read: num(u.cache_read_input_tokens), output: num(u.output_tokens),
+      };
+      const prev = recs.get(clave);
+      if (prev) for (const k of ['input', 'cache_write', 'cache_read', 'output']) prev[k] = Math.max(prev[k], d[k]);
+      else recs.set(clave, { ...d, ts, modelo: msg.model || '' });
+    }
+  }
+  const lista = [...recs.values()];
+  const filas = [...cortes.values()].sort((a, b) => a.resets_at - b.resets_at).map(c => {
+    const inicio = c.resets_at - 5 * 3600000;
+    const dentro = lista.filter(r => r.ts >= inicio && r.ts <= c.hit_at);
+    const t = dentro.reduce((s, r) => ({
+      input: s.input + r.input, cache_write: s.cache_write + r.cache_write, cache_read: s.cache_read + r.cache_read, output: s.output + r.output,
+    }), { input: 0, cache_write: 0, cache_read: 0, output: 0 });
+    const porModelo = {};
+    for (const r of dentro) porModelo[r.modelo] = (porModelo[r.modelo] || 0) + cargaUSD(r, r.modelo);
+    return {
+      inicio: new Date(inicio).toISOString(), corte: new Date(c.hit_at).toISOString(), resets_at: new Date(c.resets_at).toISOString(),
+      llamadas: dentro.length, tokens: { ...t, total: t.input + t.cache_write + t.cache_read + t.output },
+      carga_usd: Number(dentro.reduce((s, r) => s + cargaUSD(r, r.modelo), 0).toFixed(2)),
+      carga_por_modelo: Object.fromEntries(Object.entries(porModelo).map(([k, v]) => [k, Number(v.toFixed(2))])),
+    };
+  });
+  // El plan puede cambiar: solo cuentan los 3 cortes más recientes.
+  const util = filas.filter(f => f.llamadas > 0).slice(-3);
+  // Punto vivo: la utilización real que informa `claude -p` (rate_limit_event) dividida
+  // por la carga de la ventana actual. Con utilización < 5 % el error de redondeo es grande.
+  let vivoFila = null;
+  if (vivo && num(vivo.utilization) >= 0.05 && num(vivo.resets_at)) {
+    const reset = vivo.resets_at > 1e12 ? vivo.resets_at : vivo.resets_at * 1000;
+    const dentro = lista.filter(r => r.ts >= reset - 5 * 3600000 && r.ts <= ahora);
+    const carga = dentro.reduce((s, r) => s + cargaUSD(r, r.modelo), 0);
+    const tok = dentro.reduce((s, r) => s + r.input + r.cache_write + r.cache_read + r.output, 0);
+    if (carga > 0) vivoFila = { utilization: vivo.utilization, carga_usd: Number(carga.toFixed(2)), tokens: tok, ventana_carga_usd: Math.round(carga / vivo.utilization), ventana_tokens: Math.round(tok / vivo.utilization) };
+  }
+  const puntos = [...util.map(f => ({ c: f.carga_usd, t: f.tokens.total })), ...(vivoFila ? [{ c: vivoFila.ventana_carga_usd, t: vivoFila.ventana_tokens }] : [])];
+  return {
+    cortes: filas,
+    vivo: vivoFila,
+    ventana: puntos.length ? {
+      carga_usd: mediana(puntos.map(p => Math.round(p.c))),
+      tokens: mediana(puntos.map(p => p.t)),
+      fuente: `${util.length} ${util.length === 1 ? 'corte' : 'cortes'} recientes por límite${vivoFila ? ` + utilización real ${Math.round(vivoFila.utilization * 100)} %` : ''} (estimación)`,
+      calibrada_el: new Date(ahora).toISOString().slice(0, 10),
+    } : null,
+    aviso: 'Estimación: la carga es el precio de lista relativo de cada token, no la fórmula real del plan (no es pública).',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MCP globales: servidores que cargan en TODOS los proyectos (solo nombres)
+// ---------------------------------------------------------------------------
+
+/**
+ * Servidores MCP que se cargan en todas partes: alcance usuario (~/.claude.json) y
+ * .mcp.json en carpetas superiores al proyecto (p. ej. C:\Users\<tú>\.mcp.json).
+ * Nunca lee ni muestra valores (comandos, variables, claves): solo los nombres.
+ */
+export function mcpGlobales({ root = REPO_ROOT, home = homedir() } = {}) {
+  const out = [];
+  const nombresDe = file => {
+    try { return Object.keys(JSON.parse(readFileSync(file, 'utf8')).mcpServers || {}).filter(n => NOMBRE_SEGURO.test(n)); } catch { return []; }
+  };
+  const usuario = nombresDe(join(home, '.claude.json'));
+  if (usuario.length) out.push({ origen: join(home, '.claude.json'), alcance: 'usuario', servidores: usuario });
+  let dir = dirname(resolve(root));
+  for (let i = 0; i < 30; i++) {
+    const f = join(dir, '.mcp.json');
+    const n = existsSync(f) ? nombresDe(f) : [];
+    if (n.length) out.push({ origen: f, alcance: 'carpeta superior', servidores: n });
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return out;
+}
+
+export function lineasMcp(lista) {
+  if (!lista || !lista.length) return [];
+  return ['', 'MCP que cargan en TODOS los proyectos (suman tokens en cada sesión; no cambio tu configuración):',
+    ...lista.map(m => `  ${m.servidores.join(', ')}  (${m.origen})`),
+    '  Si solo los usa un proyecto, muévelos al .mcp.json de ese proyecto.'];
+}
+
 /** Datos para la página del cockpit: acota listas largas. Sigue sin rutas ni contenido. */
 export function paraWeb(r) {
-  return { ...r, sesiones: (r.sesiones || []).slice(0, 12), otras_skills: (r.otras_skills || []).slice(0, 15), lectura: r.lectura };
+  return {
+    ...r, sesiones: (r.sesiones || []).slice(0, 12), otras_skills: (r.otras_skills || []).slice(0, 15), lectura: r.lectura,
+    mcp_globales: (r.mcp_globales || []).map(m => ({ alcance: m.alcance, servidores: m.servidores })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -868,6 +1040,7 @@ export function textoProyecto(r) {
   out.push(...lineasNunca(r.nunca_usados));
   out.push('', 'Costos externos:', ...lineasExternos(r.externos));
   out.push(...lineasComunes(r));
+  out.push(...lineasMcp(r.mcp_globales));
   out.push('', `Nota: ${r.aviso_atribucion}`, `Nota: ${r.aviso_limites}`);
   if (r.lectura.lineas_malas) out.push(`Nota: ${r.lectura.lineas_malas} líneas dañadas se saltaron.`);
   return out.join('\n');
@@ -893,6 +1066,7 @@ export function textoTodos(r) {
   out.push(...lineasNunca(r.nunca_usados));
   out.push('', 'Costos externos:', ...lineasExternos(r.externos));
   out.push(...lineasComunes(r));
+  out.push(...lineasMcp(r.mcp_globales));
   out.push('', `Nota: ${r.aviso_atribucion}`, `Nota: ${r.aviso_limites}`);
   if (r.lectura.lineas_malas) out.push(`Nota: ${r.lectura.lineas_malas} líneas dañadas se saltaron.`);
   return out.join('\n');
@@ -906,9 +1080,36 @@ const AYUDA = `Uso:
   node src/uso.js                        este proyecto
   node src/uso.js todos                  todos los proyectos del starter en este PC
   node src/uso.js --proyecto <carpeta>   otro proyecto
+  node src/uso.js ventana [--dias 14] [--vivo] [--guardar]   calibra la ventana de 5 h (cortes por límite; --vivo suma la utilización real)
 Opciones: --json  --desde YYYY-MM-DD`;
 
+async function cliVentana(argv) {
+  const i = argv.indexOf('--dias');
+  const dias = i >= 0 ? Number(argv[i + 1]) || 14 : 14;
+  let vivo = null;
+  if (argv.includes('--vivo')) {
+    // Una llamada mínima (Haiku, aislada, sin herramientas: ~1 K tokens) para leer la utilización real.
+    const { runAislado } = await import('./claude_aislado.js');
+    const r0 = await runAislado({ prompt: 'Responde solo: ok', model: 'haiku', tools: [], systemPrompt: 'Responde en una palabra.', effort: 'low', maxTurns: 1, timeoutMs: 90000 });
+    if (r0.window.last !== null) vivo = { utilization: r0.window.last, resets_at: r0.window.resets_at };
+    console.log(vivo ? `Utilización real de la ventana actual: ${Math.round(vivo.utilization * 100)} %` : 'No pude leer la utilización real (claude -p no la informó).');
+  }
+  const r = await calibrarVentana({ dias, vivo });
+  if (r.vivo) console.log(`Punto vivo: carga ~USD ${r.vivo.carga_usd} = ${Math.round(r.vivo.utilization * 100)} % → ventana ~USD ${r.vivo.ventana_carga_usd} (~${fmt(r.vivo.ventana_tokens)} tokens)`);
+  if (argv.includes('--json')) { console.log(JSON.stringify(r, null, 2)); return 0; }
+  console.log(`Cortes por límite de 5 h en los últimos ${dias} días: ${r.cortes.length}`);
+  for (const c of r.cortes) console.log(`  ${c.corte.slice(0, 16).replace('T', ' ')} UTC · ${fmt(c.tokens.total)} tokens · carga ~USD ${c.carga_usd} · ${c.llamadas} llamadas`);
+  if (!r.ventana) { console.log(`Sin cortes: se sigue usando ${VENTANA_POR_DEFECTO.fuente}.`); return 0; }
+  console.log(`Ventana estimada: ~${fmt(r.ventana.tokens)} tokens (carga ~USD ${r.ventana.carga_usd}). ${r.aviso}`);
+  if (argv.includes('--guardar')) {
+    writeFileSync(VENTANA_ARCHIVO, `${JSON.stringify(r.ventana, null, 2)}\n`, 'utf8');
+    console.log(`Guardada en ${VENTANA_ARCHIVO} (la usan los presupuestos de bold-rounds y council).`);
+  }
+  return 0;
+}
+
 async function cli(argv) {
+  if (argv[0] === 'ventana') return cliVentana(argv.slice(1));
   const flags = { json: false, todos: false, desde: undefined, proyecto: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];

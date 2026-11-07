@@ -52,6 +52,8 @@ councils/results/*.json
 # bold-rounds — copias de trabajo, screenshots y variantes de cada corrida (datos del proyecto)
 /rounds/
 /rounds-*/
+# calibración local de la ventana de 5 h (node src/uso.js ventana --guardar)
+/uso-ventana.json
 
 # Generados
 /RESUMEN.html

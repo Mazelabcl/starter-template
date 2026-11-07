@@ -147,6 +147,12 @@ function pintar(box, r) {
     cuerpo.appendChild(el('section', { class: 'uso-card uso-tips' }, el('h2', { text: 'Para gastar menos' }),
       el('ol', {}, r.sugerencias.map(s => el('li', { text: s })))));
   }
+  // MCP globales: cargan en cada sesión de cada proyecto (solo nombres; no se cambia tu configuración).
+  if ((r.mcp_globales || []).length) {
+    cuerpo.appendChild(el('section', { class: 'uso-card uso-tips' }, el('h2', { text: 'MCP que cargan en todos tus proyectos' }),
+      el('ul', {}, r.mcp_globales.map(m => el('li', { text: `${m.servidores.join(', ')} (${m.alcance === 'usuario' ? 'tu configuración de usuario' : 'un .mcp.json en una carpeta superior'})` }))),
+      el('p', { class: 'uso-note', text: 'Suman tokens en cada sesión. Si solo los usa un proyecto, muévelos al .mcp.json de ese proyecto (la ruta exacta sale en node src/uso.js).' })));
+  }
   cuerpo.appendChild(tarjeta('En qué se fue', barraPartes(t)));
   const rejilla = el('div', { class: 'uso-grid' });
   rejilla.appendChild(tarjeta('Lo que más gastó', barras(r.quemadores.map(q => ({ nombre: q.etiqueta, valor: q.total, texto: `${fmt(q.total)} · ${q.pct}%` })))));
